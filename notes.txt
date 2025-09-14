@@ -1,0 +1,19 @@
+cd "C:\@Official\@Gen AI\DSV\BizTalk\Analyze_this_folder\GENAI_EPIS_CW1_IN_Document_App"
+
+
+C:\Users\SURAJITCHATTERJEE\AppData\Local\Programs\Python\Python312\python.exe -m venv migration_env
+migration_env\Scripts\activate
+to run the program : streamlit run main.py
+
+
+C:\Users\SURAJITCHATTERJEE\AppData\Local\Programs\Python\Python312\python.exe clean_ace_generator.py
+
+
+
+GIT PUSH Steps: 
+git init
+git add .
+git commit -m "Commit enhanced vector DB knowledge base creation 14 Sept" 
+git remote set-url origin https://github.com/tosurajitc/DSV_Biztalk_ACE
+git push -u origin master
+

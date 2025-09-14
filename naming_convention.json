@@ -1,0 +1,261 @@
+{
+  "version": "5.0",
+  "description": "DSV ACE Naming Convention Standards",
+  "last_updated": "2025-01-07",
+  
+  "target_systems": [
+    "CW1",
+    "SAP", 
+    "EDI",
+    "EPIS",
+    "WMS",
+    "TMS",
+    "OMS",
+    "FMS"
+  ],
+  
+  "directions": [
+    "IN",
+    "OUT"
+  ],
+  
+  "functions": [
+    "Document",
+    "Shipment", 
+    "Invoice",
+    "Order",
+    "Receipt",
+    "Tracking",
+    "Status",
+    "Notification",
+    "Report",
+    "Manifest"
+  ],
+  
+  "message_types": [
+    "SND",
+    "RCV", 
+    "REQ",
+    "RSP",
+    "ACK",
+    "NAK",
+    "UPD",
+    "DEL"
+  ],
+  
+  "naming_patterns": {
+    "project": "EPIS_{system}_{dir}_{func}_App",
+    "messageflow": "{system}_{dir}_{func}_{type}_Flow",
+    "esql_module": "{system}_{dir}_{func}_{type}_{component}",
+    "application": "EPIS_{system}_{dir}_{func}_Application",
+    "library": "{system}_{dir}_{func}_Library",
+    "schema": "{system}_{dir}_{func}_{type}_Schema",
+    "map": "{system}_{dir}_{func}_{type}_Map",
+    "subflow": "{system}_{dir}_{func}_{type}_{component}_SubFlow"
+  },
+  
+  "component_hierarchy": {
+    "main_compute": "_Main_Compute",
+    "enrichment_01": "_Enrichment_01",
+    "enrichment_02": "_Enrichment_02", 
+    "enrichment_03": "_Enrichment_03",
+    "validation": "_Validation",
+    "transformation": "_Transformation",
+    "routing": "_Routing",
+    "aggregation": "_Aggregation",
+    "input_handler": "_Input_Handler",
+    "output_handler": "_Output_Handler",
+    "database_handler": "_Database_Handler",
+    "web_service_handler": "_WebService_Handler",
+    "file_handler": "_File_Handler",
+    "compression": "_Compression",
+    "decompression": "_Decompression",
+    "encryption": "_Encryption",
+    "decryption": "_Decryption",
+    "audit": "_Audit",
+    "logging": "_Logging",
+    "monitoring": "_Monitoring",
+    "failure": "_Failure",
+    "exception": "_Exception",
+    "timeout": "_Timeout",
+    "retry": "_Retry",
+    "dead_letter": "_DeadLetter"
+  },
+  
+  "queue_naming": {
+    "input_queue_pattern": "{system}.{dir}.{func}.{type}.QL",
+    "output_queue_pattern": "{system}.{dir}.{func}.{type}.OUT.QL", 
+    "error_queue_pattern": "{system}.{dir}.{func}.{type}.ERROR.QL",
+    "dead_letter_pattern": "{system}.{dir}.{func}.{type}.DEAD.QL",
+    "audit_queue_pattern": "{system}.{dir}.{func}.{type}.AUDIT.QL"
+  },
+  
+  "file_naming": {
+    "esql_extension": ".esql",
+    "msgflow_extension": ".msgflow",
+    "subflow_extension": ".subflow", 
+    "schema_extension": ".xsd",
+    "map_extension": ".map",
+    "project_file": ".project",
+    "application_descriptor": "application.descriptor",
+    "broker_schema": ".brokerSchema"
+  },
+  
+  "validation_rules": {
+    "max_name_length": 64,
+    "allowed_characters": "^[A-Za-z0-9_]+$",
+    "reserved_words": [
+      "System",
+      "Root", 
+      "Environment",
+      "Exception",
+      "SQLCODE",
+      "SQLSTATE"
+    ],
+    "naming_case": "PascalCase_With_Underscores"
+  },
+  
+  "dsv_specific_standards": {
+    "enterprise_prefix": "EPIS",
+    "project_suffix": "_App",
+    "flow_suffix": "_Flow",
+    "compute_suffix": "_Compute",
+    "enrichment_numbering": "01, 02, 03...",
+    "separator": "_",
+    "version_suffix": "_v{major}_{minor}",
+    "environment_suffix": "_{env}"
+  },
+  
+  "business_domain_mapping": {
+    "shipping": {
+      "systems": ["CW1", "TMS"],
+      "functions": ["Shipment", "Tracking", "Manifest"],
+      "message_types": ["SND", "RCV", "UPD"]
+    },
+    "invoicing": {
+      "systems": ["SAP", "FMS"],
+      "functions": ["Invoice", "Receipt", "Status"], 
+      "message_types": ["SND", "RCV", "ACK"]
+    },
+    "ordering": {
+      "systems": ["EDI", "OMS"],
+      "functions": ["Order", "Notification", "Status"],
+      "message_types": ["REQ", "RSP", "ACK"]
+    },
+    "warehouse": {
+      "systems": ["WMS", "EPIS"],
+      "functions": ["Document", "Receipt", "Status"],
+      "message_types": ["SND", "RCV", "UPD"]
+    }
+  },
+  
+  "environment_specific": {
+    "development": {
+      "suffix": "_DEV",
+      "queue_manager": "QM_DEV",
+      "database_suffix": "_DEV"
+    },
+    "testing": {
+      "suffix": "_TEST", 
+      "queue_manager": "QM_TEST",
+      "database_suffix": "_TEST"
+    },
+    "staging": {
+      "suffix": "_STAGE",
+      "queue_manager": "QM_STAGE", 
+      "database_suffix": "_STAGE"
+    },
+    "production": {
+      "suffix": "",
+      "queue_manager": "QM_PROD",
+      "database_suffix": "_PROD"
+    }
+  },
+  
+  "integration_patterns": {
+    "request_response": {
+      "inbound_suffix": "_REQ",
+      "outbound_suffix": "_RSP",
+      "timeout_handler": "_Timeout",
+      "correlation_required": true
+    },
+    "fire_and_forget": {
+      "inbound_suffix": "_SND", 
+      "acknowledgment": "_ACK",
+      "error_handling": "_NAK",
+      "correlation_required": false
+    },
+    "publish_subscribe": {
+      "publisher_suffix": "_PUB",
+      "subscriber_suffix": "_SUB", 
+      "topic_pattern": "TOPIC.{system}.{func}",
+      "correlation_required": false
+    }
+  },
+  
+  "compliance_requirements": {
+    "mandatory_components": [
+      "Main_Compute",
+      "Input_Handler", 
+      "Output_Handler",
+      "Exception"
+    ],
+    "optional_components": [
+      "Enrichment_01",
+      "Validation",
+      "Transformation",
+      "Audit"
+    ],
+    "error_handling": [
+      "Failure",
+      "Exception", 
+      "Timeout",
+      "DeadLetter"
+    ]
+  },
+  
+  "examples": {
+    "complete_cw1_document_send": {
+      "target_system": "CW1",
+      "direction": "IN",
+      "function": "Document", 
+      "message_type": "SND",
+      "project_name": "EPIS_CW1_IN_Document_App",
+      "messageflow_name": "CW1_IN_Document_SND_Flow",
+      "main_compute": "CW1_IN_Document_SND_Main_Compute",
+      "enrichment": "CW1_IN_Document_SND_Enrichment_01",
+      "validation": "CW1_IN_Document_SND_Validation",
+      "input_handler": "CW1_IN_Document_SND_Input_Handler",
+      "output_handler": "CW1_IN_Document_SND_Output_Handler", 
+      "exception": "CW1_IN_Document_SND_Exception",
+      "input_queue": "CW1.IN.DOCUMENT.SND.QL",
+      "error_queue": "CW1.IN.DOCUMENT.SND.ERROR.QL"
+    },
+    "sap_invoice_response": {
+      "target_system": "SAP",
+      "direction": "OUT",
+      "function": "Invoice",
+      "message_type": "RSP", 
+      "project_name": "EPIS_SAP_OUT_Invoice_App",
+      "messageflow_name": "SAP_OUT_Invoice_RSP_Flow",
+      "main_compute": "SAP_OUT_Invoice_RSP_Main_Compute",
+      "enrichment": "SAP_OUT_Invoice_RSP_Enrichment_01",
+      "transformation": "SAP_OUT_Invoice_RSP_Transformation",
+      "database_handler": "SAP_OUT_Invoice_RSP_Database_Handler",
+      "exception": "SAP_OUT_Invoice_RSP_Exception",
+      "input_queue": "SAP.OUT.INVOICE.RSP.QL",
+      "output_queue": "SAP.OUT.INVOICE.RSP.OUT.QL"
+    }
+  },
+  
+  "migration_mapping": {
+    "biztalk_to_ace": {
+      "biztalk_application": "ace_project",
+      "biztalk_orchestration": "ace_messageflow", 
+      "biztalk_schema": "ace_schema",
+      "biztalk_map": "ace_esql_transformation",
+      "biztalk_pipeline": "ace_subflow",
+      "biztalk_port": "ace_mqinput_output"
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "EnrichConfigs": {
+    "MsgEnrich": [
+      {
+        "DBAlias": "MH-ESB-EDIEnterprise",
+        "Table": "",
+        "Mandatory": false,
+        "Active": true,
+        "DisableCaching": false,
+        "SQLCommand": "exec sp_Get_EAdapterRecepientId @CountryCode='{0}',@CompanyCode='{1}'",
+        "Scope_prefix": "ns0",
+        "Scope_xmlns": "http://esb.dsv.com/CDM/DocumentMessage_V2",
+        "Scope": "/ns0:DocumentMessage/ns0:Header",
+        "Source": [
+          {
+            "FieldName": "CountryCode",
+            "xPathValue": "./ns0:Target/ns0:CountryCode/text()",
+            "FieldValue": "",
+            "Optional": true,
+            "Source": "Message"
+          },
+          {
+            "FieldName": "CompanyCode",
+            "xPathValue": "../@CompanyCode",
+            "FieldValue": "",
+            "Optional": true,
+            "Source": "Message"
+          }
+        ],
+        "Dest": [
+          {
+            "FieldName": "eAdapterRecipientID",
+            "xPathValue": "",
+            "Optional": false,
+            "DefaultValue": ""
+          }
+        ]
+      }
+    ]
+  }
+}

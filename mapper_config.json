@@ -1,0 +1,38 @@
+{
+  "biztalk_extensions": {
+    ".odx": {
+      "type": "orchestration",
+      "ace_lib": "EPIS_CommonFlows_Lib"
+    },
+    ".btm": {
+      "type": "map",
+      "ace_lib": "EPIS_MessageEnrichment_StaticLib"
+    },
+    ".xsd": {
+      "type": "schema",
+      "ace_lib": "EPIS_CDMMessage_V2_Lib"
+    },
+    ".xsl": {
+      "type": "transform",
+      "ace_lib": "EPIS_MessageEnrichment_StaticLib"
+    },
+    ".cs": {
+      "type": "code",
+      "ace_lib": "EPIS_CommonUtils_Lib"
+    },
+    ".dll": {
+      "type": "assembly",
+      "ace_lib": "EPIS_CommonUtils_Lib"
+    },
+    ".config": {
+      "type": "configuration",
+      "ace_lib": "EPIS_CommonUtils_Lib"
+    }
+  },
+  "ace_patterns": [
+    ".jar",
+    ".esql",
+    ".msgflow",
+    ".subflow"
+  ]
+}

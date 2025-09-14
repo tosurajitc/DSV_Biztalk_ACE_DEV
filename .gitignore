@@ -1,0 +1,55 @@
+﻿# Virtual Environments
+env/
+venv/
+migration_env/
+
+# Python files
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs and temporary files
+*.log
+temp/
+tmp/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# BizTalk and Windows specific
+*.config
+*.Config
+app.config
+web.config
+*.btproj.user
+*.suo
+*.user
+bin/
+obj/
+*.dll
+*.pdb
+
+# Connection strings and credentials
+appsettings.json
+appsettings.*.json
+connectionStrings.config
+*.key
+*.pem
+*.pfx
+*.p12
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.staging
+
+# Database files
+*.mdf
+*.ldf
+*.sdf
+
+# Visual Studio files
+.vs/
+packages/
