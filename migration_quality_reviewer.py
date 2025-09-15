@@ -17,7 +17,7 @@ import subprocess  # ADD THIS LINE
 import tempfile   # ADD THIS LINE  
 import copy       # ADD THIS LINE (needed for auto-fix backup)
 import platform  
-
+import streamlit as st
     
 class SmartACEQualityReviewer:
     """
@@ -364,8 +364,19 @@ class SmartACEQualityReviewer:
 
         try:
             # Make LLM call for semantic analysis
-            response = self._call_llm(analysis_prompt, max_tokens=400)
-            self.token_usage += 400  # Track token usage
+            response = self._call_llm(analysis_prompt, max_tokens=4000)
+            self.token_usage += 4000  # Track token usage
+
+            if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
+                st.session_state.token_tracker.manual_track(
+                    agent="migration_quality_reviewer",
+                    operation="llm_quality_review", 
+                    model=self.groq_model,
+                    input_tokens=response.usage.prompt_tokens,
+                    output_tokens=response.usage.completion_tokens,
+                    flow_name=getattr(self, 'flow_name', 'migration_quality_analysis')
+                )
+            
             
             if response and response != "LLM_CALL_FAILED":
                 # Simple scoring based on component status
@@ -602,7 +613,7 @@ class SmartACEQualityReviewer:
         Apply DSV naming conventions to validated components
         Returns: Dictionary of naming updates applied
         """
-        print("\n🏷️ Applying Naming Convention Updates")
+        print("\n Applying Naming Convention Updates")
         print("-" * 35)
         
         naming_updates = {}
@@ -614,24 +625,207 @@ class SmartACEQualityReviewer:
             
             # Determine new name based on component type and DSV standards
             if component['extension'] == '.esql':
-                # ESQL modules: ProjectName_ComponentName_Compute.esql
-                base_name = component['name'].replace('.esql', '').replace('_Compute', '')
-                new_name = f"{project_name}_{base_name}_Compute.esql"
-            
+                # Apply DSV naming convention for ESQL files
+                original_name_without_ext = component['name'].replace('.esql', '')
+                
+                # Step 1: Extract base prefix (EPIS_SYSTEM_DIR_FUNCTION)
+                name_parts = original_name_without_ext.split('_')
+                if len(name_parts) >= 4 and name_parts[0] == 'EPIS':
+                    base_prefix = '_'.join(name_parts[:4])  # EPIS_CW1_OUT_Shipment
+                    remaining_part = '_'.join(name_parts[4:])  # Everything after base prefix
+                    
+                    # Step 2: Remove middleware patterns
+                    middleware_patterns = [
+                        'App_AGENT2_Message_Flow_',
+                        'App_AzureBlob_To_CDM_',
+                        'App_'
+                    ]
+                    
+                    for pattern in middleware_patterns:
+                        remaining_part = remaining_part.replace(pattern, '')
+                    
+                    # Step 3: Remove _Compute suffix
+                    remaining_part = remaining_part.replace('_Compute', '')
+                    
+                    # Step 4: Extract core function name
+                    core_function = ''
+                    if remaining_part:
+                        # Direct mappings
+                        if remaining_part == 'Failure':
+                            core_function = 'Failure'
+                        elif remaining_part == 'Success':
+                            core_function = 'Success'
+                        elif remaining_part == 'Error':
+                            core_function = 'Error'
+                        elif remaining_part == 'Document':
+                            core_function = 'Compute'  # Special case: Document → Compute
+                        elif 'Lookup' in remaining_part:
+                            # Handle lookup patterns
+                            core = remaining_part.replace('Lookup', '')
+                            if core.startswith('CW1'):
+                                core = core[3:]  # Remove CW1 prefix
+                            if core == 'Shipment':
+                                core_function = 'Shipment'
+                            elif core == 'CompanyCode':
+                                core_function = 'CompanyCode'
+                            elif core == 'Customer':
+                                core_function = 'Customer'
+                            else:
+                                core_function = core  # Use as-is for other patterns
+                        else:
+                            core_function = remaining_part  # Use as-is for unmatched patterns
+                    
+                    # Step 5: Construct final name
+                    if core_function:
+                        new_name = f"{base_prefix}_{core_function}.esql"
+                    else:
+                        new_name = f"{base_prefix}.esql"
+                else:
+                    # Fallback for non-EPIS patterns or insufficient parts
+                    base_name = original_name_without_ext.replace('_Compute', '')
+                    new_name = f"{base_name}.esql"
+                        
             elif component['extension'] == '.msgflow':
-                # Message flows: ProjectName_FlowName.msgflow
-                base_name = component['name'].replace('.msgflow', '')
-                new_name = f"{project_name}_{base_name}.msgflow"
+                # Apply DSV naming convention for MessageFlow files
+                original_name_without_ext = component['name'].replace('.msgflow', '')
+                
+                # Step 1: Extract base prefix (EPIS_SYSTEM_DIR_FUNCTION)
+                name_parts = original_name_without_ext.split('_')
+                if len(name_parts) >= 4 and name_parts[0] == 'EPIS':
+                    base_prefix = '_'.join(name_parts[:4])  # EPIS_CW1_OUT_Shipment
+                    
+                    # Step 2: Handle duplicated base prefix pattern
+                    # Pattern: EPIS_CW1_OUT_Shipment_App_EPIS_CW1_OUT_Shipment_App_MeaningfulPart
+                    duplication_pattern = f"{base_prefix}_App_{base_prefix}_App_"
+                    if duplication_pattern in original_name_without_ext:
+                        # Extract meaningful part after the duplication
+                        meaningful_part = original_name_without_ext.split(duplication_pattern)[1]
+                    else:
+                        # Fallback: extract everything after base_prefix_App_
+                        app_pattern = f"{base_prefix}_App_"
+                        if app_pattern in original_name_without_ext:
+                            meaningful_part = original_name_without_ext.split(app_pattern)[1]
+                        else:
+                            meaningful_part = '_'.join(name_parts[4:])  # Everything after base prefix
+                    
+                    # Step 3: Process the meaningful part for MessageFlow
+                    processed_part = ''
+                    if meaningful_part:
+                        # Rule 1: Remove AGENT2_Message_Flow completely
+                        if meaningful_part == 'AGENT2_Message_Flow':
+                            processed_part = ''  # Results in just base prefix
+                        
+                        # Rule 2: Other meaningful flow names - keep as-is
+                        else:
+                            processed_part = meaningful_part
+                    
+                    # Step 4: Construct final name
+                    if processed_part:
+                        new_name = f"{base_prefix}_{processed_part}.msgflow"
+                    else:
+                        new_name = f"{base_prefix}.msgflow"  # Just base prefix for AGENT2_Message_Flow case
+                        
+                else:
+                    # Fallback for non-EPIS patterns
+                    # Remove common duplication patterns
+                    clean_name = original_name_without_ext
+                    if '_App_' in clean_name:
+                        parts = clean_name.split('_App_')
+                        if len(parts) >= 3:
+                            # Handle duplication: take first part + last meaningful part
+                            clean_name = f"{parts[0]}_{parts[-1]}"
+                    # Remove AGENT2_Message_Flow from fallback as well
+                    clean_name = clean_name.replace('_AGENT2_Message_Flow', '')
+                    new_name = f"{clean_name}.msgflow"
             
             elif component['extension'] == '.subflow':
                 # Sub flows: ProjectName_SubFlowName.subflow
                 base_name = component['name'].replace('.subflow', '')
-                new_name = f"{project_name}_{base_name}.subflow"
-            
+
+                                    
             elif component['extension'] == '.xsd':
-                # Schemas: ProjectName_SchemaName.xsd
-                base_name = component['name'].replace('.xsd', '')
-                new_name = f"{project_name}_{base_name}.xsd"
+                # Apply DSV naming convention for XSD schema files
+                original_name_without_ext = component['name'].replace('.xsd', '')
+                
+                # Step 1: Extract base prefix (EPIS_SYSTEM_DIR_FUNCTION)
+                name_parts = original_name_without_ext.split('_')
+                if len(name_parts) >= 4 and name_parts[0] == 'EPIS':
+                    base_prefix = '_'.join(name_parts[:4])  # EPIS_CW1_OUT_Shipment
+                    
+                    # Step 2: Handle duplicated base prefix pattern
+                    # Pattern: EPIS_CW1_OUT_Shipment_App_EPIS_CW1_OUT_Shipment_App_MeaningfulPart
+                    duplication_pattern = f"{base_prefix}_App_{base_prefix}_App_"
+                    if duplication_pattern in original_name_without_ext:
+                        # Extract meaningful part after the duplication
+                        meaningful_part = original_name_without_ext.split(duplication_pattern)[1]
+                    else:
+                        # Fallback: extract everything after base_prefix_App_
+                        app_pattern = f"{base_prefix}_App_"
+                        if app_pattern in original_name_without_ext:
+                            meaningful_part = original_name_without_ext.split(app_pattern)[1]
+                        else:
+                            meaningful_part = '_'.join(name_parts[4:])  # Everything after base prefix
+                    
+                    # Step 3: Process the meaningful part for XSD schemas
+                    processed_part = ''
+                    if meaningful_part:
+                        # Rule 1: AGENT2_Message_Flow → Remove completely (empty result)
+                        if meaningful_part == 'AGENT2_Message_Flow':
+                            processed_part = ''
+                        
+                        # Rule 2: CDM patterns
+                        elif meaningful_part.startswith('CDMDocument'):
+                            # CDMDocumentn → Document (handle typos like 'CDMDocumentn')
+                            processed_part = 'Document'
+                        elif meaningful_part.startswith('CDM'):
+                            # Other CDM patterns → remove CDM prefix
+                            processed_part = meaningful_part[3:]
+                        
+                        # Rule 3: CW1 patterns 
+                        elif meaningful_part.startswith('CW1'):
+                            # CW1EventFormat → EventFormat
+                            processed_part = meaningful_part[3:]
+                        
+                        # Rule 4: Schema names - keep as-is
+                        elif meaningful_part.endswith('Schema'):
+                            # CompanyCodeSchema, ErrorSchema, ShipmentSchema → keep as-is
+                            processed_part = meaningful_part
+                        
+                        # Rule 5: Other patterns - keep as-is
+                        else:
+                            processed_part = meaningful_part
+                    
+                    # Step 4: Construct final name
+                    if processed_part:
+                        new_name = f"{base_prefix}_{processed_part}.xsd"
+                    else:
+                        new_name = f"{base_prefix}.xsd"  # Just base prefix when meaningful_part is empty
+                        
+                else:
+                    # Fallback for non-EPIS patterns
+                    clean_name = original_name_without_ext
+                    
+                    # Remove duplication patterns
+                    if '_App_' in clean_name:
+                        parts = clean_name.split('_App_')
+                        if len(parts) >= 3 and parts[0] == parts[1]:
+                            # Handle duplication: EPIS_CW1_OUT_Shipment_App_EPIS_CW1_OUT_Shipment_App_Something
+                            clean_name = f"{parts[0]}_{parts[-1]}"
+                    
+                    # Remove AGENT2_Message_Flow
+                    clean_name = clean_name.replace('_AGENT2_Message_Flow', '')
+                    clean_name = clean_name.replace('AGENT2_Message_Flow', '')
+                    
+                    # Apply CDM and CW1 rules to fallback as well
+                    if '_CDMDocument' in clean_name:
+                        clean_name = clean_name.replace('_CDMDocument', '_Document')
+                    elif clean_name.endswith('CDMDocument'):
+                        clean_name = clean_name.replace('CDMDocument', 'Document')
+                    
+                    if '_CW1' in clean_name:
+                        clean_name = clean_name.replace('_CW1', '_')
+                    
+                    new_name = f"{clean_name}.xsd"
             
             elif component['extension'] == '.map':
                 # Maps: ProjectName_MapName.map
@@ -1519,9 +1713,21 @@ class SmartACEQualityReviewer:
 
         try:
             # LLM call
-            response = self._call_llm(prompt, max_tokens=300)
-            self.token_usage += 2500
+            response = self._call_llm(prompt, max_tokens=3000)
+            self.token_usage += 5000
             
+
+            if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
+                st.session_state.token_tracker.manual_track(
+                    agent="migration_quality_reviewer",
+                    operation="extract_project_nameing", 
+                    model=self.groq_model,
+                    input_tokens=response.usage.prompt_tokens,
+                    output_tokens=response.usage.completion_tokens,
+                    flow_name=getattr(self, 'flow_name', 'migration_quality_analysis')
+                )
+
+
             # Use llm_json_parser for robust parsing
             from llm_json_parser import parse_llm_json
             
@@ -1639,69 +1845,6 @@ class SmartACEQualityReviewer:
     
 
 
-    def _extract_project_naming(self) -> str:
-        """DATA-DRIVEN: Extract naming components using naming_convention.json file"""
-        
-        # Load naming standards from JSON file
-        try:
-            with open(self.naming_standards_file, 'r', encoding='utf-8') as f:
-                standards = json.load(f)
-        except Exception as e:
-            raise Exception(f"Cannot load naming convention file: {e}")
-        
-        # LLM extraction prompt
-        prompt = f"""Extract naming components using loaded standards.
-
-    Valid target_systems: {standards.get('target_systems', [])}
-    Valid directions: {standards.get('directions', [])}  
-    Valid functions: {standards.get('functions', [])}
-
-    Vector DB Content: {self.vector_db_content[:2000]}
-
-    Return JSON: {{"target_system": "value", "directions": "value", "functions": "value"}}"""
-
-        try:
-            response = self._call_llm(prompt, max_tokens=200)
-            self.token_usage += 1000
-            
-            from llm_json_parser import parse_llm_json
-            result = parse_llm_json(response)
-            
-            if result.success:
-                components = result.data
-                
-                # Validate against loaded standards
-                target_system = components.get('target_system', '').upper()
-                if target_system not in standards.get('target_systems', []):
-                    target_system = standards.get('target_systems', ['EPIS'])[0]
-                    
-                directions = components.get('directions', '').upper() 
-                if directions not in standards.get('directions', []):
-                    directions = standards.get('directions', ['IN'])[0]
-                    
-                functions = components.get('functions', '')
-                if functions not in standards.get('functions', []):
-                    functions = standards.get('functions', ['Document'])[0]
-                
-                # Build project name using loaded pattern
-                pattern = standards.get('naming_patterns', {}).get('project', 'EPIS_{system}_{dir}_{func}_App')
-                project_name = pattern.format(system=target_system, dir=directions, func=functions)
-                
-                print(f"  📁 Project name: {project_name}")
-                return project_name
-                
-        except Exception as e:
-            print(f"  ⚠️ LLM failed: {e}")
-        
-        # Simple fallback using defaults from loaded standards
-        pattern = standards.get('naming_patterns', {}).get('project', 'EPIS_{system}_{dir}_{func}_App')
-        return pattern.format(
-            system=standards.get('target_systems', ['EPIS'])[0],
-            dir=standards.get('directions', ['IN'])[0], 
-            func=standards.get('functions', ['Document'])[0]
-        )
-
-
     
     
     def _analyze_component_quality(self) -> Dict[str, Dict]:
@@ -1754,8 +1897,8 @@ Analyze compliance and provide JSON:
     "component_count": {len(components)}
 }}"""
             
-            response = self._call_llm(prompt, max_tokens=1000)
-            self.token_usage += 1500
+            response = self._call_llm(prompt, max_tokens=2000)
+            self.token_usage += 4500
             
             try:
                 quality_results[comp_type] = json.loads(response)
@@ -1813,8 +1956,18 @@ Return JSON mapping:
     "original_name2.ext": "new_standardized_name2.ext"
 }}"""
         
-        response = self._call_llm(prompt, max_tokens=1500)
-        self.token_usage += 2000
+        response = self._call_llm(prompt, max_tokens=3500)
+        self.token_usage += 5000
+
+        if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
+            st.session_state.token_tracker.manual_track(
+                agent="migration_quality_reviewer",
+                operation="generate_project_nameing", 
+                model=self.groq_model,
+                input_tokens=response.usage.prompt_tokens,
+                output_tokens=response.usage.completion_tokens,
+                flow_name=getattr(self, 'flow_name', 'migration_quality_analysis')
+            )
         
         try:
             naming_mapping = json.loads(response)
@@ -1967,6 +2120,18 @@ Return JSON mapping:
                 temperature=0.1,
                 max_tokens=max_tokens
             )
+
+            if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
+                st.session_state.token_tracker.manual_track(
+                    agent="migration_quality_reviewer",
+                    operation="create_enrichment_report", 
+                    model=self.groq_model,
+                    input_tokens=response.usage.prompt_tokens,
+                    output_tokens=response.usage.completion_tokens,
+                    flow_name=getattr(self, 'flow_name', 'migration_quality_analysis')
+                )
+            
+
             return response.choices[0].message.content.strip()
         except Exception as e:
             print(f"LLM call failed: {e}")

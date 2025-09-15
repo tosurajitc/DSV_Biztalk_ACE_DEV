@@ -13,8 +13,7 @@ import json
 from datetime import datetime
 import traceback
 from dotenv import load_dotenv
-from llm_token_tracker import SmartTokenTracker, create_tracker
-from llm_token_tracker import TrackedGroqClient, wrap_groq_client
+from llm_token_tracker import TrackedGroqClient, wrap_groq_client, SmartTokenTracker, create_tracker
 import shutil
 import requests
 from bs4 import BeautifulSoup
@@ -910,7 +909,7 @@ def render_program_2_ui():
     
     #   MODIFIED: Generation Button (removed confluence_doc parameter)
     st.markdown("---")
-    if st.button("  Generate DSV MessageFlow", type="primary", use_container_width=True):
+    if st.button("  Generate DSV MessageFlow", type="primary"):
         run_messageflow_generation(
             confluence_doc=None,  # No longer needed - Vector DB provides content
             app_name=app_name,

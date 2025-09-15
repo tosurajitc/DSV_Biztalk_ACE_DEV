@@ -1,8 +1,8 @@
 cd "C:\@Official\@Gen AI\DSV\BizTalk\Analyze_this_folder\GENAI_EPIS_CW1_IN_Document_App"
 
 
-C:\Users\SURAJITCHATTERJEE\AppData\Local\Programs\Python\Python312\python.exe -m venv migration_env
-migration_env\Scripts\activate
+C:\Users\SURAJITCHATTERJEE\AppData\Local\Programs\Python\Python312\python.exe -m venv biztalk_ace_env
+migration_biztalk_ace_envenv\Scripts\activate
 to run the program : streamlit run main.py
 
 

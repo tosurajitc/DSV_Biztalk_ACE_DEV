@@ -508,7 +508,7 @@ if __name__ == "__main__":
     tracker = create_tracker("demo_session")
     
     # Simulate some LLM calls
-    tracker.manual_track("agent_1", "esql_generation", "llama-3.1-70b-versatile", 1500, 800, 2000, "flow_1")
+    tracker.manual_track("agent_1", "esql_generation", "llama-3.3-70b-versatile", 1500, 800, 2000, "flow_1")
     tracker.manual_track("agent_2", "schema_analysis", "llama-3.1-8b-instant", 800, 400, 1200, "flow_1")
     tracker.mark_flow_complete("flow_1")
     

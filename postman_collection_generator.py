@@ -88,7 +88,7 @@ class PostmanCollectionGenerator:
             raise Exception("Cannot proceed without AI intelligence")
     
     def _call_llm_intelligence(self, system_prompt: str, user_prompt: str, 
-                              max_tokens: int = 2000, call_type: str = "general") -> str:
+                              max_tokens: int = 8000, call_type: str = "general") -> str:
         """Make LLM call with error handling"""
         
         if call_type == "analysis":
@@ -470,7 +470,7 @@ Return ONLY the JSON object."""
 
         payload_response = self._call_llm_intelligence(
             system_prompt, user_prompt,
-            max_tokens=4000,
+            max_tokens=8000,
             call_type="generation"
         )
         
@@ -818,7 +818,7 @@ AI-generated Postman test collections based on business requirements analysis.
 
                 response = self._call_llm_intelligence(
                     system_prompt, user_prompt,
-                    max_tokens=1500,
+                    max_tokens=8000,
                     call_type="analysis"
                 )
                 

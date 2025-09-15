@@ -71,7 +71,7 @@
       <!-- 1. START EVENT MESSAGE NODE -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_1" 
              location="-221,338" rotation="RIGHT_TO_LEFT" 
-             computeExpression="esql://routine/#{FLOW_NAME}_StartEventMessage.Main">
+             computeExpression="#{FLOW_NAME}_StartEventMessage.Main">
         <translation xmi:type="utility:ConstantString" string="StartEventMessage"/>
       </nodes>
 
@@ -98,7 +98,7 @@
       <!-- 5. AFTER ENRICHMENT COMPUTE NODE -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_5" 
              location="376,68" 
-             computeExpression="esql://routine/#{FLOW_NAME}_AfterEnrichment.Main">
+             computeExpression="#{FLOW_NAME}_AfterEnrichment.Main">
         <translation xmi:type="utility:ConstantString" string="AfterEnrichment"/>
       </nodes>
 
@@ -129,7 +129,7 @@
       <!-- 9. PREPARE SOAP MESSAGE NODE -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_9" 
              location="1128,370" 
-             computeExpression="esql://routine/#{FLOW_NAME}_PrepareSoap.Main">
+             computeExpression="#{FLOW_NAME}_PrepareSoap.Main">
         <translation xmi:type="utility:ConstantString" string="Prepare Soap message"/>
       </nodes>
 
@@ -150,14 +150,14 @@
       <!-- 11. FAILURE HANDLING NODE -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_11" 
              location="1490,344" 
-             computeExpression="esql://routine/#{FLOW_NAME}_Failure.Main">
+             computeExpression="#{FLOW_NAME}_Failure.Main">
         <translation xmi:type="utility:ConstantString" string="Failure_Handler"/>
       </nodes>
 
       <!-- 12. AFTER TRANSFORMATION EVENT MESSAGE -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_12" 
              location="760,418" rotation="RIGHT_TO_LEFT" 
-             computeExpression="esql://routine/#{FLOW_NAME}_AfterTransEventMsg.Main">
+             computeExpression="#{FLOW_NAME}_AfterTransEventMsg.Main">
         <translation xmi:type="utility:ConstantString" string="AfterTransEventMessage"/>
       </nodes>
 

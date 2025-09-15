@@ -25,6 +25,10 @@ class ESQLGenerator:
         self.llm = Groq(api_key=self.groq_api_key)
         self.groq_client = Groq(api_key=self.groq_api_key)
         self.groq_model = os.getenv('GROQ_MODEL', 'llama-3.1-8b-instant')
+
+        self.max_tokens_per_request = 8192
+        self.estimated_chars_per_token = 3.2  
+        self.max_total_tokens = 32768
         
         # ✅ ADD: Initialize missing attributes
         self.output_dir = None  # Will be set by generate_esql_files method
@@ -310,17 +314,18 @@ Generate the complete ESQL module:"""
                 temperature=0.1,
                 max_tokens=3000
             )
-            
-            # Track tokens
+            print(f"🔍 DEBUG: token_tracker in session_state: {'token_tracker' in st.session_state}")
             if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
                 st.session_state.token_tracker.manual_track(
                     agent="esql_generator",
-                    operation="chunk_analysis",
+                    operation="validation_enhancement",
                     model=self.groq_model,
                     input_tokens=response.usage.prompt_tokens,
                     output_tokens=response.usage.completion_tokens,
-                    flow_name=f"chunk_{chunk_index}"
+                    flow_name=getattr(self, 'flow_name', 'esql_generator')
                 )
+                
+            
             
             self.llm_calls_count += 1
             raw_response = response.choices[0].message.content.strip()
@@ -436,7 +441,7 @@ Generate the complete ESQL module:"""
                 temperature=0.05,  # Very low for consistent structure
                 max_tokens=self.max_tokens_per_request
             )
-            
+            print(f"🔍 DEBUG: token_tracker in session_state: {'token_tracker' in st.session_state}")
             # Track tokens
             if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
                 st.session_state.token_tracker.manual_track(
@@ -445,7 +450,7 @@ Generate the complete ESQL module:"""
                     model=self.groq_model,
                     input_tokens=response.usage.prompt_tokens,
                     output_tokens=response.usage.completion_tokens,
-                    flow_name=module_requirements.get('name', 'unknown_module')
+                    flow_name=getattr(self, 'flow_name', 'esql_generator')
                 )
             
             self.llm_calls_count += 1
@@ -507,7 +512,7 @@ Return ONLY the ESQL code:"""
                 temperature=0.1,
                 max_tokens=self.max_tokens_per_request
             )
-            
+            print(f"🔍 DEBUG: token_tracker in session_state: {'token_tracker' in st.session_state}")
             # Track tokens
             if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
                 st.session_state.token_tracker.manual_track(
@@ -516,7 +521,7 @@ Return ONLY the ESQL code:"""
                     model=self.groq_model,
                     input_tokens=response.usage.prompt_tokens,
                     output_tokens=response.usage.completion_tokens,
-                    flow_name=f"{module_name}_validation"
+                    flow_name=getattr(self, 'flow_name', 'esql_generator')
                 )
             
             self.llm_calls_count += 1
@@ -568,12 +573,25 @@ Return ONLY the ESQL code:"""
             
             # Load MessageFlow content
             msgflow_content_text = ""
-            if msgflow_content.get('path') and os.path.exists(msgflow_content['path']):
-                with open(msgflow_content['path'], 'r', encoding='utf-8') as f:
+            msgflow_file_found = None
+
+            # Search for any .msgflow file in output directory
+            import glob
+            msgflow_pattern = os.path.join("output", "**", "*.msgflow")
+            msgflow_files = glob.glob(msgflow_pattern, recursive=True)
+
+            if msgflow_files:
+                msgflow_file_found = msgflow_files[0]  # Use first .msgflow file found
+                with open(msgflow_file_found, 'r', encoding='utf-8') as f:
                     msgflow_content_text = f.read()
-                print(f"  ✅ MessageFlow loaded: {len(msgflow_content_text)} characters")
+                print(f"  ✅ MessageFlow auto-discovered: {msgflow_file_found} ({len(msgflow_content_text)} characters)")
             else:
-                raise Exception(f"MessageFlow not found: {msgflow_content.get('path', 'No path provided')}")
+                print(f"  ⚠️ No .msgflow files found in output directory")
+                print(f"  🔄 Continuing with Vector DB content only...")
+                msgflow_content_text = "" 
+            
+
+
             
             # Load JSON mappings
             json_mappings_data = {}
@@ -583,6 +601,8 @@ Return ONLY the ESQL code:"""
                 print(f"  ✅ JSON mappings loaded: {len(json_mappings_data)} components")
             else:
                 raise Exception(f"JSON mappings not found: {json_mappings.get('path', 'No path provided')}")
+            
+            
             
             # Extract ESQL requirements from MessageFlow compute expressions via LLM
             print("🔍 LLM extracting ESQL requirements from MessageFlow compute expressions...")
@@ -1016,8 +1036,6 @@ def main():
     """Test harness for ESQL generator - Vector DB Mode"""
     generator = ESQLGenerator()
     
-    # Get Vector DB content using existing pipeline (NO PDF processing)
-    import streamlit as st
     
     if not st.session_state.get('vector_pipeline'):
         print("❌ Vector DB pipeline not available")
