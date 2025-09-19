@@ -17,7 +17,59 @@ class ChromaVectorStore:
             metadata={"description": "Confluence PDF knowledge base"},
             embedding_function=default_ef  # ✅ Explicitly use default (no downloads)
         )
+
+
+
+    def search_for_agent_with_diagrams(self, agent_name: str, queries: List[str], top_k: int = 5) -> List[Dict]:
+        """
+        NEW: Enhanced search that prioritizes chunks with diagram data
+        """
+        all_results = []
         
+        for query in queries:
+            # Add diagram-specific terms to query
+            enhanced_query = query + " technical diagram process flow architecture"
+            
+            results = self.collection.query(
+                query_texts=[enhanced_query],
+                n_results=top_k * 2  # Get more results for filtering
+            )
+            
+            for i in range(len(results['documents'][0])):
+                result_data = {
+                    'content': results['documents'][0][i],
+                    'metadata': results['metadatas'][0][i],
+                    'distance': results['distances'][0][i],
+                    'id': results['ids'][0][i],
+                    'query': query  # Add query for traceability
+                }
+                
+                # Boost score for diagram-containing chunks
+                if result_data['metadata'].get('has_technical_diagrams'):
+                    result_data['boosted_score'] = result_data['distance'] * 0.7  # Better score
+                    result_data['has_technical_diagrams'] = True
+                    result_data['score'] = 1.0 - result_data['boosted_score']  # Convert to similarity
+                else:
+                    result_data['boosted_score'] = result_data['distance']
+                    result_data['has_technical_diagrams'] = False
+                    result_data['score'] = 1.0 - result_data['distance']
+                
+                all_results.append(result_data)
+        
+        # Remove duplicates and sort by boosted score
+        seen_ids = set()
+        unique_results = []
+        for result in all_results:
+            if result['id'] not in seen_ids:
+                unique_results.append(result)
+                seen_ids.add(result['id'])
+        
+        # Sort by score (higher is better)
+        unique_results.sort(key=lambda x: x['score'], reverse=True)
+        return unique_results[:top_k]
+
+
+
     def create_knowledge_base(self, chunks: List[Dict]) -> None:
         """Create vector knowledge base from PDF chunks"""
         print(f"Creating knowledge base from {len(chunks)} chunks...")

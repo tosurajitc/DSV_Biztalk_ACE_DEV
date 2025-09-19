@@ -415,6 +415,49 @@ class SmartACEQualityReviewer:
 
 
 
+    def _process_esql_content(self, content: str, filename: str) -> str:
+        """
+        Process ESQL file content to:
+        1. Remove CALL statements
+        2. Fix CREATE COMPUTE MODULE names (remove .esql extension)
+        """
+        import re
+        
+        print(f"      🔧 Processing ESQL content for: {filename}")
+        modifications_made = []
+        
+        # Rule 1: Remove CALL statements
+        # Pattern matches entire lines with CALL statements
+        call_pattern = r'^\s*CALL\s+.*?;\s*$'
+        lines_before = content.count('\n') + 1
+        content = re.sub(call_pattern, '', content, flags=re.MULTILINE)
+        lines_after = content.count('\n') + 1
+        call_statements_removed = lines_before - lines_after
+        
+        if call_statements_removed > 0:
+            modifications_made.append(f"Removed {call_statements_removed} CALL statements")
+        
+        # Rule 2: Fix CREATE COMPUTE MODULE names (remove .esql extension)
+        module_pattern = r'(CREATE\s+COMPUTE\s+MODULE\s+\w+)\.esql'
+        matches_found = len(re.findall(module_pattern, content, flags=re.IGNORECASE))
+        content = re.sub(module_pattern, r'\1', content, flags=re.IGNORECASE)
+        
+        if matches_found > 0:
+            modifications_made.append(f"Fixed {matches_found} module name(s)")
+        
+        # Clean up extra blank lines that might result from CALL removal
+        content = re.sub(r'\n\s*\n\s*\n', '\n\n', content)
+        
+        # Log modifications made
+        if modifications_made:
+            print(f"        ✅ {', '.join(modifications_made)}")
+        else:
+            print(f"        ℹ️ No modifications needed")
+        
+        return content
+
+        
+
     def _create_final_folder_structure(self, project_name) -> str:
         """
         Create ACE Toolkit compatible project structure with enrichment reports
@@ -467,31 +510,67 @@ class SmartACEQualityReviewer:
             total_fixes_applied = 0
             
             for component in self.discovered_components:
-                destination_path = project_output_path / component['name']
-                
+                            destination_path = project_output_path / component['name']
+                            
+                            try:
+                                # 🔧 NEW: ESQL content processing
+                                if component.get('extension') == '.esql':
+                                    # Read original ESQL file
+                                    with open(component['full_path'], 'r', encoding='utf-8', errors='ignore') as f:
+                                        original_content = f.read()
+                                    
+                                    # Process ESQL content
+                                    modified_content = self._process_esql_content(original_content, component['name'])
+                                    
+                                    # Write modified content to destination
+                                    with open(destination_path, 'w', encoding='utf-8') as f:
+                                        f.write(modified_content)
+                                    
+                                    print(f"    🔧 Processed ESQL: {component['name']}")
+                                else:
+                                    # Existing logic for non-ESQL files
+                                    shutil.copy2(component['full_path'], destination_path)
+                                
+                                if component.get('deployment_ready', False):
+                                    deployment_ready_count += 1
+                                    print(f"    ✅ {component['name']}")
+                                else:
+                                    review_required_count += 1
+                                    print(f"    ⚠️  {component['name']} (needs review)")
+                                
+                                # Count fixes for this component
+                                if component['name'] in self.auto_fix_summary:
+                                    total_fixes_applied += len(self.auto_fix_summary[component['name']])
+                                    
+                            except Exception as e:
+                                print(f"    ❌ Failed to copy {component['name']}: {str(e)}")
+            
+            # 🔧 NEW: Copy transforms folder if it exists (XSL files)
+            transforms_source = self.ace_components_folder / 'Enhanced_ACE_Project' / 'transforms'
+            if transforms_source.exists():
+                transforms_target = project_output_path / 'transforms'
                 try:
-                    shutil.copy2(component['full_path'], destination_path)
-                    
-                    if component.get('deployment_ready', False):
-                        deployment_ready_count += 1
-                        print(f"    ✅ {component['name']}")
-                    else:
-                        review_required_count += 1
-                        print(f"    ⚠️  {component['name']} (needs review)")
-                    
-                    # Count fixes for this component
-                    if component['name'] in self.auto_fix_summary:
-                        total_fixes_applied += len(self.auto_fix_summary[component['name']])
-                        
+                    shutil.copytree(transforms_source, transforms_target, dirs_exist_ok=True)
+                    xsl_files_count = len(list(transforms_target.glob('*.xsl')))
+                    print(f"  📁 Copied transforms folder: {xsl_files_count} XSL files")
                 except Exception as e:
-                    print(f"    ❌ Failed to copy {component['name']}: {str(e)}")
+                    print(f"  ⚠️ Failed to copy transforms folder: {e}")
+            else:
+                print("  ℹ️ No transforms folder found to copy")
             
             # Create .project file (ACE Toolkit compatibility)
             project_file_content = f"""<?xml version="1.0" encoding="UTF-8"?>
     <projectDescription>
         <name>{project_name}</name>
-        <comment>Generated ACE project from BizTalk migration - {timestamp}</comment>
+        <comment></comment>
         <projects>
+            <project>EPIS_CommonUtils_Lib</project>
+            <project>EPIS_Consumer_Lib_v2</project>
+            <project>EPIS_BlobStorage_Lib</project>
+            <project>EPIS_MessageEnrichment_StaticLib</project>
+            <project>EPIS_CommonFlows_Lib</project>
+            <project>EPIS_CargoWiseOne_eAdapter_Lib</project>
+            <project>EPIS_CargoWiseOne_Schemas_Lib</project>
         </projects>
         <buildSpec>
             <buildCommand>
@@ -501,6 +580,21 @@ class SmartACEQualityReviewer:
             </buildCommand>
             <buildCommand>
                 <name>com.ibm.etools.mft.applib.applibresourcevalidator</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.connector.policy.ui.PolicyBuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.applib.mbprojectbuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.msg.validation.dfdl.mlibdfdlbuilder</name>
                 <arguments>
                 </arguments>
             </buildCommand>
@@ -515,16 +609,79 @@ class SmartACEQualityReviewer:
                 </arguments>
             </buildCommand>
             <buildCommand>
-                <name>com.ibm.etools.mft.esql.lang.esqlbuilder</name>
+                <name>com.ibm.etools.msg.validation.dfdl.mbprojectresourcesbuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.esql.lang.esqllangbuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.map.builder.mslmappingbuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.flow.msgflowxsltbuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.flow.msgflowbuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.decision.service.ui.decisionservicerulebuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.pattern.capture.PatternBuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.json.builder.JSONBuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.restapi.ui.restApiDefinitionsBuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.policy.ui.policybuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.msg.assembly.messageAssemblyBuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.msg.validation.dfdl.dfdlqnamevalidator</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.bar.ext.barbuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.unittest.ui.TestCaseBuilder</name>
                 <arguments>
                 </arguments>
             </buildCommand>
         </buildSpec>
         <natures>
-            <nature>com.ibm.etools.mft.applib.applibNature</nature>
-            <nature>com.ibm.etools.mft.flow.adapters.adapterNature</nature>
-            <nature>com.ibm.etools.mft.flow.sca.scaNature</nature>
-            <nature>com.ibm.etools.mft.esql.lang.esqlnature</nature>
+            <nature>com.ibm.etools.msgbroker.tooling.applicationNature</nature>
+            <nature>com.ibm.etools.msgbroker.tooling.messageBrokerProjectNature</nature>
         </natures>
     </projectDescription>"""
             

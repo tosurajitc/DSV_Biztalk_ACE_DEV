@@ -234,6 +234,15 @@ class XSLGenerator:
                 temperature=0.3,
                 max_tokens=4000
             )
+            if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
+                st.session_state.token_tracker.manual_track(
+                    agent="schema_generator",
+                    operation="schema_generation",
+                    model=self.groq_model,
+                    input_tokens=response.usage.prompt_tokens,
+                    output_tokens=response.usage.completion_tokens,
+                    flow_name=getattr(self, 'current_schema_name', 'schema_gen')
+                )
             
             raw_analysis = response.choices[0].message.content.strip()
             self.llm_analysis_calls += 1
@@ -325,6 +334,15 @@ class XSLGenerator:
                     temperature=0.2,
                     max_tokens=4000
                 )
+                if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
+                    st.session_state.token_tracker.manual_track(
+                        agent="schema_generator",
+                        operation="schema_generation",
+                        model=self.groq_model,
+                        input_tokens=response.usage.prompt_tokens,
+                        output_tokens=response.usage.completion_tokens,
+                        flow_name=getattr(self, 'current_schema_name', 'schema_gen')
+                    )
                 
                 xsl_content = response.choices[0].message.content.strip()
                 self.llm_generation_calls += 1

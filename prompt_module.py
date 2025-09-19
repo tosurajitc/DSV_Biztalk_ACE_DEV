@@ -188,7 +188,7 @@ Create a production-ready ESQL module for IBM ACE with the following specificati
 
 ## BUSINESS CONTEXT:
 ```
-{business_context[:1000] if business_context else "Standard transformation module"}
+{business_context[:1000] if business_context else "Standard compute module"}
 ```
 """
     

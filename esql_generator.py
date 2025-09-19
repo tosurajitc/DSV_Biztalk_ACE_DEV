@@ -99,6 +99,12 @@ class ESQLGenerator:
 
 ## MANDATORY STRUCTURAL REQUIREMENTS
 
+### 0. MODULE NAME RULES (CRITICAL):
+- CREATE COMPUTE MODULE statement must use module name WITHOUT .esql extension
+- Example: CREATE COMPUTE MODULE AzureBlob_To_CDM_Document  (CORRECT)
+- Example: CREATE COMPUTE MODULE AzureBlob_To_CDM_Document.esql  (WRONG)
+- File extension (.esql) is handled separately, NOT in the module declaration
+
 ### 1. InputRoot/OutputRoot Rules (CRITICAL):
 - **InputRoot**: READ-ONLY - NEVER modify InputRoot directly
 - **OutputRoot**: WRITABLE - Always use OutputRoot for modifications
@@ -162,10 +168,8 @@ END;
 Extract and return JSON with:
 1. "esql_modules": List of required ESQL modules with names and purposes
 2. "business_logic": Business logic requirements for each module
-3. "database_operations": Database lookup/procedure requirements
-4. "transformations": Data transformation specifications
-5. "message_structure": Input/output message structure details
-6. "customizations": Specific customizations needed for template
+3. "message_structure": Input/output message structure details
+4. "customizations": Specific customizations needed for template
 
 Focus on:
 - Node names from MessageFlow that need ESQL modules
@@ -181,6 +185,9 @@ Return valid JSON only:"""
         Create ESQL generation prompt for specific module
         """
         module_name = module_requirements.get('name', 'UnknownModule')
+        if module_name.lower().endswith('.esql'):
+            module_name = module_name[:-5]
+
         purpose = module_requirements.get('purpose', 'Message processing')
         
         prompt = f"""Generate a complete ESQL module for IBM ACE:
@@ -193,11 +200,13 @@ Return valid JSON only:"""
 ## BUSINESS REQUIREMENTS:
 {json.dumps(module_requirements.get('business_logic', {}), indent=2)}
 
-## DATABASE OPERATIONS:
-{json.dumps(module_requirements.get('database_operations', []), indent=2)}
+- Focus on message processing and validation
+- Database operations will be added manually by developers
+- No automatic database procedure generation
 
-## TRANSFORMATIONS:
-{json.dumps(module_requirements.get('transformations', []), indent=2)}
+- Focus only on ESQL compute logic  
+- No XSL transformations (handled separately)
+- No inline XML transformations
 
 ## TEMPLATE CUSTOMIZATIONS:
 {json.dumps(module_requirements.get('customizations', {}), indent=2)}
@@ -361,6 +370,9 @@ Generate the complete ESQL module:"""
         
         for module_req in modules:
             module_name = module_req.get('name', 'UnknownModule')
+            if module_name.lower().endswith('.esql'):
+                module_name = module_name[:-5]
+
             print(f"⚡ Generating {module_name}.esql with LLM...")
             
             try:

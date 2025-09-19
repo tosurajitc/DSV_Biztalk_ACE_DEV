@@ -2,7 +2,9 @@ cd "C:\@Official\@Gen AI\DSV\BizTalk\Analyze_this_folder\GENAI_EPIS_CW1_IN_Docum
 
 
 C:\Users\SURAJITCHATTERJEE\AppData\Local\Programs\Python\Python312\python.exe -m venv biztalk_ace_env
-migration_biztalk_ace_envenv\Scripts\activate
+
+biztalk_ace_env\Scripts\activate
+
 to run the program : streamlit run main.py
 
 
@@ -13,7 +15,7 @@ C:\Users\SURAJITCHATTERJEE\AppData\Local\Programs\Python\Python312\python.exe cl
 GIT PUSH Steps: 
 git init
 git add .
-git commit -m "Commit enhanced vector DB knowledge base creation 14 Sept" 
+git commit -m "Commit naming convention updated 15 Sept" 
 git remote set-url origin https://github.com/tosurajitc/DSV_Biztalk_ACE
 git push -u origin master
 

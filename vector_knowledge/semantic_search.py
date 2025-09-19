@@ -6,114 +6,126 @@ class SemanticSearchEngine:
         self.vector_store = vector_store
         
         # Define agent-specific search queries
-# Replace the agent_queries dictionary in semantic_search.py with this updated version:
-
         self.agent_queries = {
             'component_mapper': [
-                'BizTalk orchestration components and schemas',
-                'mapping transformations and data conversion',
-                'pipeline components and message processing'
+                'BizTalk orchestration components and schemas with process diagrams',
+                'mapping transformations and data conversion with technical diagrams', 
+                'system architecture diagrams and component relationships',
+                'integration flow diagrams and message routing'
             ],
             'messageflow_generator': [
-                'message flow patterns and routing logic',
-                'system integration and connection points',
-                'data flow between applications and services'
-            ],
-            'ace_module_creator': [
-                'ESQL transformation modules and logic',
-                'XSL stylesheet mappings and conversions',
-                'data enrichment and computation rules'
-            ],
-            'schema_generator': [
-                'schema definitions and data structures',
-                'message format specifications and validation',
-                'data type definitions and constraints'
-            ],
-            'migration_quality_reviewer': [
-                'business requirements and acceptance criteria',
-                'quality standards and validation rules',
-                'compliance requirements and testing criteria',
-                'naming conventions and template compliance',
-                'migration quality patterns and best practices'
+                'message flow patterns and routing logic with flow diagrams',
+                'system integration diagrams and connection points',
+                'data flow diagrams between applications and services',
+                'technical architecture diagrams and message processing flows'
             ],
             'esql_generator': [
-                'ESQL transformation logic and business rules',
-                'database operations and data processing',
-                'compute node implementations and message routing'
+                'database lookup diagrams and stored procedures',
+                'data transformation logic with technical diagrams',
+                'enrichment process diagrams and business rules',
+                'technical specifications with database integration diagrams'
+            ],
+            'schema_generator': [
+                'schema definitions with data structure diagrams', 
+                'message format specifications and technical diagrams',
+                'data model diagrams and schema relationships',
+                'technical specifications with data flow diagrams'
             ],
             'xsl_generator': [
-                'XSL stylesheet mappings and field transformations',
-                'data conversion and transformation patterns',
-                'XML processing and template transformations'
-            ],
-            'application_descriptor_generator': [
-                'library dependencies and shared libraries',
-                'application configuration settings and parameters',
-                'runtime requirements and deployment configurations'
-            ],
-            'enrichment_generator': [
-                'CW1 document enrichment and database lookup operations',
-                'CargoWise One data enhancement and validation rules', 
-                'database stored procedures and enrichment transformations',
-                'CDM document processing and Universal Event generation',
-                'CompanyCode lookup and target recipient enrichment logic',
-                'CW1 shipment matching and IsPublished flag validation'
-            ],
-            'postman_collection_generator': [
-                'CDM document validation testing and XML schema compliance testing',
-                'CargoWise One CW1 integration testing and eAdapter service validation',
-                'database enrichment testing and stored procedure validation scenarios',
-                'XSL transformation testing and CDM to UniversalEvent conversion validation', 
-                'MQ message processing testing and queue-based integration scenarios',
-                'business logic validation testing and data enrichment rule verification',
-                'error handling testing and exception scenario validation for document processing',
-                'CompanyCode and shipment matching testing for CW1 business rules'
+                'transformation mapping diagrams and XSL specifications',
+                'data conversion diagrams and mapping logic',
+                'technical diagrams with transformation processes',
+                'message transformation flows and technical specifications'
             ],
             'project_generator': [
-                'application integration and system connectivity requirements',
-                'enterprise service bus and message processing specifications',
-                'document transformation and data enrichment operations', 
-                'business process automation and workflow integration',
-                'database operations and lookup procedures for data enrichment',
-                'message routing and transformation between connected systems',
-                'system dependencies and component integration architecture',
-                'service connectivity and endpoint configuration requirements'
+                'system architecture diagrams and project dependencies',
+                'technical integration diagrams and component relationships',
+                'project structure diagrams and module dependencies',
+                'technical specifications with system integration diagrams'
             ]
         }
+
+
+
+
+
+
+
     
     def get_agent_content(self, agent_name: str, top_k: int = 5) -> str:
-        """Get focused content for specific agent"""
+        """
+        ENHANCED: Get focused content for specific agent with diagram data integration
+        """
         if agent_name not in self.agent_queries:
             raise ValueError(f"Unknown agent: {agent_name}")
         
         queries = self.agent_queries[agent_name]
         
-        # Search for relevant chunks
-        results = self.vector_store.search_for_agent(agent_name, queries, top_k)
+        # Search for relevant chunks with diagram priority
+        results = self.vector_store.search_for_agent_with_diagrams(agent_name, queries, top_k)
         
         if not results:
             return f"No relevant content found for {agent_name}"
         
-        # Assemble content with context
+        # Assemble content with enhanced diagram extraction
         content_parts = []
         content_parts.append(f"=== FOCUSED CONTENT FOR {agent_name.upper()} ===\n")
         
+        # Separate regular content and diagram-rich content
+        diagram_sections = []
+        regular_sections = []
+        
         for i, result in enumerate(results, 1):
-            content_parts.append(f"--- Relevant Section {i} (Score: {result['score']:.3f}) ---")
-            content_parts.append(f"Source: {result['metadata'].get('section', 'Unknown')}")
-            content_parts.append(f"Query: {result['query']}")
-            content_parts.append(result['content'])
+            content = result['content']
+            metadata = result['metadata']
+            
+
+            has_technical_diagrams = metadata.get('has_technical_diagrams', False) or metadata.get('has_diagrams', False)
+            
+            section_info = {
+                'index': i,
+                'score': result['score'],
+                'source': metadata.get('section', 'Unknown'),
+                'query': result['query'],
+                'content': content,
+                'has_technical_diagrams': has_technical_diagrams,
+                'diagram_count': metadata.get('diagram_count', 0)
+            }
+            
+            if has_technical_diagrams:
+                diagram_sections.append(section_info)
+            else:
+                regular_sections.append(section_info)
+        
+        # Prioritize diagram-rich content first
+        all_sections = diagram_sections + regular_sections
+        
+        for section in all_sections:
+            content_parts.append(f"--- Relevant Section {section['index']} (Score: {section['score']:.3f}) ---")
+            content_parts.append(f"Source: {section['source']}")
+            content_parts.append(f"Query: {section['query']}")
+            
+            # Add diagram indicator
+            if section['has_technical_diagrams']:
+                content_parts.append(f"🔍 CONTAINS TECHNICAL DIAGRAMS ({section['diagram_count']} diagrams)")
+            
+            content_parts.append(section['content'])
             content_parts.append("")  # Empty line for separation
+        
+        # Add diagram summary at the top if any diagrams found
+        if diagram_sections:
+            diagram_summary = f"\n🎯 DIAGRAM CONTENT AVAILABLE: {len(diagram_sections)} sections with technical diagrams\n"
+            content_parts.insert(1, diagram_summary)
         
         focused_content = "\n".join(content_parts)
         
-        print(f"✅ {agent_name}: Retrieved {len(results)} relevant chunks ({len(focused_content)} chars)")
+        print(f"✅ {agent_name}: Retrieved {len(results)} relevant chunks ({len(focused_content)} chars) - {len(diagram_sections)} with diagrams")
         return focused_content
     
     def get_search_summary(self, agent_name: str) -> Dict:
         """Get summary of search results for monitoring"""
         queries = self.agent_queries[agent_name]
-        results = self.vector_store.search_for_agent(agent_name, queries, 3)
+        results = self.vector_store.search_for_agent_with_diagrams(agent_name, queries, 3)
         
         return {
             'agent': agent_name,

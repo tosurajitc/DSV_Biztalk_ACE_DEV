@@ -46,14 +46,28 @@ class VectorOptimizedPipeline:
                 if not text.strip():
                     raise Exception("Could not extract text from PDF")
                 
+                # FIXED (includes vector preparation)
                 chunks = self.pdf_processor.intelligent_chunking(text)
-                
+
                 if not chunks:
                     raise Exception("No chunks created from PDF")
-                
-                # Create vector store and add chunks
+
+                # NEW: Prepare chunks for vector store with diagram metadata
+                if hasattr(self.pdf_processor, '_prepare_chunks_for_vector_store'):
+                    print("📊 Preparing chunks with diagram data for vector store...")
+                    vector_ready_chunks = self.pdf_processor._prepare_chunks_for_vector_store(chunks)
+                    
+                    # Count diagram-enhanced chunks
+                    diagram_chunks = sum(1 for chunk in vector_ready_chunks 
+                                    if chunk['metadata'].get('has_technical_diagrams', False))
+                    print(f"✅ Prepared {len(vector_ready_chunks)} chunks ({diagram_chunks} with diagrams)")
+                else:
+                    print("⚠️ Diagram preparation not available, using standard chunks")
+                    vector_ready_chunks = chunks
+
+                # Create vector store with enhanced chunks
                 self.vector_store = ChromaVectorStore()
-                self.vector_store.create_knowledge_base(chunks)
+                self.vector_store.create_knowledge_base(vector_ready_chunks)
                 
                 # Initialize search engine
                 self.search_engine = SemanticSearchEngine(self.vector_store)

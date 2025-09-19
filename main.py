@@ -1487,7 +1487,7 @@ def render_program_4_ui():
             st.markdown("**📋 Naming Standards File**")
             naming_standards_file = st.text_input(
                 "Path to Naming Standards JSON",
-                value=r"C:\@Official\@Gen AI\DSV\BizTalk\Analyze_this_folder\GENAI_EPIS_CW1_IN_Document_App\naming_convention.json",
+                value=r"C:\@Official\@Gen AI\DSV\BizTalk\Analyze_this_folder\DSV_Biztalk_ACE\naming_convention.json",
                 help="JSON file containing smart naming convention rules"
             )
             
@@ -2295,7 +2295,7 @@ def render_token_analytics_tab():
     
     with col5:
         st.metric(
-            label="ðŸ“… Daily Capacity",
+            label=" Daily Capacity",
             value=f"{metrics.estimated_daily_capacity:,}",
             delta=f"${metrics.estimated_daily_cost:.2f}/day",
             help="Estimated flows per day at current rate"
