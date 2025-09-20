@@ -328,26 +328,11 @@ class DSVMessageFlowGenerator:
                 raise MessageFlowGenerationError("Vector DB/Component processing failed - missing input queue or output service configuration")
             
             # Create business specification from Vector DB extraction
-            vector_business_spec = f"""
-    === VECTOR DB EXTRACTED SPECIFICATIONS ===
 
-    MESSAGE FLOW PATTERNS:
-    {chr(10).join(f"- {pattern}" for pattern in message_flow_patterns)}
-
-    ROUTING LOGIC:
-    {chr(10).join(f"- {rule}" for rule in routing_logic)}
-
-    INTEGRATION FLOWS:
-    {chr(10).join(f"- {flow}" for flow in integration_patterns)}
-
-    TECHNICAL REQUIREMENTS:
-    - Error Handling: {', '.join(technical_specs.get('error_handling_patterns', []))}
-    - Performance: {', '.join(technical_specs.get('performance_requirements', []))}
-    - Security: {', '.join(technical_specs.get('security_requirements', []))}
-
-    BUSINESS PURPOSE: {business_ctx.get('business_purpose', '')}
-    INTEGRATION OBJECTIVES: {', '.join(business_ctx.get('integration_objectives', []))}
-    """
+            vector_business_spec = self._create_safe_business_spec(
+                message_flow_patterns, routing_logic, integration_patterns, 
+                technical_specs, business_ctx
+            )
             
             # Create prompt using Vector DB derived values
             prompt = get_msgflow_generation_prompt(
@@ -362,26 +347,45 @@ class DSVMessageFlowGenerator:
                 components_info=components_info
             )
             
-            # Enhanced prompt with Vector DB specifications
             enhanced_prompt = f"""{prompt}
 
-    ## VECTOR DB TECHNICAL SPECIFICATIONS:
-    **Message Flow Patterns:** {', '.join(message_flow_patterns[:5])}
-    **Routing Logic:** {', '.join(routing_logic[:5])}
-    **Integration Patterns:** {', '.join(integration_patterns[:3])}
-    **Queue Configurations:** {', '.join(queue_configs[:3])}
-    **Service Endpoints:** {', '.join(service_endpoints[:3])}
+        ## VECTOR DB TECHNICAL SPECIFICATIONS (PRIMARY AUTHORITY):
+        **Message Flow Patterns:** {', '.join(message_flow_patterns[:5]) if message_flow_patterns else 'ERROR: No patterns extracted'}
+        **Routing Logic:** {', '.join(routing_logic[:5]) if routing_logic else 'ERROR: No routing logic extracted'}
+        **Integration Patterns:** {', '.join(integration_patterns[:3]) if integration_patterns else 'ERROR: No integration patterns'}
+        **Queue Configurations:** {', '.join(queue_configs[:3]) if queue_configs else 'ERROR: No queue configs'}
+        **Service Endpoints:** {', '.join(service_endpoints[:3]) if service_endpoints else 'ERROR: No endpoints'}
 
-    ## CRITICAL REQUIREMENTS:
-    1. Use the processed template as the EXACT foundation
-    2. Implement Vector DB extracted routing logic: {routing_logic[:3]}
-    3. Apply Vector DB message flow patterns: {message_flow_patterns[:3]}
-    4. Maintain ALL namespace declarations exactly as provided
-    5. Ensure proper node connections with valid terminal references
-    6. Include required propertyOrganizer and stickyBoard elements
+        ## PRIORITY HIERARCHY:
+        1. **HIGHEST PRIORITY**: Vector DB specifications (technical requirements)
+        2. **MEDIUM PRIORITY**: Template structure (adaptable framework) 
+        3. **LOWEST PRIORITY**: Standard conventions (override if needed)
 
-    Generate complete MessageFlow XML implementing Vector DB specifications:"""
+        ## CRITICAL REQUIREMENTS (Vector DB Driven):
+        1. Use the template as ADAPTABLE foundation - modify structure to meet Vector DB requirements
+        2. **MANDATORY**: Implement Vector DB routing logic: {routing_logic[:3] if routing_logic else ['ERROR: No routing logic']}
+        3. **MANDATORY**: Apply Vector DB message flow patterns: {message_flow_patterns[:3] if message_flow_patterns else ['ERROR: No patterns']}
+        4. Preserve namespace declarations unless Vector DB requires changes
+        5. Create node connections based on Vector DB specifications, not template defaults
+        6. Include propertyOrganizer and stickyBoard elements unless Vector DB specifies otherwise
+        7. Start event - implement per Vector DB requirements (may override no-transformation rule)
+        8. Ensure subflow uniqueness per Vector DB patterns
+        9. End event placement per Vector DB flow specifications
 
+        ## TEMPLATE ADAPTATION RULES:
+        - If Vector DB specifies different node types than template → USE Vector DB requirements
+        - If Vector DB routing conflicts with template connections → FOLLOW Vector DB routing
+        - If Vector DB requires additional nodes not in template → ADD them
+        - If Vector DB specifies different message patterns → IMPLEMENT Vector DB patterns
+        - Template serves as structural starting point only
+
+        ## VALIDATION REQUIREMENTS:
+        ✅ All Vector DB routing logic implemented
+        ✅ All Vector DB message patterns applied  
+        ✅ Node connections match Vector DB specifications
+        ✅ Flow structure supports Vector DB technical requirements
+
+        Generate complete MessageFlow XML implementing Vector DB specifications as PRIMARY authority:"""
             # LLM generation
             response = self.client.chat.completions.create(
                 model=self.groq_model,
@@ -438,6 +442,38 @@ class DSVMessageFlowGenerator:
         except Exception as e:
             raise MessageFlowGenerationError(f"Vector DB MessageFlow generation failed: {str(e)}")
         
+
+
+    def _create_safe_business_spec(self, message_flow_patterns, routing_logic, 
+                              integration_patterns, technical_specs, business_ctx):
+        """Create Vector DB business spec with same validation as enhanced prompt"""
+        
+        def safe_list(items, error_msg):
+            return '\n'.join(f"- {item}" for item in items) if items else f"❌ CRITICAL: {error_msg}"
+        
+        def safe_comma(items, error_msg):
+            return ', '.join(items) if items else f"Not specified: {error_msg}"
+        
+        return f"""=== VECTOR DB EXTRACTED SPECIFICATIONS ===
+
+    MESSAGE FLOW PATTERNS:
+    {safe_list(message_flow_patterns, "No patterns extracted from Vector DB")}
+
+    ROUTING LOGIC:
+    {safe_list(routing_logic, "No routing logic extracted from Vector DB")}
+
+    INTEGRATION FLOWS:
+    {safe_list(integration_patterns, "No integration patterns extracted from Vector DB")}
+
+    TECHNICAL REQUIREMENTS:
+    - Error Handling: {safe_comma(technical_specs.get('error_handling_patterns', []), 'error handling')}
+    - Performance: {safe_comma(technical_specs.get('performance_requirements', []), 'performance')}
+    - Security: {safe_comma(technical_specs.get('security_requirements', []), 'security')}
+
+    BUSINESS PURPOSE: {business_ctx.get('business_purpose', 'Not extracted from Vector DB')}
+    INTEGRATION OBJECTIVES: {safe_comma(business_ctx.get('integration_objectives', []), 'integration objectives')}
+    """
+
 
 
     def _validate_inputs(self, component_data: Dict, msgflow_template: str, 

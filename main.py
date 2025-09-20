@@ -72,7 +72,7 @@ def optimized_pipeline_execution():
     # Import required classes
     from ace_module_creator import ACEModuleCreatorOrchestrator, ACEGenerationInputs
     from schema_generator import SchemaGenerator
-    from migration_quality_reviewer import IntelligentNamingConverter
+    from migration_quality_reviewer import SmartACEQualityReviewer
     
     # Initialize vector pipeline
     vector_pipeline = VectorOptimizedPipeline()
@@ -122,7 +122,7 @@ def optimized_pipeline_execution():
             output_dir=st.session_state.get('output_dir', 'output')
         )),
         
-        ('quality_reviewer', lambda confluence_content: IntelligentNamingConverter(
+        ('quality_reviewer', lambda confluence_content: SmartACEQualityReviewer(
             naming_convention_path="naming_convention.json",
             confluence_content=confluence_content
         ).extract_naming_parameters(

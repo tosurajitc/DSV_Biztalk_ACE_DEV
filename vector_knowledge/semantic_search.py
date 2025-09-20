@@ -42,6 +42,16 @@ class SemanticSearchEngine:
                 'technical integration diagrams and component relationships',
                 'project structure diagrams and module dependencies',
                 'technical specifications with system integration diagrams'
+            ],
+            'application_descriptor_generator': [
+                'application descriptor and library dependencies',
+                'shared library configurations and deployment',
+                'dependency management and component integration'
+            ],
+            'enrichment_generator': [
+                'data enrichment and database lookups',
+                'CW1 integration and business rule processing',
+                'data transformation and enhancement patterns'
             ]
         }
 

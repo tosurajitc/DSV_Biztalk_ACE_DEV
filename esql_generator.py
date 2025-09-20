@@ -35,6 +35,11 @@ class ESQLGenerator:
         self.llm_calls_count = 0
         self.esql_modules = []
         self.processing_results = {}
+        # ENHANCED: Valid data types for constraint validation
+        self.valid_data_types = {
+            'BOOLEAN', 'INTEGER', 'DECIMAL', 'FLOAT', 'CHARACTER',
+            'BIT', 'BLOB', 'DATE', 'TIME', 'TIMESTAMP', 'REFERENCE', 'ROW'
+        }
         
     def estimate_tokens(self, text: str) -> int:
         """Estimate token count for text"""
@@ -96,6 +101,24 @@ class ESQLGenerator:
         Enhanced system prompt with all requirements
         """
         return """You are an expert IBM ACE ESQL developer specializing in generating production-ready ESQL modules. You MUST follow these CRITICAL requirements exactly:
+## ⚠️ CRITICAL DATA TYPE RESTRICTIONS (READ FIRST) ⚠️
+
+### APPROVED DATA TYPES ONLY - NO EXCEPTIONS:
+You MUST ONLY use these data types in ALL DECLARE statements:
+✅ BOOLEAN, INTEGER, DECIMAL, FLOAT, CHARACTER
+✅ BIT, BLOB, DATE, TIME, TIMESTAMP, REFERENCE, ROW
+
+### ABSOLUTELY FORBIDDEN DATA TYPES - NEVER USE:
+❌ XML - Use REFERENCE TO InputRoot.XMLNSC instead
+❌ RECORD - Use REFERENCE TO instead  
+❌ STRING - Use CHARACTER instead
+❌ VARCHAR - Use CHARACTER instead
+❌ JSON - Use REFERENCE TO InputRoot.JSON instead
+❌ Database - Use REFERENCE TO instead
+
+### XML PROCESSING RULE:
+Instead of: DECLARE xmlData XML;
+Use this: DECLARE xmlRef REFERENCE TO InputRoot.XMLNSC;
 
 ## MANDATORY STRUCTURAL REQUIREMENTS
 
@@ -104,6 +127,7 @@ class ESQLGenerator:
 - Example: CREATE COMPUTE MODULE AzureBlob_To_CDM_Document  (CORRECT)
 - Example: CREATE COMPUTE MODULE AzureBlob_To_CDM_Document.esql  (WRONG)
 - File extension (.esql) is handled separately, NOT in the module declaration
+- Do not call any procedures directly in the ESQL file
 
 ### 1. InputRoot/OutputRoot Rules (CRITICAL):
 - **InputRoot**: READ-ONLY - NEVER modify InputRoot directly
@@ -129,12 +153,23 @@ CREATE PROCEDURE CopyEntireMessage() BEGIN
 END;
 ```
 
-### 3. FORBIDDEN ELEMENTS:
+### FORBIDDEN ELEMENTS:
 - NO comments starting with "--" (e.g., "-- Declare variables")
 - NO lines starting with "esql"
 - NO "@" symbols anywhere
 - NO code block markers
 - NO custom SQLEXCEPTION handlers in procedures
+- NO direct procedure calls using CALL statements
+- NO CALL functionName() patterns - use SET statements instead
+
+## DATA TYPE RESTRICTIONS (CRITICAL):
+ONLY use these approved data types in DECLARE statements:
+- BOOLEAN, INTEGER, DECIMAL, FLOAT, CHARACTER, BIT, BLOB, DATE, TIME, TIMESTAMP, REFERENCE, ROW
+
+NEVER use these forbidden data types:
+- XML, RECORD, STRING, VARCHAR, Database (use REFERENCE TO InputRoot.XMLNSC for XML processing)
+- For text data: use CHARACTER instead of STRING or VARCHAR
+- For XML processing: use REFERENCE TO InputRoot.XMLNSC instead of XML type
 
 ### 4. TEMPLATE STRUCTURE (MUST BE CUSTOMIZED BASED ON BUSINESS FLOW):
 - Update dataInfo.mainIdentifier XPath based on business entities
@@ -735,7 +770,20 @@ Return ONLY the ESQL code:"""
                     print(f"  🎯 Generating {module_name}.esql with LLM...")
                     
                     # Generate comprehensive generation prompt
-                    generation_prompt = f"""Generate complete IBM ACE ESQL module with STRICT format compliance:
+                    generation_prompt = f"""⚠️ CRITICAL: FOLLOW DATA TYPE RESTRICTIONS EXACTLY ⚠️
+
+            ## MANDATORY DATA TYPES - NO EXCEPTIONS:
+            ✅ ONLY USE: BOOLEAN, INTEGER, DECIMAL, FLOAT, CHARACTER, BIT, BLOB, DATE, TIME, TIMESTAMP, REFERENCE, ROW
+            ❌ NEVER USE: XML, RECORD, STRING, VARCHAR, JSON, Database
+
+            ## XML PROCESSING EXAMPLES:
+            ❌ WRONG: DECLARE xmlData XML;
+            ✅ CORRECT: DECLARE xmlRef REFERENCE TO InputRoot.XMLNSC;
+
+            ❌ WRONG: DECLARE msg RECORD;  
+            ✅ CORRECT: DECLARE msgRef REFERENCE TO InputRoot;
+
+            Generate complete IBM ACE ESQL module with STRICT format compliance: 
 
     ## MODULE SPECIFICATION:
     Name: {module_name}
@@ -791,11 +839,13 @@ Return ONLY the ESQL code:"""
         END;
     END MODULE;
 
-    ## FORBIDDEN ELEMENTS:
-    - NO "@" symbols anywhere
-    - NO comments starting with "--"
-    - NO modifications to InputRoot
-    - NO prefixes before CREATE COMPUTE MODULE
+        ## FORBIDDEN ELEMENTS:
+        - NO "@" symbols anywhere
+        - NO comments starting with "--"
+        - NO modifications to InputRoot
+        - NO prefixes before CREATE COMPUTE MODULE
+        - NO CALL statements or direct procedure calls
+        - Use SET statements and built-in functions instead of CALL
 
     ## VARIABLE NAMING:
     Customize declare variable names based on business context (episInfo could become documentInfo, orderInfo, shipmentInfo, etc.)
@@ -831,6 +881,16 @@ Return ONLY the ESQL code:"""
                     
                     if '@' in esql_content:
                         raise Exception(f"ESQL format violation: {module_name} contains forbidden '@' symbols")
+
+                    # ENHANCED: Apply constraint validation
+                    constraint_result = self.validate_esql_constraints(esql_content)
+                    if not constraint_result['valid']:
+                        print(f"    ❌ Constraint violations for {module_name}: {constraint_result['errors']}")
+                        failed_modules.append({
+                            'name': module_name,
+                            'error': f"Constraint violations: {', '.join(constraint_result['errors'])}"
+                        })
+                        continue
                     
                     # Validate required elements
                     required_elements = [
@@ -950,6 +1010,41 @@ Return ONLY the ESQL code:"""
                 raise Exception(f"Vector DB + MessageFlow ESQL Generation Failed: {str(e)}")
 
 
+
+    def validate_esql_constraints(self, esql_content: str) -> Dict[str, Any]:
+        """Validate ESQL constraints - NEW METHOD"""
+        validation = {'valid': True, 'errors': [], 'warnings': []}
+        
+        # 1. Check for forbidden VARCHAR
+        if re.search(r'\bVARCHAR\b', esql_content, re.IGNORECASE):
+            validation['errors'].append("VARCHAR is forbidden - use CHARACTER instead")
+            validation['valid'] = False
+        
+        # 2. Check for Database DECLARE statements  
+        if re.search(r'DECLARE\s+\w+\s+Database\b', esql_content, re.IGNORECASE):
+            validation['errors'].append("DECLARE with Database is forbidden")
+            validation['valid'] = False
+        
+        # 3. Check for direct procedure calls
+        if re.search(r'CALL\s+\w+\s*\(', esql_content, re.IGNORECASE):
+            validation['errors'].append("Direct procedure calls are forbidden")
+            validation['valid'] = False
+        
+        # 4. Check for invalid data types
+        valid_types = {'BOOLEAN', 'INTEGER', 'DECIMAL', 'FLOAT', 'CHARACTER', 
+                    'BIT', 'BLOB', 'DATE', 'TIME', 'TIMESTAMP', 'REFERENCE', 'ROW'}
+        
+        declare_pattern = r'DECLARE\s+\w+\s+(\w+)'
+        for match in re.finditer(declare_pattern, esql_content, re.IGNORECASE):
+            data_type = match.group(1).upper()
+            if data_type not in valid_types:
+                validation['errors'].append(f"Invalid data type '{data_type}' - only approved types allowed")
+                validation['valid'] = False
+        
+        return validation
+
+
+
     def _clean_esql_content(self, esql_content: str) -> str:
         """
         Clean ESQL content to ensure compliance:
@@ -1017,6 +1112,36 @@ Return ONLY the ESQL code:"""
 # Helper function for integration
 def create_enhanced_esql_generator(groq_api_key=None) -> ESQLGenerator:
     return ESQLGenerator(groq_api_key=groq_api_key)
+
+
+def validate_data_type_constraints(self, esql_content: str) -> Dict:
+    """Validate ESQL data type constraints"""
+    validation = {'valid': True, 'errors': [], 'warnings': []}
+    
+    # Check for forbidden VARCHAR
+    if 'VARCHAR' in esql_content:
+        validation['errors'].append("VARCHAR is forbidden - use CHARACTER instead")
+        validation['valid'] = False
+    
+    # Check for invalid data types
+    valid_types = ['BOOLEAN', 'INTEGER', 'DECIMAL', 'FLOAT', 'CHARACTER', 
+                   'BIT', 'BLOB', 'DATE', 'TIME', 'TIMESTAMP', 'REFERENCE', 'ROW']
+    
+    # Extract DECLARE statements and validate types
+    declare_pattern = r'DECLARE\s+\w+\s+(\w+)'
+    for match in re.finditer(declare_pattern, esql_content):
+        data_type = match.group(1)
+        if data_type not in valid_types:
+            validation['errors'].append(f"Invalid data type: {data_type}")
+            validation['valid'] = False
+    
+    return validation
+
+
+
+
+
+
 
 
 # Example usage function

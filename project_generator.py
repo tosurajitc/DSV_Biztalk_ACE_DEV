@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import Dict, Any
 from datetime import datetime
-
+import json as json_module
 
 class ProjectGenerator:
     """
@@ -30,80 +30,244 @@ class ProjectGenerator:
         # Ignore all LLM-related parameters - we don't need them!
         print("🎯 Simple Project Generator initialized - No LLM required")
         print("   ✅ Parameters ignored (LLM not needed): groq_api_key, etc.")
+
+
+        
     
     def generate_project_file(self, 
+                            vector_content: str,
                             template_path: str,
-                            component_mapping_json_path: str = None,
-                            output_dir: str = None,
-                            generated_components_dir: str = None,
-                            vector_content: str = None) -> Dict[str, Any]:
+                            component_mapping_json_path: str,
+                            output_dir: str,
+                            biztalk_folder: str = None,  # ✅ FIXED: Added parameter
+                            generated_components_dir: str = None) -> Dict[str, Any]:
         """
-        Generate .project file using template with simple placeholder replacement
-        
-        Args:
-            template_path (str): Path to project.xml template file
-            component_mapping_json_path (str): Not used - kept for compatibility
-            output_dir (str): Output directory (project name extracted from this path)
-            generated_components_dir (str): Not used - kept for compatibility  
-            vector_content (str): Not used - kept for compatibility
-        
-        Returns:
-            Dict[str, Any]: Generation results
+        Generate final .project file using MINIMAL functionality - NO undefined method calls
+        ✅ USES ONLY: os, json, basic file operations - NO extraction methods
         """
-        print("🚀 Starting Simple Project File Generation")
+        print("🎯 Starting Simple Project File Generation")
         
-        # Handle parameter compatibility - output_dir might be in different positions
-        if output_dir is None:
-            if component_mapping_json_path and os.path.isdir(component_mapping_json_path):
-                # Likely output_dir was passed as second parameter
-                output_dir = component_mapping_json_path
-                component_mapping_json_path = None
+        # Extract project name from output directory
+        project_name = os.path.basename(os.path.abspath(output_dir))
+        if not project_name or project_name == '.':
+            project_name = "Enhanced_ACE_Project"
         
-        if not output_dir:
-            raise ValueError("output_dir parameter is required")
+        print(f"🎯 Project name: {project_name}")
         
         try:
-            # Step 1: Extract project name from output directory
-            project_name = self._extract_project_name(output_dir)
-            print(f"📁 Project name extracted: {project_name}")
+            # ✅ STEP 1: Read template file (basic file reading only)
+            print("📄 Step 1: Reading template...")
+            if os.path.exists(template_path):
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    template_content = f.read()
+                print(f"  ✅ Template loaded: {len(template_content)} characters")
+            else:
+                # Create basic IBM ACE project template
+                template_content = '''<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+	<name>{project_name}</name>
+	<comment></comment>
+	<projects>
+		<project>EPIS_CommonUtils_Lib</project>
+		<project>EPIS_Consumer_Lib_v2</project>
+		<project>EPIS_BlobStorage_Lib</project>
+		<project>EPIS_MessageEnrichment_StaticLib</project>
+		<project>EPIS_CommonFlows_Lib</project>
+        <project>EPIS_CargoWiseOne_eAdapter_Lib</project>
+        <project>EPIS_CargoWiseOne_Schemas_Lib</project>
+	</projects>
+	<buildSpec>
+		<buildCommand>
+			<name>com.ibm.etools.mft.applib.applibbuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>com.ibm.etools.mft.applib.applibresourcevalidator</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>com.ibm.etools.mft.connector.policy.ui.PolicyBuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>com.ibm.etools.mft.applib.mbprojectbuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>com.ibm.etools.msg.validation.dfdl.mlibdfdlbuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>com.ibm.etools.mft.flow.adapters.adapterbuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>com.ibm.etools.mft.flow.sca.scabuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>com.ibm.etools.msg.validation.dfdl.mbprojectresourcesbuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>com.ibm.etools.mft.esql.lang.esqllangbuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>com.ibm.etools.mft.map.builder.mslmappingbuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>com.ibm.etools.mft.flow.msgflowxsltbuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>com.ibm.etools.mft.flow.msgflowbuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>com.ibm.etools.mft.decision.service.ui.decisionservicerulebuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>com.ibm.etools.mft.pattern.capture.PatternBuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>com.ibm.etools.mft.json.builder.JSONBuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>com.ibm.etools.mft.restapi.ui.restApiDefinitionsBuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>com.ibm.etools.mft.policy.ui.policybuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>com.ibm.etools.mft.msg.assembly.messageAssemblyBuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>com.ibm.etools.msg.validation.dfdl.dfdlqnamevalidator</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>com.ibm.etools.mft.bar.ext.barbuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>com.ibm.etools.mft.unittest.ui.TestCaseBuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+	</buildSpec>
+	<natures>
+		<nature>com.ibm.etools.msgbroker.tooling.applicationNature</nature>
+		<nature>com.ibm.etools.msgbroker.tooling.messageBrokerProjectNature</nature>
+	</natures>
+</projectDescription>'''
+                print("  ⚠️ Template not found - using default IBM ACE template")
             
-            # Step 2: Load template content
-            template_content = self._load_template(template_path)
-            print(f"📄 Template loaded: {len(template_content)} characters")
+            # ✅ STEP 2: Read JSON file (basic JSON reading only)
+            print("📄 Step 2: Reading JSON mappings...")
+            if os.path.exists(component_mapping_json_path):
+                with open(component_mapping_json_path, 'r', encoding='utf-8') as f:
+                    json_data = json_module.load(f)
+                print(f"  ✅ JSON loaded: {len(str(json_data))} characters")
+            else:
+                json_data = {}
+                print("  ⚠️ JSON not found - using empty data")
             
-            # Step 3: Replace placeholder with project name
-            project_content = self._replace_placeholder(template_content, project_name)
-            print(f"🔄 Placeholder replaced: {project_name}")
+            # ✅ STEP 3: Count component files (basic file counting only)
+            print("📄 Step 3: Counting component files...")
+            component_count = 0
+            if generated_components_dir and os.path.exists(generated_components_dir):
+                for root, dirs, files in os.walk(generated_components_dir):
+                    for file in files:
+                        if file.endswith(('.esql', '.xsd', '.xsl', '.msgflow', '.xml')):
+                            component_count += 1
+            print(f"  ✅ Found {component_count} component files")
             
-            # Step 4: Write .project file
-            project_file_path = self._write_project_file(project_content, output_dir)
-            print(f"💾 .project file written: {project_file_path}")
+            # ✅ STEP 4: Generate project content (simple string replacement only)
+            print("📄 Step 4: Generating project content...")
             
-            # Return results
-            result = {
+            # Simple template replacement
+            project_content = template_content.replace('{project_name}', project_name)
+            project_content = project_content.replace('${project_name}', project_name)
+            project_content = project_content.replace('PROJECT_NAME', project_name)
+            
+            # Update name tag if it exists
+            if '<name>' in project_content and '</name>' in project_content:
+                import re
+                project_content = re.sub(r'<name>.*?</name>', f'<name>{project_name}</name>', project_content)
+            
+            print(f"  ✅ Project content generated: {len(project_content)} characters")
+            
+            # ✅ STEP 5: Write project file (basic file writing only)
+            print("📄 Step 5: Writing project file...")
+            
+            # Ensure output directory exists
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Write .project file
+            project_file_path = os.path.join(output_dir, '.project')
+            with open(project_file_path, 'w', encoding='utf-8') as f:
+                f.write(project_content)
+            
+            print(f"  ✅ Project file written: {project_file_path}")
+            print("✅ Project generation completed successfully!")
+            
+            # ✅ Return success with minimal data
+            return {
                 'status': 'success',
-                'project_name': project_name,
                 'project_file_path': project_file_path,
-                'template_path': template_path,
-                'output_dir': output_dir,
+                'project_name': project_name,
+                'project_file_generated': True,
+                'content_source': 'simple_template',
                 'content_length': len(project_content),
-                'generation_time': datetime.now().isoformat(),
-                'llm_calls': 0,  # Zero LLM calls!
-                'method': 'template_replacement'
+                'llm_analysis_calls': 0,  # No LLM used
+                'llm_generation_calls': 0,  # No LLM used
+                'processing_metadata': {
+                    'template_found': os.path.exists(template_path),
+                    'json_found': os.path.exists(component_mapping_json_path),
+                    'components_found': component_count,
+                    'vector_content_length': len(vector_content) if vector_content else 0
+                }
             }
-            
-            print("✅ Simple Project Generation Complete!")
-            return result
             
         except Exception as e:
-            error_result = {
-                'status': 'error',
-                'error_message': str(e),
-                'generation_time': datetime.now().isoformat(),
-                'llm_calls': 0
+            print(f"❌ Project generation failed: {str(e)}")
+            return {
+                'status': 'failed',
+                'error': str(e),
+                'project_file_generated': False,
+                'llm_analysis_calls': 0,
+                'llm_generation_calls': 0
             }
-            print(f"❌ Generation failed: {str(e)}")
-            return error_result
+        
+
     
     def _extract_project_name(self, output_dir: str) -> str:
         """

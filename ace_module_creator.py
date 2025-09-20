@@ -455,14 +455,17 @@ class ACEModuleCreatorOrchestrator:
         
     
     def _execute_application_descriptor_generation(self, inputs: ACEGenerationInputs) -> ModuleExecutionResult:
-        """Execute Application Descriptor Generation module with Vector DB integration"""
+        """
+        Execute Application Descriptor Generation module - FIXED: Direct call approach
+        ✅ SOLUTION: Call sub-module directly with vector content instead of through pipeline
+        """
         print("\n📋 Step 4: Application Descriptor Generation")
         print("  🧠 Vector DB Processing: Library dependencies, configuration settings, shared libraries")
         
         start_time = time.time()
         
         try:
-            # ✅ Vector DB Integration (following same pattern as other modules)
+            # ✅ FIXED: Get vector content directly from pipeline
             import streamlit as st
             
             if (st.session_state.get('vector_enabled', False) and 
@@ -473,25 +476,20 @@ class ACEModuleCreatorOrchestrator:
                 print("  🔍 Vector search focus: Library dependencies, configuration settings, shared libraries")
                 print("  📋 DSV template: Account-specific standards and compliance structure")
                 
-                # Create agent function for application descriptor generation
-                def application_descriptor_agent_function(focused_content):
-                    """Agent function that receives Vector DB focused content for application descriptor processing"""
-                    from application_descriptor_generator import ApplicationDescriptorGenerator
-                    
-                    generator = ApplicationDescriptorGenerator(groq_api_key=self.groq_api_key)
-                    return generator.generate_application_descriptor(
-                        vector_content=focused_content,  # ← Vector DB content from pipeline
-                        template_path=inputs.application_descriptor_template_path,  # ← DSV template
-                        component_mapping_json_path=inputs.component_mapping_json_path,  # ← Component mappings
-                        output_dir=inputs.output_dir  # ← Output directory
-                    )
+                # ✅ NEW APPROACH: Get vector content directly, then call module
+                vector_content = st.session_state.vector_pipeline.search_engine.get_agent_content("application_descriptor_generator")
                 
                 print("  🤖 Running LLM-based application descriptor generation with Vector optimization...")
                 
-                # Use Vector DB pipeline to get focused content and run agent
-                result = st.session_state.vector_pipeline.run_agent_with_vector_search(
-                    agent_name="application_descriptor_generator",  # ← Vector search for application descriptor-specific content
-                    agent_function=application_descriptor_agent_function
+                # ✅ FIXED: Direct module call instead of pipeline call
+                from application_descriptor_generator import ApplicationDescriptorGenerator
+                
+                generator = ApplicationDescriptorGenerator(groq_api_key=self.groq_api_key)
+                result = generator.generate_application_descriptor(
+                    vector_content=vector_content,  # ← Vector DB content
+                    template_path=inputs.application_descriptor_template_path,
+                    component_mapping_json_path=inputs.component_mapping_json_path,
+                    output_dir=inputs.output_dir
                 )
                 
                 print("  ✅ Vector DB processing completed!")
@@ -513,7 +511,7 @@ class ACEModuleCreatorOrchestrator:
                     "Application Descriptor Generator requires Vector DB for business requirement processing. "
                     "Please setup Vector Knowledge Base in Agent 1."
                 )
-                
+                    
             execution_time = time.time() - start_time
             self.total_llm_calls += result['llm_analysis_calls'] + result['llm_generation_calls']
             
@@ -549,14 +547,17 @@ class ACEModuleCreatorOrchestrator:
 
     
     def _execute_enrichment_generation(self, inputs: ACEGenerationInputs) -> ModuleExecutionResult:
-        """Execute Enrichment Generation module with Vector DB integration - NO FALLBACKS"""
+        """
+        Execute Enrichment Generation module - FIXED: Direct call approach
+        ✅ SOLUTION: Call sub-module directly with vector content instead of through pipeline
+        """
         print("\n🔋 Step 5: Enrichment Configuration Generation")
         print("  🧠 Vector DB Processing: CW1 enrichment-focused content extraction")
         
         start_time = time.time()
         
         try:
-            # ✅ Vector DB Integration - Following exact esql_generator pattern
+            # ✅ FIXED: Get vector content directly from pipeline
             import streamlit as st
             
             if (st.session_state.get('vector_enabled', False) and 
@@ -566,25 +567,20 @@ class ACEModuleCreatorOrchestrator:
                 print("  🚀 Using Vector DB for CW1 enrichment-focused content...")
                 print("  🔍 Vector search focus: CW1 database operations, enrichment logic, CargoWise One integration")
                 
-                # Create agent function for enrichment generation
-                def enrichment_agent_function(focused_content):
-                    """Agent function that receives Vector DB focused content for CW1 enrichment processing"""
-                    from enrichment_generator import EnrichmentGenerator
-                    
-                    generator = EnrichmentGenerator(groq_api_key=self.groq_api_key)
-                    return generator.generate_enrichment_files(
-                        vector_content=focused_content,  # ← Vector DB content instead of PDF
-                        component_mapping_json_path=inputs.component_mapping_json_path,
-                        msgflow_path=inputs.msgflow_path,
-                        output_dir=inputs.output_dir
-                    )
+                # ✅ NEW APPROACH: Get vector content directly, then call module
+                vector_content = st.session_state.vector_pipeline.search_engine.get_agent_content("enrichment_generator")
                 
                 print("  🤖 Running LLM-based CW1 enrichment generation with Vector optimization...")
                 
-                # Use Vector DB pipeline to get focused content and run agent
-                result = st.session_state.vector_pipeline.run_agent_with_vector_search(
-                    agent_name="enrichment_generator",  # ← Vector search for enrichment-specific content
-                    agent_function=enrichment_agent_function
+                # ✅ FIXED: Direct module call instead of pipeline call
+                from enrichment_generator import EnrichmentGenerator
+                
+                generator = EnrichmentGenerator(groq_api_key=self.groq_api_key)
+                result = generator.generate_enrichment_files(
+                    vector_content=vector_content,  # ← Vector DB content
+                    component_mapping_json_path=inputs.component_mapping_json_path,
+                    msgflow_path=inputs.msgflow_path,
+                    output_dir=inputs.output_dir
                 )
                 
                 print("  ✅ Vector DB processing completed!")
@@ -606,40 +602,27 @@ class ACEModuleCreatorOrchestrator:
                     "Enrichment Generator requires Vector DB for business requirement processing. "
                     "Please setup Vector Knowledge Base in Agent 1."
                 )
-                
+                    
             execution_time = time.time() - start_time
+            self.total_llm_calls += result['llm_analysis_calls'] + result['llm_generation_calls']
             
-            # Track LLM calls from enrichment generation
-            llm_analysis_calls = result.get('llm_analysis_calls', 0)
-            llm_generation_calls = result.get('llm_generation_calls', 0)
-            self.total_llm_calls += llm_analysis_calls + llm_generation_calls
-            
-            print(f"  ✅ CW1 enrichment generation completed in {execution_time:.2f}s")
-            print(f"  🔥 100% LLM-based generation with Vector DB optimization")
-            print(f"  📊 Generated {result.get('enrichment_configs_generated', 0)} enrichment configuration files")
-            print(f"  🧠 LLM calls: {llm_analysis_calls} analysis + {llm_generation_calls} generation")
+            print(f"  ✅ Enrichment generation completed in {execution_time:.2f}s")
+            print(f"  📊 Generated enrichment configuration files")
+            print(f"  🧠 LLM calls: {result['llm_analysis_calls']} analysis + {result['llm_generation_calls']} generation")
             
             return ModuleExecutionResult(
                 module_name="Enrichment Generator",
                 status="success",
                 execution_time=execution_time,
-                llm_analysis_calls=llm_analysis_calls,
-                llm_generation_calls=llm_generation_calls,
-                output_files=result.get('config_files', []),
-                metadata={
-                    'vector_processing': True,
-                    'enrichment_configs_generated': result.get('enrichment_configs_generated', 0),
-                    'generation_method': '100% LLM Based with Vector DB',
-                    'cw1_database_operations': 6,  # CompanyCode, SSN, HouseBill, IsPublished, BrokerageId, RecipientId
-                    'database_aliases': ['MH.ESB.EDIEnterprise', 'DSV.ESB.Integration'],
-                    'processing_flow': 'CW1.IN.DOCUMENT.SND.QL → Enrichment → UniversalEvent',
-                    'timestamp': datetime.now().isoformat()
-                }
+                llm_analysis_calls=result['llm_analysis_calls'],
+                llm_generation_calls=result['llm_generation_calls'],
+                output_files=result.get('output_files', []),
+                metadata=result.get('processing_metadata', {})
             )
             
         except Exception as e:
             execution_time = time.time() - start_time
-            print(f"  ❌ CW1 enrichment generation failed: {str(e)}")
+            print(f"  ❌ Enrichment generation failed: {str(e)}")
             
             return ModuleExecutionResult(
                 module_name="Enrichment Generator",
@@ -651,6 +634,13 @@ class ACEModuleCreatorOrchestrator:
                 metadata={},
                 error_message=str(e)
             )
+        
+
+
+
+
+
+
     
     def _execute_project_generation(self, inputs: ACEGenerationInputs) -> ModuleExecutionResult:
         """Execute Project Generation module with Vector DB integration"""
