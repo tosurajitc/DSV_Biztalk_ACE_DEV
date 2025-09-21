@@ -90,8 +90,8 @@ class EnrichmentGenerator:
         print("\n⚡ Step 3: LLM generating before/after enrichment JSON configurations...")
         enrichment_configs = self._llm_generate_enrichment_configurations(enrichment_analysis)
         
-        # Step 4: Write enrichment configuration files
-        print("\n💾 Step 4: Writing before_enrichment.json and after_enrichment.json files...")
+        # Step 4: Write transco configuration files
+        print("\n💾 Step 4: Writing ACE transco files for database operations...")
         config_files = self._write_enrichment_configuration_files(enrichment_configs, output_dir)
         
         return {
@@ -779,65 +779,55 @@ Extract all enrichment patterns, lookup requirements, and data flow specificatio
         """
         print("  ⚡ LLM generating CW1 before/after enrichment JSON configurations...")
         
-        system_prompt = """You are an expert CargoWise One (CW1) data enrichment architect specializing in CDM Document enrichment configurations.
+        system_prompt = """You are an expert IBM ACE data enrichment architect specializing in transco file generation for database operations.
 
-    Generate production-ready before_enrichment.json and after_enrichment.json configurations for CW1 document processing.
+        Generate separate IBM ACE transco files for database enrichment operations using EnrichConfigs.MsgEnrich format.
 
-    CONFIGURATION REQUIREMENTS:
-    - before_enrichment.json: CDM Document structure before database enrichment
-    - after_enrichment.json: Enhanced CDM Document with enriched fields from 6 database operations
-    - Include field mappings, XPath specifications, and validation rules
-    - Ensure configurations support CW1.IN.DOCUMENT.SND.QL → UniversalEvent processing
+        TRANSCO FILE REQUIREMENTS:
+        - Generate 6 separate transco JSON configurations for 6 database operations
+        - Use EnrichConfigs.MsgEnrich structure with DBAlias, SQLCommand, Source, Dest
+        - Include proper XPath mappings and database parameter binding
+        - Each operation should be a separate configuration file
+        - Follow IBM ACE enrichment subflow standards
 
-    OUTPUT: Return JSON object with "before_enrichment" and "after_enrichment" keys containing complete IBM ACE-compatible configurations."""
+        OUTPUT: Return JSON object with 6 keys (one for each database operation) containing complete ACE transco configurations in EnrichConfigs.MsgEnrich format."""
+        
+        
+        user_prompt = f"""Generate IBM ACE transco files based on database operations found in business requirements:
 
-        user_prompt = f"""Generate CW1 enrichment configurations based on Vector DB analysis:
+        ## VECTOR DB ANALYSIS CONTEXT:
+        {json.dumps(enrichment_analysis.get('lookup_configurations', []), indent=2)[:1000]}
 
-    ## ENRICHMENT ANALYSIS RESULTS:
-    **CW1 Enrichment Patterns Found:**
-    {json.dumps(enrichment_analysis.get('enrichment_patterns', []), indent=2)}
+        ## TASK:
+        Analyze the lookup_configurations to identify all database operations and generate separate transco files for each operation using EnrichConfigs.MsgEnrich format.
 
-    **Before Enrichment Structure:**
-    {json.dumps(enrichment_analysis.get('before_enrichment_structure', {}), indent=2)}
+        ## TRANSCO FORMAT EXAMPLE:
+        Each operation should follow this EnrichConfigs.MsgEnrich structure:
 
-    **After Enrichment Structure:**
-    {json.dumps(enrichment_analysis.get('after_enrichment_structure', {}), indent=2)}
+        {{
+        "EnrichConfigs": {{
+            "MsgEnrich": [{{
+            "DBAlias": "database-alias-from-analysis",
+            "SQLCommand": "exec stored_procedure_name @param1='{{0}}',@param2='{{1}}'",
+            "Scope_prefix": "ns0",
+            "Scope_xmlns": "http://esb.dsv.com/CDM/DocumentMessage_V2",
+            "Scope": "/ns0:DocumentMessage/ns0:Header",
+            "Mandatory": false,
+            "Active": true,
+            "DisableCaching": false,
+            "Source": [
+                {{"FieldName": "param1", "xPathValue": "./ns0:Target/ns0:Field1/text()", "Source": "Message", "Optional": true}},
+                {{"FieldName": "param2", "xPathValue": "./ns0:Target/ns0:Field2/text()", "Source": "Message", "Optional": true}}
+            ],
+            "Dest": [
+                {{"FieldName": "ResultField", "xPathValue": "", "Optional": true, "DefaultValue": ""}}
+            ]
+            }}]
+        }}
+        }}
 
-    **Database Lookup Configurations:**
-    {json.dumps(enrichment_analysis.get('lookup_configurations', []), indent=2)}
-
-    **Validation Rules:**
-    {json.dumps(enrichment_analysis.get('validation_rules', []), indent=2)}
-
-    **CW1 Data Flow Points:**
-    {json.dumps(enrichment_analysis.get('data_flow_points', []), indent=2)}
-
-    ## CW1 ENRICHMENT REQUIREMENTS:
-    Generate configurations that handle the 6 specific database operations:
-    1. **CompanyCode Lookup** → sp_GetMainCompanyInCountry (MH.ESB.EDIEnterprise)
-    2. **CW1 Shipment by SSN** → sp_Shipment_GetIdBySSN (DSV.ESB.Integration)
-    3. **CW1 Shipment by HouseBill** → proc_Shipment_GetIdByHouseBill (DSV.ESB.Integration)
-    4. **IsPublished Flag** → proc_EDocument_GetIsPublishedFlag (DSV.ESB.Integration)
-    5. **CW1 BrokerageId** → proc_CustomsDeclaration_GetIdByReference (DSV.ESB.Integration)
-    6. **Target Recipient** → sp_Get_EAdapterRecepientId (MH.ESB.EDIEnterprise)
-
-    ### before_enrichment.json requirements:
-    - CDM Document structure with Header/Target/Document sections
-    - Required XPath field definitions for the 6 lookup operations
-    - Input validation specifications for CompanyCode, CountryCode, EntityReferenceType, etc.
-    - Error handling configuration for missing required fields
-    - Database connection configurations for MH.ESB.EDIEnterprise and DSV.ESB.Integration
-
-    ### after_enrichment.json requirements:
-    - Enhanced CDM Document with all enriched fields populated
-    - Results from the 6 database operations: CompanyCode, EE_ShipmentId_by_SSN, EE_IsBooking, EE_ShipmentId_by_HouseBill, IsPublished, CW1BrokerageId, eAdapterRecipientID
-    - Validation rules for enriched data consistency
-    - Error handling for failed database lookups
-    - Routing logic for CW1 UniversalEvent generation
-
-    Return as JSON object: {{"before_enrichment": {{...}}, "after_enrichment": {{...}}}}
-
-    Focus on CW1 document processing workflow: Queue → Enrichment → UniversalEvent → CargoWise One"""
+        Return JSON with operation names as keys (e.g., "sp_GetMainCompanyInCountry") and their transco configurations as values."""
+        
 
         try:
             response = self.llm.chat.completions.create(
@@ -943,17 +933,20 @@ Extract all enrichment patterns, lookup requirements, and data flow specificatio
             # ✅ FIXED: Apply safe data handling
             safe_configs = self._safe_enrichment_data(enrichment_configs)
             
-            # Write before_enrichment.json
-            before_config_path = os.path.join(output_dir, 'before_enrichment.json')
-            with open(before_config_path, 'w', encoding='utf-8') as f:
-                json.dump(safe_configs['before_enrichment'], f, indent=2)
-            config_files.append(before_config_path)
-            
-            # Write after_enrichment.json  
-            after_config_path = os.path.join(output_dir, 'after_enrichment.json')
-            with open(after_config_path, 'w', encoding='utf-8') as f:
-                json.dump(safe_configs['after_enrichment'], f, indent=2)
-            config_files.append(after_config_path)
+
+            # Write separate transco file for each database operation
+            for operation_name, transco_config in safe_configs.items():
+                if operation_name in ['before_enrichment', 'after_enrichment']:
+                    continue  # Skip old format keys if they exist
+                    
+                # Create filename: sp_GetMainCompanyInCountry.json
+                filename = f"{operation_name}.json"
+                file_path = os.path.join(output_dir, filename)
+                
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(transco_config, f, indent=2)
+                config_files.append(file_path)
+                print(f"    ✅ Generated: {filename}")
             
             return config_files
             

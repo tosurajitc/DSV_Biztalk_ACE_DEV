@@ -168,27 +168,38 @@ Provide the complete, production-ready MessageFlow XML below:
 def get_esql_creation_prompt(module_name: str, purpose: str, business_context: str = None,
                            additional_context: Dict[str, Any] = None) -> str:
     """
-    Generate ESQL module creation prompt with strict coding standards
+    Generate ESQL module creation prompt with Event Data Usage compliance
     
     Args:
         module_name: Name of the ESQL module
         purpose: Purpose/functionality of the module
         business_context: Business requirements context
         additional_context: Additional context information
+        node_type: Type of node (StartEvent, AfterTransformation, or other)
     """
+    
+    # Detect if this is an event capture stage from existing parameters
+    name_lower = module_name.lower()
+    purpose_lower = purpose.lower() if purpose else ""
+    context_str = str(additional_context).lower() if additional_context else ""
+    
+    # Event capture indicators
+    event_indicators = [
+        'inputeventmessage', 'startevent', 'aftertransformation', 
+        'failureeventmessage', 'errorevent', 'event_capture'
+    ]
+    
+    # Check if this is an event capture stage
+    is_event_capture = any(indicator in name_lower or indicator in purpose_lower or indicator in context_str 
+                          for indicator in event_indicators)
     
     prompt = f"""# IBM ACE ESQL Module Generation
 
-Create a production-ready ESQL module for IBM ACE with the following specifications:
-
-## MODULE DETAILS:
-- **Module Name**: {module_name}
-- **Purpose**: {purpose}
-- **Generated**: {datetime.now().isoformat()}
+Create a production-ready ESQL module for IBM ACE: {module_name}
 
 ## BUSINESS CONTEXT:
 ```
-{business_context[:1000] if business_context else "Standard compute module"}
+{business_context[:2500] if business_context else "Standard transformation module"}
 ```
 """
     
@@ -199,198 +210,213 @@ Create a production-ready ESQL module for IBM ACE with the following specificati
 - **Component Type**: {additional_context.get('component_type', 'Unknown')}
 - **Target ACE Library**: {additional_context.get('target_ace_library', 'Unknown')}
 """
-    
-    prompt += f"""
 
-### ✅ REQUIRED ESQL STRUCTURE:
+    # Add Event Data Usage compliance rules for event capture stages
+    if is_event_capture:
+        prompt += f"""
+
+## EVENT DATA USAGE COMPLIANCE (MANDATORY)
+
+### ALLOWED IN EVENT CAPTURE STAGES:
+1. **Metadata Extraction ONLY** - for production support team
+2. **Source/Target Information** - from message Headers for tracking
+3. **Technical Metadata** - messageType, dataFormat, timestamps
+4. **Standard IBM ACE Infrastructure** - CopyEntireMessage(), CopyMessageHeaders()
+5. **Error Information** - for failure handling and debugging
+
+### STRICTLY PROHIBITED IN EVENT CAPTURE STAGES:
+1. **Business Data Extraction** - NO extraction from message payload
+2. **Business Transformation** - NO modification of business content
+3. **Database Enrichment** - NO stored procedure calls for business logic
+4. **Custom Business Fields** - NO customReference/customProperty with business values
+5. **Message Content Changes** - NO alteration of the actual message
+
+### COMPLIANT EVENT DATA TEMPLATE:
 ```
-CREATE COMPUTE MODULE {module_name}_Compute
+CREATE COMPUTE MODULE {module_name}
     CREATE FUNCTION Main() RETURNS BOOLEAN
     BEGIN
-        DECLARE episInfo 		REFERENCE TO 	Environment.variables.EventData.episInfo;
-		DECLARE sourceInfo 		REFERENCE TO 	Environment.variables.EventData.sourceInfo;
-		DECLARE targetInfo 		REFERENCE TO 	Environment.variables.EventData.targetInfo;
-		DECLARE integrationInfo REFERENCE TO 	Environment.variables.EventData.integrationInfo;
-		DECLARE dataInfo 		REFERENCE TO 	Environment.variables.EventData.dataInfo;
-        SET sourceInfo.srcAppIdentifier 		= InputRoot.XMLNSC.[<].*:Header.*:Source.*:Identifier; 
-		SET sourceInfo.srcEnterpriseCode	 	= InputRoot.XMLNSC.[<].*:Header.*:Source.*:EnterpriseCode;
-		SET sourceInfo.srcDivision		 		= InputRoot.XMLNSC.[<].*:Header.*:Source.*:Division;
-		SET sourceInfo.srcDepartmentCode 		= InputRoot.XMLNSC.[<].*:Header.*:Source.*:DepartmentCode;
-		SET sourceInfo.srcBranchCode 			= InputRoot.XMLNSC.[<].*:Header.*:Source.*:BranchCode;
-		SET sourceInfo.srcCountryCode 			= InputRoot.XMLNSC.[<].*:Header.*:Source.*:CountryCode;	
-		SET sourceInfo.srcCompanyCode 			= InputRoot.XMLNSC.[<].*:Header.*:Source.*:CompanyCode;
-		SET sourceInfo.srcApplicationCode 		= InputRoot.XMLNSC.[<].*:Header.*:Source.*:ApplicationCode;
-		
-		SET targetInfo.tgtAppIdentifier 		= InputRoot.XMLNSC.[<].*:Header.*:Target.*:Identifier; 	
-		SET targetInfo.tgtEnterpriseCode 		= InputRoot.XMLNSC.[<].*:Header.*:Target.*:EnterpriseCode; 
-		SET targetInfo.tgtDivision 				= InputRoot.XMLNSC.[<].*:Header.*:Target.*:Division; 
-		SET targetInfo.tgtDepartmentCode 		= InputRoot.XMLNSC.[<].*:Header.*:Target.*:DepartmentCode; 
-		SET targetInfo.tgtBranchCode 			= InputRoot.XMLNSC.[<].*:Header.*:Target.*:branchCode;
-		SET targetInfo.tgtCountryCode 			= InputRoot.XMLNSC.[<].*:Header.*:Target.*:CountryCode;  
-		SET targetInfo.tgtCompanyCode 			= InputRoot.XMLNSC.[<].*:Header.*:Target.*:CompanyCode; 
-		SET targetInfo.tgtApplicationCode 		= InputRoot.XMLNSC.[<].*:Header.*:Target.*:ApplicationCode; 
-	
-		SET dataInfo.messageType = InputRoot.XMLNSC.[<].*:Header.*:MessageType;		
-		SET dataInfo.dataFormat = 'XML';
-		SET dataInfo.mainIdentifier = InputRoot.XMLNSC.[<].*:ShipmentInstruction.*:ShipmentDetails.*:ShipmentId;
-		SET dataInfo.customReference1		= ''; 						
-		SET dataInfo.customReference1Type	= ''; 	
-		SET dataInfo.customReference2		= ''; 	
-		SET dataInfo.customReference2Type	= ''; 	
-		SET dataInfo.customReference3		= ''; 	
-		SET dataInfo.customReference3Type	= ''; 
-		SET dataInfo.customReference4		= ''; 
-		SET dataInfo.customReference4Type	= '';
-		SET dataInfo.customProperty1		= '';
-		SET dataInfo.customProperty1Type	= '';
-		SET dataInfo.customProperty2		= '';
-		SET dataInfo.customProperty2Type	= '';
-		SET dataInfo.customProperty3		= '';
-		SET dataInfo.customProperty3Type	= '';
-		SET dataInfo.customProperty4		= '';
-		SET dataInfo.customProperty4Type	= '';
-		SET dataInfo.batch = false;
-		SET OutputRoot=NULL;
-		CALL CopyEntireMessage();
-
+        -- METADATA CAPTURE ONLY
+        DECLARE episInfo        REFERENCE TO Environment.variables.EventData.episInfo;
+        DECLARE sourceInfo      REFERENCE TO Environment.variables.EventData.sourceInfo;
+        DECLARE targetInfo      REFERENCE TO Environment.variables.EventData.targetInfo;
+        DECLARE integrationInfo REFERENCE TO Environment.variables.EventData.integrationInfo;
+        DECLARE dataInfo        REFERENCE TO Environment.variables.EventData.dataInfo;
+        
+        -- SOURCE/TARGET METADATA (for production support)
+        SET sourceInfo.srcAppIdentifier = InputRoot.XMLNSC.[<].*:Header.*:Source.*:Identifier;
+        SET sourceInfo.srcEnterpriseCode = InputRoot.XMLNSC.[<].*:Header.*:Source.*:EnterpriseCode;
+        -- ... other Header metadata fields
+        
+        -- TECHNICAL METADATA ONLY
+        SET dataInfo.messageType = InputRoot.XMLNSC.[<].*:Header.*:MessageType;
+        SET dataInfo.dataFormat = 'XML';
+        SET dataInfo.batch = false;
+        
+        -- ❌ DO NOT INCLUDE BUSINESS DATA:
+        -- SET dataInfo.mainIdentifier = InputRoot.XMLNSC.[<].*:ShipmentInstruction.*:ShipmentDetails.*:ShipmentId;
+        -- SET dataInfo.customReference1 = [business_value];
+        
+        -- STANDARD MESSAGE PROCESSING
+        SET OutputRoot = NULL;
+        CALL CopyEntireMessage();
+        
         RETURN TRUE;
     END;
+    
+    -- MANDATORY: Standard IBM ACE Infrastructure
     CREATE PROCEDURE CopyMessageHeaders() BEGIN
-		DECLARE I INTEGER 1;
-		DECLARE J INTEGER;
-		SET J = CARDINALITY(InputRoot.*[]);
-		WHILE I < J DO
-			SET OutputRoot.*[I] = InputRoot.*[I];
-			SET I = I + 1;
-		END WHILE;
-	END;
+        DECLARE I INTEGER 1;
+        DECLARE J INTEGER;
+        SET J = CARDINALITY(InputRoot.*[]);
+        WHILE I < J DO
+            SET OutputRoot.*[I] = InputRoot.*[I];
+            SET I = I + 1;
+        END WHILE;
+    END;
 
-	CREATE PROCEDURE CopyEntireMessage() BEGIN
-		SET OutputRoot = InputRoot;
-	END;
+    CREATE PROCEDURE CopyEntireMessage() BEGIN
+        SET OutputRoot = InputRoot;
+    END;
 END MODULE;
 ```
 
-### ✅ MANDATORY ESQL PATTERNS:
+### VALIDATION CHECKLIST FOR EVENT CAPTURE:
+- [ ] NO business data extraction from message payload
+- [ ] NO database calls for business enrichment  
+- [ ] NO custom business logic in event capture
+- [ ] ONLY metadata and technical information captured
+- [ ] Standard IBM ACE infrastructure included
+"""
+    
+    else:
+        # For non-event capture stages (transformation, enrichment, etc.)
+        prompt += f"""
 
-#### Message Processing (CORRECT APPROACH):
+## BUSINESS TRANSFORMATION MODULE
+
+### ALLOWED IN TRANSFORMATION STAGES:
+1. **Business Logic Processing** - data transformation and enrichment
+2. **Database Operations** - stored procedures for business data
+3. **Message Transformation** - business content modification
+4. **Custom Business Fields** - business-specific reference/property fields
+5. **Error Handling** - business validation and error processing
+
+### TRANSFORMATION TEMPLATE STRUCTURE:
 ```
--- InputRoot is READ-ONLY - never modify it
--- OutputRoot can be modified - always start by copying InputRoot
-SET OutputRoot = InputRoot;
-SET OutputRoot.MQMD.MsgId = UUIDASBLOB();
-SET OutputRoot.MQMD.CorrelId = InputRoot.MQMD.MsgId;
-SET OutputRoot.XMLNSC.ElementName = COALESCE(InputRoot.XMLNSC.ElementName, 'default');
-```
-
-#### Database Operations (NO PROCEDURE ERROR HANDLERS):
-```
--- Use direct database operations without custom error handlers
--- Account has standard error handler - do not create PROCEDURE with SQLEXCEPTION
-SET DATABASE.param1 = InputRoot.XMLNSC.Element;
-SET DATABASE.param2 = InputRoot.XMLNSC.AnotherElement;
-```
-
-```
--- remove respective dataInfo.customReference if not required based on the input business requirements
--- similarly remove sourceInfo variables if not required and targetInfo variables if not required based on the business requirements
--- update sourceInfo and targetInfo variables based on the business requirements
-SET DATABASE.param2 = InputRoot.XMLNSC.AnotherElement;
-```
-
-#### Error Handling (WITHOUT TYPE CHECKING):
-```
--- Simple validation without type checking
-IF COALESCE(InputRoot.XMLNSC.RequiredField, '') = '' THEN
-    SET Environment.Variables.ValidationError = 'Required field missing';
-    PROPAGATE TO TERMINAL 'failure';
-END IF;
-```
-
-#### Variable Declarations (CORRECT APPROACH):
-```
--- DO NOT declare InputRoot or OutputRoot - they are predefined
--- Only declare custom variables
-DECLARE customVariable CHARACTER;
-DECLARE counter INTEGER 0;
-DECLARE resultRef REFERENCE TO OutputRoot.XMLNSC;
-```
-
-## IMPLEMENTATION REQUIREMENTS:
-
-### 1. Core Functionality:
-- Implement the {purpose} logic
-- Use InputRoot for reading data (READ-ONLY)
-- Use OutputRoot for writing/modifying data (WRITABLE)
-- Add validation for required fields
-- Implement error handling with meaningful messages
-
-### 2. Database Integration (if applicable):
-- Use direct database operations with SET DATABASE syntax
-- No custom SQLEXCEPTION handlers in procedures
-- Rely on account's standard error handling
-- Log database operations in Environment variables
-
-### 3. Message Structure Rules:
-- **InputRoot**: READ-ONLY - use for accessing input message data
-- **OutputRoot**: WRITABLE - always copy InputRoot first, then modify
-- Generate new message IDs using UUIDASBLOB()
-- Preserve correlation IDs for tracking
-- Use COALESCE for safe field access
-
-### 4. Performance Optimization:
-- Use COALESCE for safe field access
-- Minimize XPath expressions by using REFERENCE variables
-- Cache frequently accessed values in local variables
-- Implement efficient looping patterns with WHILE loops
-
-### 5. Production Standards:
-- Include comprehensive validation logic
-- Add audit logging to Environment variables
-- Use meaningful variable names
-- Follow IBM ACE naming conventions
-
-## FORBIDDEN CODE PATTERNS (WILL CAUSE ERRORS):
-
-### ❌ DO NOT USE - Creates ACE Toolkit Errors:
-```
--- FORBIDDEN: PROCEDURE with SQLEXCEPTION handler
-CREATE PROCEDURE BadProcedure()
-BEGIN
-    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+CREATE COMPUTE MODULE {module_name}
+    CREATE FUNCTION Main() RETURNS BOOLEAN
     BEGIN
-        SET Environment.Variables.LastSQLError = SQLERRORTEXT;
-        PROPAGATE TO TERMINAL 'failure';
+        -- Business logic variables
+        DECLARE businessData REFERENCE TO InputRoot.XMLNSC;
+        DECLARE enrichedData REFERENCE TO OutputRoot.XMLNSC;
+        
+        -- Copy input to output first
+        SET OutputRoot = InputRoot;
+        
+        -- Business transformation logic here
+        -- Database lookups for enrichment
+        -- Data validation and processing
+        -- Custom business logic
+        
+        RETURN TRUE;
     END;
-END;
+    
+    -- MANDATORY: Standard IBM ACE Infrastructure
+    CREATE PROCEDURE CopyMessageHeaders() BEGIN
+        DECLARE I INTEGER 1;
+        DECLARE J INTEGER;
+        SET J = CARDINALITY(InputRoot.*[]);
+        WHILE I < J DO
+            SET OutputRoot.*[I] = InputRoot.*[I];
+            SET I = I + 1;
+        END WHILE;
+    END;
 
--- FORBIDDEN: InputRoot/OutputRoot declarations
-DECLARE InputRoot XML;
-DECLARE OutputRoot XML;
-
--- FORBIDDEN: Type checking blocks
-IF InputRoot IS OF TYPE XML THEN
-    -- XML processing
-ELSE
-    -- JSON processing
-END IF;
-
--- FORBIDDEN: Modifying InputRoot
-SET InputRoot.XMLNSC.SomeField = 'value';
+    CREATE PROCEDURE CopyEntireMessage() BEGIN
+        SET OutputRoot = InputRoot;
+    END;
+END MODULE;
 ```
+"""
+
+    prompt += f"""
+
+### REQUIRED ESQL STRUCTURE (ALL MODULES):
+
+#### Complete Module Template:
+```
+CREATE COMPUTE MODULE {module_name}
+    CREATE FUNCTION Main() RETURNS BOOLEAN
+    BEGIN
+        -- Your business logic or event data capture here
+        -- (Follows compliance rules based on node type)
+        
+        RETURN TRUE;
+    END;
+    
+    -- MANDATORY: These procedures must be included exactly as shown
+    CREATE PROCEDURE CopyMessageHeaders() BEGIN
+        DECLARE I INTEGER 1;
+        DECLARE J INTEGER;
+        SET J = CARDINALITY(InputRoot.*[]);
+        WHILE I < J DO
+            SET OutputRoot.*[I] = InputRoot.*[I];
+            SET I = I + 1;
+        END WHILE;
+    END;
+
+    CREATE PROCEDURE CopyEntireMessage() BEGIN
+        SET OutputRoot = InputRoot;
+    END;
+END MODULE;
+```
+
+#### Additional Requirements for Failure/Error Modules:
+```
+-- Add this function for error handling modules:
+CREATE FUNCTION GetFaultDetailAsString(IN fault REFERENCE) RETURNS CHARACTER
+BEGIN
+    DECLARE str CHARACTER '';
+    IF EXISTS(fault.*:detail.*:ExceptionDetail[]) THEN
+        DECLARE exc REFERENCE TO fault.*:detail.*:ExceptionDetail[1];
+        WHILE EXISTS(exc.*:Type[]) DO
+            IF LENGTH(str) > 0 THEN
+                SET str = str || ' ';
+            END IF;
+            SET str = str || COALESCE(exc.*:Type, '') || ': ' || COALESCE(exc.*:Message, '');
+            MOVE exc TO exc.*:InnerException;
+        END WHILE;
+    END IF;
+    RETURN str;
+END;
+```
+
+#### Format Requirements:
+- Module name: CREATE COMPUTE MODULE {module_name}
+- NO .esql extension in module name
+- NO "@" symbols anywhere
+- NO lines starting with "esql"
+- NO code block markers
+
+#### Data Type Restrictions:
+- ONLY use: BOOLEAN, INTEGER, DECIMAL, FLOAT, CHARACTER, BIT, BLOB, DATE, TIME, TIMESTAMP, REFERENCE, ROW
+- NEVER use: XML, RECORD, STRING, VARCHAR (use REFERENCE TO InputRoot.XMLNSC for XML)
+
+### CRITICAL REQUIREMENTS:
+1. **Event Capture Compliance**: Business logic prohibited in event capture modules
+2. **Complete Infrastructure**: All modules MUST include the exact procedures shown above
+3. **Module Name Format**: CREATE COMPUTE MODULE {module_name} (NO .esql extension)
+4. **Data Types**: ONLY use approved types (REFERENCE, CHARACTER, INTEGER, etc.)
+5. **No Forbidden Elements**: No "@" symbols, no "esql" line prefixes, no code markers
 
 ## OUTPUT REQUIREMENTS:
-- Generate ONLY pure ESQL code
-- Start directly with CREATE COMPUTE MODULE statements
-- No code block markers or language tags
-- No "@" symbols anywhere in the code
-- No lines starting with "esql"
-- No PROCEDURE error handlers
-- No InputRoot/OutputRoot declarations
-- No type checking blocks
-- Complete, runnable ESQL module compatible with ACE Toolkit
+Generate a complete, working ESQL module that:
+- Includes ALL mandatory procedures exactly as shown above
+- Follows Event Data compliance rules if this is an event capture stage
+- Uses proper ESQL syntax and approved data types
+- Contains NO explanatory text outside the ESQL code
 
-## ESQL MODULE CODE:
 Generate the complete ESQL module below:
 
 """

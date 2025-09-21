@@ -1,16 +1,27 @@
+/*
+================================================================================
+IBM ACE ESQL Template - Event Data Usage Compliant
+================================================================================
+PURPOSE: Template for ESQL modules that comply with Event Data Usage requirements
+COMPLIANCE: Event data used only for internal metadata capture and production support
+RESTRICTIONS: No business transformation or enrichment in event capture stages
+INFRASTRUCTURE: Includes all standard IBM ACE procedures and functions
+================================================================================
+*/
 
-
-
+-- REGULAR PROCESSING ESQL TEMPLATE
 CREATE COMPUTE MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE__InputEventMessage
 	CREATE FUNCTION Main() RETURNS BOOLEAN
 	BEGIN
 		
+		-- ✅ COMPLIANT: Event data references for METADATA CAPTURE ONLY
 		DECLARE episInfo 		REFERENCE TO 	Environment.variables.EventData.episInfo;
 		DECLARE sourceInfo 		REFERENCE TO 	Environment.variables.EventData.sourceInfo;
 		DECLARE targetInfo 		REFERENCE TO 	Environment.variables.EventData.targetInfo;
 		DECLARE integrationInfo REFERENCE TO 	Environment.variables.EventData.integrationInfo;
 		DECLARE dataInfo 		REFERENCE TO 	Environment.variables.EventData.dataInfo;
 		
+		-- ✅ COMPLIANT: Source metadata extraction (for production support tracking)
 		SET sourceInfo.srcAppIdentifier 		= InputRoot.XMLNSC.[<].*:Header.*:Source.*:Identifier; 
 		SET sourceInfo.srcEnterpriseCode	 	= InputRoot.XMLNSC.[<].*:Header.*:Source.*:EnterpriseCode;
 		SET sourceInfo.srcDivision		 		= InputRoot.XMLNSC.[<].*:Header.*:Source.*:Division;
@@ -20,6 +31,7 @@ CREATE COMPUTE MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE__I
 		SET sourceInfo.srcCompanyCode 			= InputRoot.XMLNSC.[<].*:Header.*:Source.*:CompanyCode;
 		SET sourceInfo.srcApplicationCode 		= InputRoot.XMLNSC.[<].*:Header.*:Source.*:ApplicationCode;
 		
+		-- ✅ COMPLIANT: Target metadata extraction (for production support tracking)
 		SET targetInfo.tgtAppIdentifier 		= InputRoot.XMLNSC.[<].*:Header.*:Target.*:Identifier; 	
 		SET targetInfo.tgtEnterpriseCode 		= InputRoot.XMLNSC.[<].*:Header.*:Target.*:EnterpriseCode; 
 		SET targetInfo.tgtDivision 				= InputRoot.XMLNSC.[<].*:Header.*:Target.*:Division; 
@@ -29,32 +41,27 @@ CREATE COMPUTE MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE__I
 		SET targetInfo.tgtCompanyCode 			= InputRoot.XMLNSC.[<].*:Header.*:Target.*:CompanyCode; 
 		SET targetInfo.tgtApplicationCode 		= InputRoot.XMLNSC.[<].*:Header.*:Target.*:ApplicationCode; 
 	
+		-- ✅ COMPLIANT: Technical metadata (not business data)
 		SET dataInfo.messageType = InputRoot.XMLNSC.[<].*:Header.*:MessageType;		
-
-		SET dataInfo.mainIdentifier = InputRoot.XMLNSC.[<].*:ShipmentInstruction.*:ShipmentDetails.*:ShipmentId;
-		SET dataInfo.customReference1		= ''; 						
-		SET dataInfo.customReference1Type	= ''; 	
-		SET dataInfo.customReference2		= ''; 	
-		SET dataInfo.customReference2Type	= ''; 	
-		SET dataInfo.customReference3		= ''; 	
-		SET dataInfo.customReference3Type	= ''; 
-		SET dataInfo.customReference4		= ''; 
-		SET dataInfo.customReference4Type	= '';
-		SET dataInfo.customProperty1		= '';
-		SET dataInfo.customProperty1Type	= '';
-		SET dataInfo.customProperty2		= '';
-		SET dataInfo.customProperty2Type	= '';
-		SET dataInfo.customProperty3		= '';
-		SET dataInfo.customProperty3Type	= '';
-		SET dataInfo.customProperty4		= '';
-		SET dataInfo.customProperty4Type	= '';
+		SET dataInfo.dataFormat = 'XML';
 		SET dataInfo.batch = false;
-		SET OutputRoot=NULL;
+		
+		-- ❌ NON-COMPLIANT EXAMPLES (DO NOT INCLUDE):
+		-- SET dataInfo.mainIdentifier = InputRoot.XMLNSC.[<].*:ShipmentInstruction.*:ShipmentDetails.*:ShipmentId;
+		-- SET dataInfo.customReference1 = [business_value];
+		-- SET dataInfo.customProperty1 = [business_value];
+		-- Any extraction of business data from message payload
+		-- Any database lookups for business enrichment
+		-- Any business transformation logic
+		
+		-- ✅ STANDARD IBM ACE: Required message processing
+		SET OutputRoot = NULL;
 		CALL CopyEntireMessage();
 		
 		RETURN TRUE;
 	END;
 
+	-- ✅ STANDARD IBM ACE INFRASTRUCTURE: Required message processing procedures
 	CREATE PROCEDURE CopyMessageHeaders() BEGIN
 		DECLARE I INTEGER 1;
 		DECLARE J INTEGER;
@@ -68,4 +75,122 @@ CREATE COMPUTE MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE__I
 	CREATE PROCEDURE CopyEntireMessage() BEGIN
 		SET OutputRoot = InputRoot;
 	END;
+
 END MODULE;
+
+
+/*
+================================================================================
+FAILURE/ERROR HANDLING ESQL TEMPLATE
+================================================================================
+*/
+
+CREATE COMPUTE MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE__FailureEventMessage
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		
+		-- ✅ COMPLIANT: Event data references for ERROR METADATA CAPTURE
+		DECLARE episInfo 		REFERENCE TO 	Environment.variables.EventData.episInfo;
+		DECLARE sourceInfo 		REFERENCE TO 	Environment.variables.EventData.sourceInfo;
+		DECLARE targetInfo 		REFERENCE TO 	Environment.variables.EventData.targetInfo;
+		DECLARE integrationInfo REFERENCE TO 	Environment.variables.EventData.integrationInfo;
+		DECLARE dataInfo 		REFERENCE TO 	Environment.variables.EventData.dataInfo;
+		DECLARE errorInfo 		REFERENCE TO 	Environment.variables.EventData.errorInfo;
+		
+		-- ✅ COMPLIANT: Error metadata capture (for production support)
+		SET errorInfo.errorTimestamp = CURRENT_TIMESTAMP;
+		SET errorInfo.flowName = MessageFlowLabel;
+		SET errorInfo.nodeName = NodeLabel;
+		
+		-- ✅ COMPLIANT: Extract exception details using standard function
+		IF EXISTS(InputExceptionList.*[]) THEN
+			SET errorInfo.exceptionDetails = GetFaultDetailAsString(InputExceptionList);
+		END IF;
+		
+		-- ✅ COMPLIANT: Technical metadata
+		SET dataInfo.messageType = 'ERROR';		
+		SET dataInfo.dataFormat = 'XML';
+		SET dataInfo.batch = false;
+		
+		-- ✅ STANDARD IBM ACE: Required message processing
+		SET OutputRoot = NULL;
+		CALL CopyEntireMessage();
+		
+		RETURN TRUE;
+	END;
+
+	-- ✅ STANDARD IBM ACE INFRASTRUCTURE: Required error handling function
+	CREATE FUNCTION GetFaultDetailAsString(IN fault REFERENCE) RETURNS CHARACTER
+	BEGIN
+		DECLARE str CHARACTER '';
+		IF EXISTS(fault.*:detail.*:ExceptionDetail[]) THEN
+			DECLARE exc REFERENCE TO fault.*:detail.*:ExceptionDetail[1];
+			WHILE EXISTS(exc.*:Type[]) DO
+				IF LENGTH(str) > 0 THEN
+					SET str = str || ' ';
+				END IF;
+				SET str = str || COALESCE(exc.*:Type, '') || ': ' || COALESCE(exc.*:Message, '');
+				MOVE exc TO exc.*:InnerException;
+			END WHILE;
+		END IF;
+		RETURN str;
+	END;
+
+	-- ✅ STANDARD IBM ACE INFRASTRUCTURE: Required message processing procedures
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+
+END MODULE;
+
+
+/*
+================================================================================
+LLM GENERATION GUIDELINES
+================================================================================
+
+WHEN GENERATING ESQL FILES, FOLLOW THESE RULES:
+
+✅ ALWAYS INCLUDE:
+1. All standard IBM ACE infrastructure procedures/functions
+2. Source/target metadata extraction from Headers
+3. Technical metadata (messageType, dataFormat, batch flag)
+4. Standard message processing (CopyEntireMessage call)
+5. Error handling function in failure modules
+
+❌ NEVER INCLUDE IN EVENT CAPTURE STAGES:
+1. Business data extraction from message payload
+2. Custom business reference/property fields with business values
+3. Database lookups for business enrichment
+4. Business transformation or enrichment logic
+5. Stored procedure calls for business purposes
+
+🎯 PURPOSE OF EVENT DATA:
+- Internal metadata capture only
+- Production support team assistance
+- Technical tracking and monitoring
+- Error handling and debugging
+
+🚫 PROHIBITED IN EVENT CAPTURE:
+- Business logic processing
+- Message content transformation
+- Data enrichment operations
+- Custom business field population
+
+📝 NAMING CONVENTIONS:
+- InputEventMessage: For regular event capture
+- FailureEventMessage: For error event capture
+- Use placeholders: _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE__
+
+================================================================================
+*/

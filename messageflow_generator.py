@@ -195,6 +195,8 @@ class DSVMessageFlowGenerator:
         print(f"   🔧 Enhanced {len(enhanced_components)} component mappings with integration details")
         return enhanced_components
     
+    
+    
     def _process_template_placeholders(self, template: str, component_data: Dict, flow_details: Dict) -> str:
         """Replace template placeholders with actual values from JSON data"""
         try:
@@ -214,9 +216,49 @@ class DSVMessageFlowGenerator:
             if not primary_component and component_mappings:
                 primary_component = component_mappings[0]
             
+            # DSV Flow Naming Convention - Apply suffix based on integration pattern
+            base_flow_name = flow_details.get('flow_name', 'DefaultFlow')
+            dsv_flow_name = base_flow_name
+            
+            # Collect integration context from available component data
+            integration_context = []
+            if primary_component:
+                integration_details = primary_component.get('ace_components', {}).get('integration_details', {})
+                if integration_details.get('input_queue'):
+                    integration_context.append(integration_details['input_queue'].lower())
+                if integration_details.get('output_endpoint'):
+                    integration_context.append(integration_details['output_endpoint'].lower())
+                if primary_component.get('component_type'):
+                    integration_context.append(primary_component['component_type'].lower())
+            
+            # Add context from all components for better pattern detection
+            for mapping in component_mappings:
+                integration_details = mapping.get('ace_components', {}).get('integration_details', {})
+                if integration_details.get('input_queue'):
+                    integration_context.append(integration_details['input_queue'].lower())
+                if integration_details.get('output_endpoint'):
+                    integration_context.append(integration_details['output_endpoint'].lower())
+            
+            context_str = ' '.join(integration_context)
+            
+            # Apply DSV naming conventions based on integration patterns
+            if any(mq_kw in context_str for mq_kw in ['queue', 'mq', '.ql', 'jms']):
+                if any(send_kw in context_str for send_kw in ['send', 'snd', 'out']):
+                    dsv_flow_name = f"{base_flow_name}_SND"
+                elif any(rec_kw in context_str for rec_kw in ['receive', 'rec', 'in']):
+                    dsv_flow_name = f"{base_flow_name}_REC"
+                else:
+                    dsv_flow_name = f"{base_flow_name}_P2P"
+            elif any(file_kw in context_str for file_kw in ['file', 'path', 'ftp', 'directory', 'folder']):
+                dsv_flow_name = f"SAT_{base_flow_name}"
+            elif any(web_kw in context_str for web_kw in ['http', 'web', 'api', 'rest', 'soap', 'service', 'email']):
+                dsv_flow_name = f"{base_flow_name}_HUB"
+            
+            print(f"   🎯 DSV Naming: '{base_flow_name}' → '{dsv_flow_name}' (Context: {context_str[:50]}...)")
+            
             # Default replacement values
             replacements = {
-                '{FLOW_NAME}': flow_details.get('flow_name', 'DefaultFlow'),
+                '{FLOW_NAME}': dsv_flow_name,
                 '{APP_NAME}': flow_details.get('app_name', 'DefaultApp'),
                 '{INPUT_QUEUE_NAME}': 'CW1.IN.DOCUMENT.SND.QL',  # Default from documentation
                 '{XSL_STYLESHEET_NAME}': 'DefaultTransform.xsl',
@@ -249,7 +291,61 @@ class DSVMessageFlowGenerator:
             return template  # Return original template if processing fails
         
 
+    def _analyze_source_destination_protocols(self, component_data: Dict, business_context: Dict) -> Dict:
+        """
+        Analyze source and destination protocols from component mapping and business context
+        Returns: {'source_protocol': str, 'dest_protocol': str, 'flow_type': str}
+        """
+        try:
+            protocol_info = {
+                'source_protocol': 'UNKNOWN',
+                'dest_protocol': 'UNKNOWN', 
+                'flow_type': 'STANDARD'
+            }
+            
+            # Extract from component mappings
+            component_mappings = component_data.get('component_mappings', [])
+            
+            for mapping in component_mappings:
+                integration_details = mapping.get('integration_details', {})
+                
+                # Detect source protocol
+                input_queue = integration_details.get('input_queue', '')
+                if input_queue and ('MQ' in input_queue.upper() or '.QL' in input_queue):
+                    protocol_info['source_protocol'] = 'MQ'
+                elif 'http' in str(integration_details.get('input_endpoint', '')).lower():
+                    protocol_info['source_protocol'] = 'HTTP'
+                elif 'file' in str(integration_details.get('input_type', '')).lower():
+                    protocol_info['source_protocol'] = 'FILE'
+                
+                # Detect destination protocol  
+                output_endpoint = integration_details.get('output_endpoint', '')
+                if output_endpoint and ('MQ' in output_endpoint.upper() or '.QL' in output_endpoint):
+                    protocol_info['dest_protocol'] = 'MQ'
+                elif 'http' in str(output_endpoint).lower() or 'service' in str(output_endpoint).lower():
+                    protocol_info['dest_protocol'] = 'HTTP'
+                elif 'file' in str(output_endpoint).lower():
+                    protocol_info['dest_protocol'] = 'FILE'
+            
+            # Determine flow type based on protocols
+            if protocol_info['source_protocol'] == 'MQ' and protocol_info['dest_protocol'] == 'MQ':
+                protocol_info['flow_type'] = 'P2P'
+            elif protocol_info['source_protocol'] == 'FILE' or protocol_info['dest_protocol'] == 'FILE':
+                protocol_info['flow_type'] = 'SAT'
+            elif protocol_info['source_protocol'] == 'HTTP' or protocol_info['dest_protocol'] == 'HTTP':
+                protocol_info['flow_type'] = 'HUB'
+            
+            return protocol_info
+            
+        except Exception as e:
+            print(f"    ⚠️ Protocol analysis failed: {e}")
+            return {
+                'source_protocol': 'UNKNOWN',
+                'dest_protocol': 'UNKNOWN',
+                'flow_type': 'STANDARD'
+            }
     
+
     def _generate_xml_with_enhanced_context(self, msgflow_template: str, business_context: Dict, 
                                         component_context: List[Dict], biztalk_maps: List[Dict], 
                                         component_data: Dict, output_dir: str) -> str:
@@ -260,8 +356,13 @@ class DSVMessageFlowGenerator:
                 'flow_name': self.flow_name,
                 'app_name': self.app_name
             }
+            print("  🔍 Analyzing source and destination protocols...")
+            protocol_analysis = self._analyze_source_destination_protocols(component_data, business_context)
+            print(f"    ✅ Detected: Source={protocol_analysis['source_protocol']}, Dest={protocol_analysis['dest_protocol']}, Flow Type={protocol_analysis['flow_type']}")
+
             processed_template = self._process_template_placeholders(msgflow_template, component_data, flow_details)
-            
+            print(f"  ✅ Template placeholders processed")      
+                  
             # Import prompt function from prompt_module.py
             from prompt_module import get_msgflow_generation_prompt
             
@@ -544,22 +645,41 @@ class DSVMessageFlowGenerator:
         """Extract transformation logic from a single .btm file"""
         try:
             # Try multiple encodings for BizTalk files
-            encodings_to_try = ['utf-16', 'utf-16-le', 'utf-8-sig', 'utf-8', 'cp1252']
+            encodings_to_try = ['utf-16', 'utf-16-le', 'utf-8-sig', 'utf-8', 'cp1252', 'windows-1252']
             
             btm_content = None
             used_encoding = None
             
             for encoding in encodings_to_try:
                 try:
-                    with open(btm_file, 'r', encoding=encoding) as f:
+                    # Convert Path to string explicitly and force encoding
+                    with open(str(btm_file), 'r', encoding=encoding, errors='strict') as f:
                         btm_content = f.read()
                     used_encoding = encoding
+                    print(f"   ✅ Read {btm_file.name} using {encoding}")
                     break
-                except (UnicodeDecodeError, UnicodeError):
+                except (UnicodeDecodeError, UnicodeError, LookupError) as e:
+                    print(f"   🔄 {encoding} failed for {btm_file.name}: {type(e).__name__}")
                     continue
-            
+                except Exception as e:
+                    print(f"   ⚠️ Unexpected error with {encoding}: {type(e).__name__}: {str(e)[:50]}")
+                    continue
+                        
+            # Add binary fallback if all encodings fail
             if btm_content is None:
-                raise ValueError(f"Could not read content from {btm_file.name}")
+                try:
+                    print(f"   🔧 Trying binary read for {btm_file.name}")
+                    with open(str(btm_file), 'rb') as f:
+                        raw_bytes = f.read()
+                    
+                    # Try to decode with error replacement as last resort
+                    btm_content = raw_bytes.decode('utf-8', errors='replace')
+                    used_encoding = 'utf-8-binary-fallback'
+                    print(f"   ✅ Binary fallback successful for {btm_file.name}")
+                    
+                except Exception as fallback_error:
+                    print(f"   ❌ Binary fallback failed: {fallback_error}")
+                    raise ValueError(f"Could not read content from {btm_file.name} with any method")
             
             # Use LLM to extract transformation logic
             prompt = f"""Analyze this BizTalk Map (.btm) file and extract transformation logic:

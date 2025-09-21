@@ -776,13 +776,14 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
             print("📝 Phase 4: Customizing ESQL template...")
             
             # Load base template
-            template_path = "ESQL_Template.esql"
+            template_path = "ESQL_Template_Updated.esql"
             if os.path.exists(template_path):
                 with open(template_path, 'r', encoding='utf-8') as f:
                     self.esql_template = f.read()
                 
                 # Customize template using mappings
-                customized_template = self.customize_esql_template(self.esql_template, self.mappings)
+                # Customize template using mappings
+                customized_template = self.customize_esql_template(self.esql_template, self.biztalk_components, self.business_requirements)
                 
                 # Save customized template
                 customized_path = os.path.join(output_dir, "ESQL_Template_Updated.esql")
