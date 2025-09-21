@@ -548,8 +548,8 @@ class ACEModuleCreatorOrchestrator:
     
     def _execute_enrichment_generation(self, inputs: ACEGenerationInputs) -> ModuleExecutionResult:
         """
-        Execute Enrichment Generation module - FIXED: Direct call approach
-        ✅ SOLUTION: Call sub-module directly with vector content instead of through pipeline
+        Execute Enrichment Generation module - FIXED: Consistent pipeline approach + correct file count
+        ✅ SOLUTION: Use pipeline approach like project generator + fix output_files key
         """
         print("\n🔋 Step 5: Enrichment Configuration Generation")
         print("  🧠 Vector DB Processing: CW1 enrichment-focused content extraction")
@@ -557,7 +557,7 @@ class ACEModuleCreatorOrchestrator:
         start_time = time.time()
         
         try:
-            # ✅ FIXED: Get vector content directly from pipeline
+            # ✅ CONSISTENT: Same pattern as project generator
             import streamlit as st
             
             if (st.session_state.get('vector_enabled', False) and 
@@ -567,20 +567,25 @@ class ACEModuleCreatorOrchestrator:
                 print("  🚀 Using Vector DB for CW1 enrichment-focused content...")
                 print("  🔍 Vector search focus: CW1 database operations, enrichment logic, CargoWise One integration")
                 
-                # ✅ NEW APPROACH: Get vector content directly, then call module
-                vector_content = st.session_state.vector_pipeline.search_engine.get_agent_content("enrichment_generator")
+                # ✅ CONSISTENT: Create agent function that receives Vector DB focused content
+                def enrichment_agent_function(focused_content):
+                    """Agent function that receives Vector DB focused content for CW1 enrichment processing"""
+                    from enrichment_generator import EnrichmentGenerator
+                    
+                    generator = EnrichmentGenerator(groq_api_key=self.groq_api_key)
+                    return generator.generate_enrichment_files(
+                        vector_content=focused_content,  # ← Vector DB content
+                        component_mapping_json_path=inputs.component_mapping_json_path,
+                        msgflow_path=inputs.msgflow_path,
+                        output_dir=inputs.output_dir
+                    )
                 
                 print("  🤖 Running LLM-based CW1 enrichment generation with Vector optimization...")
                 
-                # ✅ FIXED: Direct module call instead of pipeline call
-                from enrichment_generator import EnrichmentGenerator
-                
-                generator = EnrichmentGenerator(groq_api_key=self.groq_api_key)
-                result = generator.generate_enrichment_files(
-                    vector_content=vector_content,  # ← Vector DB content
-                    component_mapping_json_path=inputs.component_mapping_json_path,
-                    msgflow_path=inputs.msgflow_path,
-                    output_dir=inputs.output_dir
+                # ✅ CONSISTENT: Use Vector DB pipeline like project generator
+                result = st.session_state.vector_pipeline.run_agent_with_vector_search(
+                    agent_name="enrichment_generator",  # ← Vector search for enrichment-specific content
+                    agent_function=enrichment_agent_function
                 )
                 
                 print("  ✅ Vector DB processing completed!")
@@ -616,7 +621,7 @@ class ACEModuleCreatorOrchestrator:
                 execution_time=execution_time,
                 llm_analysis_calls=result['llm_analysis_calls'],
                 llm_generation_calls=result['llm_generation_calls'],
-                output_files=result.get('output_files', []),
+                output_files=result.get('config_files', []),  # ✅ FIXED: Use correct key for file count
                 metadata=result.get('processing_metadata', {})
             )
             
@@ -635,9 +640,6 @@ class ACEModuleCreatorOrchestrator:
                 error_message=str(e)
             )
         
-
-
-
 
 
 

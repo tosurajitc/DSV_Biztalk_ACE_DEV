@@ -784,13 +784,13 @@ Extract all enrichment patterns, lookup requirements, and data flow specificatio
         Generate separate IBM ACE transco files for database enrichment operations using EnrichConfigs.MsgEnrich format.
 
         TRANSCO FILE REQUIREMENTS:
-        - Generate 6 separate transco JSON configurations for 6 database operations
+        - Generate separate transco JSON configurations for EACH database operation found in the requirements
         - Use EnrichConfigs.MsgEnrich structure with DBAlias, SQLCommand, Source, Dest
         - Include proper XPath mappings and database parameter binding
         - Each operation should be a separate configuration file
         - Follow IBM ACE enrichment subflow standards
 
-        OUTPUT: Return JSON object with 6 keys (one for each database operation) containing complete ACE transco configurations in EnrichConfigs.MsgEnrich format."""
+        OUTPUT: Return JSON object with one key per database operation found, containing complete ACE transco configurations in EnrichConfigs.MsgEnrich format."""
         
         
         user_prompt = f"""Generate IBM ACE transco files based on database operations found in business requirements:
@@ -866,11 +866,11 @@ Extract all enrichment patterns, lookup requirements, and data flow specificatio
                 if not isinstance(enrichment_configs, dict):
                     raise ValueError("LLM must return a JSON object")
                 
-                if 'before_enrichment' not in enrichment_configs or 'after_enrichment' not in enrichment_configs:
-                    raise ValueError("LLM must return both before_enrichment and after_enrichment configurations")
+                if len(enrichment_configs) == 0:
+                    raise ValueError("LLM must return at least one configuration")
                 
                 print(f"  ✅ CW1 enrichment configuration generation complete")
-                print(f"  📊 Generated before_enrichment and after_enrichment configurations for CW1 processing")
+                print(f"  📊 Generated {len(enrichment_configs)} separate transco configurations for CW1 processing")  # ← Updated
                 return enrichment_configs
                 
             except json.JSONDecodeError:
