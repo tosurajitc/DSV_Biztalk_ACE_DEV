@@ -17,7 +17,7 @@ from llm_token_tracker import TrackedGroqClient, wrap_groq_client, SmartTokenTra
 import shutil
 import requests
 from bs4 import BeautifulSoup
-
+from fetch_naming import run_pdf_naming_extraction
 # Vector DB imports - MANDATORY, no fallback
 try:
     from vector_knowledge.pdf_processor import PDFProcessor
@@ -188,6 +188,42 @@ def setup_vector_knowledge_base(uploaded_pdf, agent_name="Agent 1"):
             st.session_state.vector_stats = stats
             st.session_state.vector_ready = True
             st.session_state.confluence_pdf_processed = True
+
+            # NEW: Extract naming conventions from PDF
+            temp_pdf_path = None
+            with st.spinner("  Extracting naming conventions from PDF..."):
+                temp_pdf_path = None  # ✅ Initialize variable
+                try:
+                    # Save uploaded PDF to temporary file for fetch_naming.py
+                    import tempfile
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+                        # Reset file pointer and read content
+                        uploaded_pdf.seek(0)
+                        temp_file.write(uploaded_pdf.read())
+                        temp_pdf_path = temp_file.name  # ✅ Now properly scoped
+                        uploaded_pdf.seek(0)  # Reset for other uses
+                    
+                    # Initialize LLM client for PDF processing
+                    from groq import Groq
+                    llm_client = Groq(api_key=os.getenv('GROQ_API_KEY'))
+                    
+                    # Extract naming conventions
+                    naming_success = run_pdf_naming_extraction(temp_pdf_path, llm_client)
+                    
+                    if naming_success:
+                        st.success("✅ Extracted naming conventions from PDF")
+                    else:
+                        st.warning("⚠️ PDF naming extraction failed - using default naming conventions")
+                        
+                except Exception as e:
+                    st.warning(f"⚠️ PDF naming extraction error: {str(e)} - using default naming conventions")
+                finally:
+                    # Clean up temp file (os should already be imported at top of main.py)
+                    if temp_pdf_path and os.path.exists(temp_pdf_path):  # ✅ Check if file exists
+                        try:
+                            os.unlink(temp_pdf_path)
+                        except:
+                            pass  # Ignore cleanup errors
             
             st.success(f"  Vector DB Ready! {stats['chunks_created']} chunks indexed")
             return True
@@ -767,7 +803,7 @@ def run_specification_mapping(biztalk_folder, confluence_pdf, groq_api_key, groq
         if result.get('template_file') and os.path.exists(result['template_file']):
             with open(result['template_file'], "r") as file:
                 st.download_button(
-                    label="âš™ï¸ Download ESQL Template",
+                    label="Download ESQL Template",
                     data=file.read(),
                     file_name=os.path.basename(result['template_file']),
                     mime="text/plain"

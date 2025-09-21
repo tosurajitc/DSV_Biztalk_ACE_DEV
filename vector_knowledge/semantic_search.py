@@ -50,9 +50,27 @@ class SemanticSearchEngine:
             ],
             'enrichment_generator': [
                 'data enrichment and database lookups',
-                'CW1 integration and business rule processing',
+                'integration and business rule processing',
                 'data transformation and enhancement patterns'
-            ]
+            ],
+            'postman_collection_generator': [
+                'api', 'endpoint', 'service', 'rest', 'http', 'soap',
+                'test', 'testing', 'validation', 'verification', 'scenario',
+                'request', 'response', 'authentication', 'authorization',
+                'integration', 'interface', 'connector', 'adapter',
+                'error', 'exception', 'handling', 'monitoring',
+                'queue', 'topic', 'mq', 'jms', 'ssl', 'tcp'
+            ],
+            'migration_quality_reviewer': [
+                'quality', 'compliance', 'standard', 'best', 'practice',
+                'review', 'audit', 'assessment', 'validation', 'verification',
+                'architecture', 'design', 'pattern', 'framework', 'structure',
+                'performance', 'scalability', 'reliability', 'security',
+                'integration', 'compatibility', 'dependency', 'component',
+                'error', 'exception', 'handling', 'monitoring', 'logging',
+                'testing', 'coverage', 'criteria', 'requirement', 'specification'
+            ],
+
         }
 
 

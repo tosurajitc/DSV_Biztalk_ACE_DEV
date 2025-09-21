@@ -936,10 +936,6 @@ Extract all enrichment patterns, lookup requirements, and data flow specificatio
 
             # Write separate transco file for each database operation
             for operation_name, transco_config in safe_configs.items():
-                if operation_name in ['before_enrichment', 'after_enrichment']:
-                    continue  # Skip old format keys if they exist
-                    
-                # Create filename: sp_GetMainCompanyInCountry.json
                 filename = f"{operation_name}.json"
                 file_path = os.path.join(output_dir, filename)
                 
