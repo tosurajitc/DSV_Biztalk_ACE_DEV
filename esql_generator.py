@@ -358,17 +358,23 @@ Generate the complete ESQL module:"""
                 temperature=0.1,
                 max_tokens=3000
             )
+            print(f"🔍 DEBUG: LLM call completed in method: {__name__}")
             print(f"🔍 DEBUG: token_tracker in session_state: {'token_tracker' in st.session_state}")
-            if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
-                st.session_state.token_tracker.manual_track(
-                    agent="esql_generator",
-                    operation="validation_enhancement",
-                    model=self.groq_model,
-                    input_tokens=response.usage.prompt_tokens,
-                    output_tokens=response.usage.completion_tokens,
-                    flow_name=getattr(self, 'flow_name', 'esql_generator')
-                )
-                
+            try:
+                if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
+                    st.session_state.token_tracker.manual_track(
+                        agent="esql_generator",
+                        operation="llm_call_detected",  # Generic operation name
+                        model=self.groq_model,
+                        input_tokens=response.usage.prompt_tokens,
+                        output_tokens=response.usage.completion_tokens,
+                        flow_name="esql_generation"
+                    )
+                    print(f"📊 esql_generator/llm_call_detected: {response.usage.total_tokens} tokens")
+                else:
+                    print("🔍 DEBUG: Token tracking skipped - conditions not met")
+            except Exception as e:
+                print(f"🔍 DEBUG: Token tracking error: {e}")
             
             
             self.llm_calls_count += 1
@@ -488,18 +494,25 @@ Generate the complete ESQL module:"""
                 temperature=0.05,  # Very low for consistent structure
                 max_tokens=self.max_tokens_per_request
             )
+            print(f"🔍 DEBUG: LLM call completed in method: {__name__}")
             print(f"🔍 DEBUG: token_tracker in session_state: {'token_tracker' in st.session_state}")
-            # Track tokens
-            if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
-                st.session_state.token_tracker.manual_track(
-                    agent="esql_generator",
-                    operation="module_generation",
-                    model=self.groq_model,
-                    input_tokens=response.usage.prompt_tokens,
-                    output_tokens=response.usage.completion_tokens,
-                    flow_name=getattr(self, 'flow_name', 'esql_generator')
-                )
-            
+            try:
+                if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
+                    st.session_state.token_tracker.manual_track(
+                        agent="esql_generator",
+                        operation="llm_call_detected",  # Generic operation name
+                        model=self.groq_model,
+                        input_tokens=response.usage.prompt_tokens,
+                        output_tokens=response.usage.completion_tokens,
+                        flow_name="esql_generation"
+                    )
+                    print(f"📊 esql_generator/llm_call_detected: {response.usage.total_tokens} tokens")
+                else:
+                    print("🔍 DEBUG: Token tracking skipped - conditions not met")
+            except Exception as e:
+                print(f"🔍 DEBUG: Token tracking error: {e}")
+
+
             self.llm_calls_count += 1
             esql_content = response.choices[0].message.content.strip()
             
@@ -559,17 +572,23 @@ Return ONLY the ESQL code:"""
                 temperature=0.1,
                 max_tokens=self.max_tokens_per_request
             )
+            print(f"🔍 DEBUG: LLM call completed in method: {__name__}")
             print(f"🔍 DEBUG: token_tracker in session_state: {'token_tracker' in st.session_state}")
-            # Track tokens
-            if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
-                st.session_state.token_tracker.manual_track(
-                    agent="esql_generator",
-                    operation="validation_enhancement",
-                    model=self.groq_model,
-                    input_tokens=response.usage.prompt_tokens,
-                    output_tokens=response.usage.completion_tokens,
-                    flow_name=getattr(self, 'flow_name', 'esql_generator')
-                )
+            try:
+                if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
+                    st.session_state.token_tracker.manual_track(
+                        agent="esql_generator",
+                        operation="llm_call_detected",  # Generic operation name
+                        model=self.groq_model,
+                        input_tokens=response.usage.prompt_tokens,
+                        output_tokens=response.usage.completion_tokens,
+                        flow_name="esql_generation"
+                    )
+                    print(f"📊 esql_generator/llm_call_detected: {response.usage.total_tokens} tokens")
+                else:
+                    print("🔍 DEBUG: Token tracking skipped - conditions not met")
+            except Exception as e:
+                print(f"🔍 DEBUG: Token tracking error: {e}")
             
             self.llm_calls_count += 1
             enhanced_content = response.choices[0].message.content.strip()
@@ -674,6 +693,20 @@ Return ONLY the ESQL code:"""
                 temperature=0.1,
                 max_tokens=2000
             )
+
+            try:
+                if 'token_tracker' in st.session_state and hasattr(generation_response, 'usage') and generation_response.usage:
+                    st.session_state.token_tracker.manual_track(
+                        agent="esql_generator",
+                        operation="esql_module_generation",
+                        model=self.groq_model,
+                        input_tokens=generation_response.usage.prompt_tokens,
+                        output_tokens=generation_response.usage.completion_tokens,
+                        flow_name="esql_generation"
+                    )
+                    print(f"📊 esql_generator/esql_module_generation: {generation_response.usage.total_tokens} tokens | ${generation_response.usage.total_tokens * 0.0008:.4f} | {self.groq_model}")
+            except Exception as e:
+                print(f"⚠️ Token tracking failed: {e}")
             
             self.llm_calls_count += 1
             
@@ -731,6 +764,20 @@ Return ONLY the ESQL code:"""
                 temperature=0.1,
                 max_tokens=4000
             )
+
+            try:
+                if 'token_tracker' in st.session_state and hasattr(generation_response, 'usage') and generation_response.usage:
+                    st.session_state.token_tracker.manual_track(
+                        agent="esql_generator",
+                        operation="esql_module_generation",
+                        model=self.groq_model,
+                        input_tokens=generation_response.usage.prompt_tokens,
+                        output_tokens=generation_response.usage.completion_tokens,
+                        flow_name="esql_generation"
+                    )
+                    print(f"📊 esql_generator/esql_module_generation: {generation_response.usage.total_tokens} tokens | ${generation_response.usage.total_tokens * 0.0008:.4f} | {self.groq_model}")
+            except Exception as e:
+                print(f"⚠️ Token tracking failed: {e}")
             
             self.llm_calls_count += 1
             
@@ -862,6 +909,20 @@ Return ONLY the ESQL code:"""
                         temperature=0.1,
                         max_tokens=4000
                     )
+
+                    try:
+                        if 'token_tracker' in st.session_state and hasattr(generation_response, 'usage') and generation_response.usage:
+                            st.session_state.token_tracker.manual_track(
+                                agent="esql_generator",
+                                operation="esql_module_generation",
+                                model=self.groq_model,
+                                input_tokens=generation_response.usage.prompt_tokens,
+                                output_tokens=generation_response.usage.completion_tokens,
+                                flow_name="esql_generation"
+                            )
+                            print(f"📊 esql_generator/esql_module_generation: {generation_response.usage.total_tokens} tokens | ${generation_response.usage.total_tokens * 0.0008:.4f} | {self.groq_model}")
+                    except Exception as e:
+                        print(f"⚠️ Token tracking failed: {e}")
                     
                     self.llm_calls_count += 1
                     

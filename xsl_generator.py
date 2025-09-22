@@ -236,12 +236,12 @@ class XSLGenerator:
             )
             if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
                 st.session_state.token_tracker.manual_track(
-                    agent="schema_generator",
-                    operation="schema_generation",
+                    agent="xsl_generator",
+                    operation="xsl_transformation_generation",
                     model=self.groq_model,
                     input_tokens=response.usage.prompt_tokens,
                     output_tokens=response.usage.completion_tokens,
-                    flow_name=getattr(self, 'current_schema_name', 'schema_gen')
+                    flow_name="xsl_generation"
                 )
             
             raw_analysis = response.choices[0].message.content.strip()
@@ -336,12 +336,12 @@ class XSLGenerator:
                 )
                 if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
                     st.session_state.token_tracker.manual_track(
-                        agent="schema_generator",
-                        operation="schema_generation",
+                        agent="xsl_generator",
+                        operation="xsl_transformation_generation",
                         model=self.groq_model,
                         input_tokens=response.usage.prompt_tokens,
                         output_tokens=response.usage.completion_tokens,
-                        flow_name=getattr(self, 'current_schema_name', 'schema_gen')
+                        flow_name="xsl_generation"
                     )
                 
                 xsl_content = response.choices[0].message.content.strip()

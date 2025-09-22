@@ -35,7 +35,7 @@ from typing import Optional
 # Additional utilities for diagram processing
 import tempfile
 import os
-
+import streamlit as st
 
 # ================================================================================================
 # EXISTING PDFProcessor CLASS WITH ENHANCEMENTS
@@ -554,6 +554,16 @@ Return detailed JSON with ALL identified elements. Be extremely thorough - captu
                     max_tokens=3000,
                     temperature=0.1  # Low temperature for technical accuracy
                 )
+
+                if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
+                    st.session_state.token_tracker.manual_track(
+                        agent="pdf_processor",
+                        operation="diagram_vision_analysis",
+                        model=self.vision_model,
+                        input_tokens=response.usage.prompt_tokens,
+                        output_tokens=response.usage.completion_tokens,
+                        flow_name="pdf_diagram_processing"
+                    )
                 
                 # Parse LLM response
                 analysis_text = response.choices[0].message.content

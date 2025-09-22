@@ -103,26 +103,16 @@ class PDFNamingExtractor:
                 temperature=0.1,
                 max_tokens=1000
             )
-            if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
-                st.session_state.token_tracker.manual_track(
-                    agent="fetch_naming",
-                    operation="extract_project_nameing", 
-                    model=self.model,
-                    input_tokens=response.usage.prompt_tokens,
-                    output_tokens=response.usage.completion_tokens,
-                    flow_name=getattr(self, 'flow_name', 'migration_quality_analysis')
-                )
-
             
             # Track token usage
             if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
                 st.session_state.token_tracker.manual_track(
-                    agent="pdf_naming_extractor",
-                    operation="pdf_summary_extraction",
+                    agent="pdf_naming_extractor",  # ✅ Consistent name
+                    operation="pdf_summary_extraction",  # ✅ Correct operation name
                     model=self.model,
                     input_tokens=response.usage.prompt_tokens,
                     output_tokens=response.usage.completion_tokens,
-                    flow_name="pdf_naming_extraction"
+                    flow_name="pdf_naming_extraction"  # ✅ Specific flow name
                 )
             
             llm_response = response.choices[0].message.content.strip()
