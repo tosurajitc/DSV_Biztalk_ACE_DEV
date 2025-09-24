@@ -1,0 +1,44 @@
+CREATE COMPUTE MODULE CW1_IN_Document_SND_AfterEnrichmentn_Compute
+CREATE FUNCTION Main() RETURNS BOOLEAN
+BEGIN
+    DECLARE shipmentInfo 		REFERENCE TO 	Environment.variables.EventData.shipmentInfo;
+    DECLARE sourceCompany 		REFERENCE TO 	Environment.variables.EventData.sourceCompany;
+    DECLARE targetCompany 		REFERENCE TO 	Environment.variables.EventData.targetCompany;
+    DECLARE integrationDetails REFERENCE TO 	Environment.variables.EventData.integrationDetails;
+    DECLARE dataPayload 		REFERENCE TO 	Environment.variables.EventData.dataPayload;
+
+    SET sourceCompany.CustomsDeclarationId = CAST(proc_CustomsDeclaration_GetIdByReference(shipmentInfo.Reference) AS INTEGER);
+    SET targetCompany.EAdapterRecepientId = CAST(sp_Get_EAdapterRecepientId(shipmentInfo.SSN) AS INTEGER);
+    SET shipmentInfo.IsPublishedFlag = CAST(proc_EDocument_GetIsPublishedFlag(shipmentInfo.DocumentId) AS BOOLEAN);
+    SET sourceCompany.MainCompanyInCountry = sp_GetMainCompanyInCountry(sourceCompany.CountryCode);
+    SET shipmentInfo.ShipmentId = CAST(sp_Shipment_GetIdBySSN(shipmentInfo.SSN) AS INTEGER);
+
+    SET OutputRoot.XMLNSC.ShipmentInfo = shipmentInfo;
+    SET OutputRoot.XMLNSC.SourceCompany = sourceCompany;
+    SET OutputRoot.XMLNSC.TargetCompany = targetCompany;
+    SET OutputRoot.XMLNSC.IntegrationDetails = integrationDetails;
+    SET OutputRoot.XMLNSC.DataPayload = dataPayload;
+
+    SET OutputRoot.XMLNSC.EventData.ShipmentInfo = shipmentInfo;
+    SET OutputRoot.XMLNSC.EventData.SourceCompany = sourceCompany;
+    SET OutputRoot.XMLNSC.EventData.TargetCompany = targetCompany;
+    SET OutputRoot.XMLNSC.EventData.IntegrationDetails = integrationDetails;
+    SET OutputRoot.XMLNSC.EventData.DataPayload = dataPayload;
+
+    RETURN TRUE;
+END;
+
+CREATE PROCEDURE CopyMessageHeaders() BEGIN
+    DECLARE I INTEGER 1;
+    DECLARE J INTEGER;
+    SET J = CARDINALITY(InputRoot.*[]);
+    WHILE I < J DO
+        SET OutputRoot.*[I] = InputRoot.*[I];
+        SET I = I + 1;
+    END WHILE;
+END;
+
+CREATE PROCEDURE CopyEntireMessage() BEGIN
+    SET OutputRoot = InputRoot;
+END;
+END MODULE;

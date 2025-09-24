@@ -1,0 +1,115 @@
+{
+  "timestamp": "2025-09-24T17:59:28.398899",
+  "analysis_phase": "after_enrichment_consolidation",
+  "project_info": {
+    "name": "EPIS_CW1_IN_Document_App",
+    "message_flow": "CW1_IN_Document_SND",
+    "connected_system": "CargoWise One - APP-051 (CW1)"
+  },
+  "consolidation_metadata": {
+    "source_files": [
+      "proc_Shipment_GetIdByHouseBill.json",
+      "sp_GetMainCompanyInCountry.json",
+      "sp_Shipment_GetIdBySSN.json"
+    ],
+    "total_configs_merged": 3,
+    "merged_timestamp": "2025-09-24T17:59:28.398899"
+  },
+  "EnrichConfigs": {
+    "MsgEnrich": [
+      {
+        "DBAlias": "DSV.ESB.Integration",
+        "SQLCommand": "exec proc_Shipment_GetIdByHouseBill @HouseBill='{0}'",
+        "Scope_prefix": "s0",
+        "Scope_xmlns": "http://esb.dsv.com/CDM/DocumentMessage_V2",
+        "Scope": "/s0:DocumentMessage/s0:Document",
+        "Mandatory": false,
+        "Active": true,
+        "DisableCaching": false,
+        "Source": [
+          {
+            "FieldName": "HouseBill",
+            "xPathValue": "s0:EntityReference/s0:Reference[@Type='HouseBill']/text()",
+            "Source": "Message",
+            "Optional": true
+          }
+        ],
+        "Dest": [
+          {
+            "FieldName": "ResultField",
+            "xPathValue": "",
+            "Optional": true,
+            "DefaultValue": ""
+          }
+        ],
+        "_source_file": "proc_Shipment_GetIdByHouseBill.json"
+      },
+      {
+        "DBAlias": "MH.ESB.EDIEnterprise",
+        "SQLCommand": "exec sp_GetMainCompanyInCountry @CountryCode='{0}'",
+        "Scope_prefix": "ns0",
+        "Scope_xmlns": "http://esb.dsv.com/CDM/DocumentMessage_V2",
+        "Scope": "/ns0:DocumentMessage/ns0:Header",
+        "Mandatory": false,
+        "Active": true,
+        "DisableCaching": false,
+        "Source": [
+          {
+            "FieldName": "CountryCode",
+            "xPathValue": "/ns0:DocumentMessage/ns0:Header/ns0:Target/ns0:CountryCode/text()",
+            "Source": "Message",
+            "Optional": true
+          }
+        ],
+        "Dest": [
+          {
+            "FieldName": "ResultField",
+            "xPathValue": "",
+            "Optional": true,
+            "DefaultValue": ""
+          }
+        ],
+        "_source_file": "sp_GetMainCompanyInCountry.json"
+      },
+      {
+        "DBAlias": "DSV.ESB.Integration",
+        "SQLCommand": "exec sp_Shipment_GetIdBySSN @SSN='{0}',@SID='{1}',@STP='{2}'",
+        "Scope_prefix": "s0",
+        "Scope_xmlns": "http://esb.dsv.com/CDM/DocumentMessage_V2",
+        "Scope": "/s0:DocumentMessage/s0:Header",
+        "Mandatory": false,
+        "Active": true,
+        "DisableCaching": false,
+        "Source": [
+          {
+            "FieldName": "SSN",
+            "xPathValue": "/s0:DocumentMessage/s0:Document/s0:EntityReference/s0:Reference[@Type='SSN']/text()",
+            "Source": "Message",
+            "Optional": true
+          },
+          {
+            "FieldName": "SID",
+            "xPathValue": "/s0:DocumentMessage/s0:Header/s0:Source/s0:ApplicationCode/text()",
+            "Source": "Message",
+            "Optional": true
+          },
+          {
+            "FieldName": "STP",
+            "xPathValue": "/s0:Header/s0:Source/s0:EnterpriseCode/text()",
+            "Source": "Message",
+            "Optional": true
+          }
+        ],
+        "Dest": [
+          {
+            "FieldName": "ResultField",
+            "xPathValue": "",
+            "Optional": true,
+            "DefaultValue": ""
+          }
+        ],
+        "_source_file": "sp_Shipment_GetIdBySSN.json"
+      }
+    ]
+  }
+}

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:schemas:ace:cw1brokerageid"
+           xmlns:tns="urn:schemas:ace:cw1brokerageid"
+           elementFormDefault="qualified">
+    <xs:annotation>
+        <xs:documentation>
+            CW1BrokerageId Schema: Data structure definition for enterprise data exchange.
+        </xs:documentation>
+    </xs:annotation>
+    <xs:element name="CW1BrokerageId" type="tns:CW1BrokerageIdType"/>
+    <xs:complexType name="CW1BrokerageIdType">
+        <xs:annotation>
+            <xs:documentation>
+                Complex type definition for CW1BrokerageId.
+            </xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <!-- Add elements as required by the data structure -->
+        </xs:sequence>
+    </xs:complexType>
+</xs:schema>

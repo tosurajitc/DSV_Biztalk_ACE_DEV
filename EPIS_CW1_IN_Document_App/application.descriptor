@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ns2:appDescriptor xmlns:ns2="http://com.ibm.etools.mft.descriptor.base">
+    <ns2:application>
+        <ns2:name>EPIS_CW1_IN_Document_App</ns2:name>
+        <ns2:description>Migrated ACE Application</ns2:description>
+        <ns2:version>1.0.0</ns2:version>
+        <ns2:additionalInformation>Connected System: CargoWise One - APP-051 (CW1)</ns2:additionalInformation>
+        <ns2:additionalInformation>Migration Date: 2025-09-24 17:59:28</ns2:additionalInformation>
+        <ns2:additionalInformation>Components: 19 ACE artifacts</ns2:additionalInformation>
+    </ns2:application>
+</ns2:appDescriptor>

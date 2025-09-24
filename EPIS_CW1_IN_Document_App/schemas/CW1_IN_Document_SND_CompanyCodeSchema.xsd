@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:schemas:ace:companycode"
+           xmlns:tns="urn:schemas:ace:companycode"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified"
+           version="1.0">
+    <xs:annotation>
+        <xs:documentation>
+            CompanyCode XSD Schema
+            Purpose: Data structure definition
+            Target Namespace: urn:schemas:ace:companycode
+            Business Context: Enterprise data exchange
+            ACE Considerations: Use ACE database connectors for integration
+        </xs:documentation>
+    </xs:annotation>
+    <xs:element name="CompanyCode" type="tns:CompanyCodeType">
+        <xs:annotation>
+            <xs:documentation>Root element for CompanyCode data structure</xs:documentation>
+        </xs:annotation>
+    </xs:element>
+    <xs:complexType name="CompanyCodeType">
+        <xs:annotation>
+            <xs:documentation>Complex type definition for CompanyCode data structure</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <!-- Add data structure elements here -->
+        </xs:sequence>
+    </xs:complexType>
+</xs:schema>

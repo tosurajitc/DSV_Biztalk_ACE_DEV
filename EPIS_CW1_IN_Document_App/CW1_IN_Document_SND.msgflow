@@ -11,14 +11,14 @@
     xmlns:epis_compression_lib_GZipCompressAndB64EncodeElement.subflow="epis/compression/lib/GZipCompressAndB64EncodeElement.subflow" 
     xmlns:epis_enrichment_lib_EPIS_MessageEnrichment.subflow="epis/enrichment/lib/EPIS_MessageEnrichment.subflow" 
     xmlns:utility="http://www.ibm.com/wbi/2005/eflow_utility" 
-    nsURI="{FLOW_NAME}.msgflow" 
-    nsPrefix="{FLOW_NAME}.msgflow">
+    nsURI="AGENT2_Message_Flow_SND.msgflow" 
+    nsPrefix="AGENT2_Message_Flow_SND.msgflow">
 
   <eClassifiers xmi:type="eflow:FCMComposite" name="FCMComposite_1" nodeLayoutStyle="RECTANGLE">
     <eSuperTypes href="http://www.ibm.com/wbi/2005/eflow#//FCMBlock"/>
     
     <!-- Template Properties - Replace with actual values -->
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.INPUT_QUEUE" name="INPUT_QUEUE" lowerBound="1" defaultValueLiteral="{INPUT_QUEUE_NAME}">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.INPUT_QUEUE" name="INPUT_QUEUE" lowerBound="1" defaultValueLiteral="CW1.IN.DOCUMENT.SND.QL">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -30,7 +30,7 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
     </eStructuralFeatures>
     
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.STYLESHEET_NAME" name="STYLESHEET_NAME" defaultValueLiteral="{XSL_STYLESHEET_NAME}">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.STYLESHEET_NAME" name="STYLESHEET_NAME" defaultValueLiteral="DefaultTransform.xsl">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -46,7 +46,7 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
     </eStructuralFeatures>
     
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.BEFORE_INPUT_DIR" name="BEFORE_INPUT_DIR" defaultValueLiteral="{APP_NAME}\{FLOW_NAME}\enrichment">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.BEFORE_INPUT_DIR" name="BEFORE_INPUT_DIR" defaultValueLiteral="AGENT2_App_Name\AGENT2_Message_Flow_SND\enrichment">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -54,7 +54,7 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AFTER_INPUT_DIR" name="AFTER_INPUT_DIR" defaultValueLiteral="{APP_NAME}\{FLOW_NAME}\enrichment">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AFTER_INPUT_DIR" name="AFTER_INPUT_DIR" defaultValueLiteral="AGENT2_App_Name\AGENT2_Message_Flow_SND\enrichment">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -63,34 +63,37 @@
     </eStructuralFeatures>
 
     <!-- Branding and Graphics -->
-    <translation xmi:type="utility:TranslatableString" key="{FLOW_NAME}" bundleName="{FLOW_NAME}" pluginId="{APP_NAME}_Developer"/>
-    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/{APP_NAME}_Developer/icons/full/obj16/{FLOW_NAME}.gif"/>
-    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/{APP_NAME}_Developer/icons/full/obj30/{FLOW_NAME}.gif"/>
+    <translation xmi:type="utility:TranslatableString" key="AGENT2_Message_Flow_SND" bundleName="AGENT2_Message_Flow_SND" pluginId="AGENT2_App_Name_Developer"/>
+    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/AGENT2_App_Name/icons/full/obj16/AGENT2_Message_Flow.gif"/>
+    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/AGENT2_App_Name/icons/full/obj16/AGENT2_Message_Flow.gif"/>
     
     <composition>
       <!-- 1. START EVENT MESSAGE NODE -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_1" 
              location="-221,338" rotation="RIGHT_TO_LEFT" 
-             computeExpression="{FLOW_NAME}_StartEventMessage">
+             computeExpression="AGENT2_Message_Flow_SND_StartEventMessage">
         <translation xmi:type="utility:ConstantString" string="StartEventMessage"/>
       </nodes>
 
       <!-- 2. MQ INPUT NODE -->
       <nodes xmi:type="epis_common_flows_lib_MQInput.subflow:FCMComposite_1" xmi:id="FCMComposite_1_2" location="-201,103">
         <translation xmi:type="utility:ConstantString" string="MQInput"/>
+        <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.INPUT_QUEUE" name="INPUT_QUEUE" lowerBound="1" defaultValueLiteral="CW1.IN.DOCUMENT.SND.QL">
+          <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+        </eStructuralFeatures>
       </nodes>
 
       <!-- 3. MESSAGE ENRICHMENT NODE (Before) -->
       <nodes xmi:type="epis_enrichment_lib_EPIS_MessageEnrichment.subflow:FCMComposite_1" 
              xmi:id="FCMComposite_1_3" location="30,299" 
-             inputDirectory="/{APP_NAME}/enrichment/{FLOW_NAME}">
+             inputDirectory="/AGENT2_App_Name/enrichment/AGENT2_Message_Flow_SND">
         <translation xmi:type="utility:ConstantString" string="EPIS_MessageEnrichment_Before"/>
       </nodes>
 
       <!-- 4. BEFORE ENRICHMENT PROCESSING -->
       <nodes xmi:type="epis_enrichment_lib_EPIS_MessageEnrichment.subflow:FCMComposite_1" 
              xmi:id="FCMComposite_1_4" location="216,222" 
-             inputDirectory="{LOCAL_ENRICHMENT_PATH}" 
+             inputDirectory="/AGENT2_App_Name/enrichment/AGENT2_Message_Flow" 
              filenamePattern="BeforeEnrichmentConf.json">
         <translation xmi:type="utility:ConstantString" string="EPIS_MessageEnrichment_Config"/>
       </nodes>
@@ -98,14 +101,14 @@
       <!-- 5. AFTER ENRICHMENT COMPUTE NODE -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_5" 
              location="376,68" 
-             computeExpression="{FLOW_NAME}_AfterEnrichmentn">
+             computeExpression="AGENT2_Message_Flow_SND_AfterEnrichmentn">
         <translation xmi:type="utility:ConstantString" string="AfterEnrichment"/>
       </nodes>
 
       <!-- 6. XSL TRANSFORMATION NODE -->
       <nodes xmi:type="ComIbmXslMqsi.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_6" 
              location="596,45" 
-             stylesheetName="{XSL_STYLESHEET_NAME}" 
+             stylesheetName="DefaultTransform.xsl" 
              messageDomainProperty="XMLNSC">
         <translation xmi:type="utility:ConstantString" string="XSL Transform"/>
       </nodes>
@@ -129,7 +132,7 @@
       <!-- 9. PREPARE SOAP MESSAGE NODE -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_9" 
              location="1128,370" 
-             computeExpression="{FLOW_NAME}_PrepareSoap">
+             computeExpression="AGENT2_Message_Flow_SND_PrepareSoap">
         <translation xmi:type="utility:ConstantString" string="Prepare Soap message"/>
       </nodes>
 
@@ -142,7 +145,7 @@
              selectedOperation="{OPERATION}" 
              selectedPort="{PORT}" 
              useHTTPTransport="true" 
-             webServiceURL="{SOAP_ENDPOINT_URL}" 
+             webServiceURL="https://eadapterqa.dsv.com/eAdapterStreamedService.svc" 
              sslProtocol="TLS">
         <translation xmi:type="utility:ConstantString" string="SOAP Request"/>
       </nodes>
@@ -150,14 +153,14 @@
       <!-- 11. FAILURE HANDLING NODE -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_11" 
              location="1490,344" 
-             computeExpression="{FLOW_NAME}_Failure">
+             computeExpression="AGENT2_Message_Flow_SND_Failure">
         <translation xmi:type="utility:ConstantString" string="Failure_Handler"/>
       </nodes>
 
       <!-- 12. AFTER TRANSFORMATION EVENT MESSAGE -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_12" 
              location="760,418" rotation="RIGHT_TO_LEFT" 
-             computeExpression="{FLOW_NAME}_AfterTransEventMsg">
+             computeExpression="AGENT2_Message_Flow_SND_AfterTransEventMsg">
         <translation xmi:type="utility:ConstantString" string="AfterTransEventMessage"/>
       </nodes>
 

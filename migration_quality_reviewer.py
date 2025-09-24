@@ -409,11 +409,13 @@ class SmartACEQualityReviewer:
         
         return components
     
+
+    
     def _create_ace_project_structure(self) -> str:
-        """Create final ACE project structure with correct naming"""
-        print("\n🗃️ Creating ACE Project Structure...")
+        """Create final ACE project structure with organized subdirectories"""
+        print("\n🗃️ Creating ACE Project Structure with Organized Folders...")
         
-        # Get project name from naming convention
+        # Get dynamic names from naming convention
         project_naming = self.naming_convention.get('project_naming', {})
         project_name = project_naming.get('ace_application_name', 'EPIS_MIGRATION_App')
         message_flow_base = project_naming.get('message_flow_name', 'MIGRATION_Flow')
@@ -429,18 +431,45 @@ class SmartACEQualityReviewer:
         else:
             print(f"    ⚠️ No message flow found - using standard naming")
         
-        # Create project directory
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Create main project directory (DYNAMIC name)
         project_dir = self.ace_components_folder.parent / f"{project_name}"
         
         try:
-            # Create main project directory
+            # STEP 2: Create main project directory
             os.makedirs(project_dir, exist_ok=True)
-            print(f"📁 Created project directory: {project_name}")
+            print(f"📁 Created main project directory: {project_name}")
             
-            # Copy and rename components with correct naming convention
+            # STEP 3: Create organized subdirectories
+            # Dynamic ESQL subdirectory name
+            esql_dir = project_dir / message_flow_base
+            # Hardcoded subdirectory names
+            schemas_dir = project_dir / "schemas"
+            transforms_dir = project_dir / "transforms"
+            enrichment_dir = project_dir / "enrichment"
+            
+            # Create all subdirectories
+            subdirs_created = []
+            for subdir_name, subdir_path in [
+                (message_flow_base, esql_dir),      # Dynamic ESQL folder
+                ("schemas", schemas_dir),           # Hardcoded
+                ("transforms", transforms_dir),     # Hardcoded  
+                ("enrichment", enrichment_dir)      # Hardcoded
+            ]:
+                os.makedirs(subdir_path, exist_ok=True)
+                subdirs_created.append(subdir_name)
+                print(f"  📂 Created subdirectory: {subdir_name}/")
+            
+            print(f"📊 Created {len(subdirs_created)} organized subdirectories")
+            
+            # STEP 4: Copy and organize components by file type
             components_copied = 0
-            
+            file_routing_summary = {
+                'esql_files': 0,
+                'xsd_files': 0, 
+                'xsl_files': 0,
+                'other_files': 0
+            }
+
             for component in self.discovered_components:
                 old_path = Path(component['original_path'])
                 
@@ -450,35 +479,105 @@ class SmartACEQualityReviewer:
                 else:
                     new_name = self._generate_component_name(component, message_flow_base)
                 
-                new_path = project_dir / new_name
-                
-                try:
-                    # Copy component with new name
-                    shutil.copy2(old_path, new_path)
-                    components_copied += 1
-                    print(f"  ✅ {component['full_name']} → {new_name}")
+                # 🗂️ ROUTE FILES TO APPROPRIATE SUBDIRECTORIES
+                if component['extension'] == '.esql':
+                    new_path = esql_dir / new_name
+                    file_routing_summary['esql_files'] += 1
+                    destination = f"{message_flow_base}/"
                     
-                except Exception as e:
-                    print(f"  ❌ Failed to copy {component['full_name']}: {e}")
+                    try:
+                        # 🆕 UPDATED LOGIC FOR ESQL FILES - Update content AND filename
+                        new_module_name = new_name.replace('.esql', '')  # Remove extension for module name
+                        print(f"    🔧 Processing ESQL: {component['full_name']} → {new_name}")
+                        
+                        # Use helper method to update ESQL content
+                        updated_content = self._update_esql_module_name(old_path, new_module_name)
+                        
+                        # Write updated content to new file
+                        with open(new_path, 'w', encoding='utf-8') as f:
+                            f.write(updated_content)
+                        
+                        components_copied += 1
+                        print(f"  ✅ {component['full_name']} → {destination}{new_name} (content updated)")
+                        
+                    except Exception as e:
+                        print(f"  ❌ Failed to update ESQL {component['full_name']}: {e}")
+                        # Fallback: copy original file without content updates
+                        try:
+                            shutil.copy2(old_path, new_path)
+                            components_copied += 1
+                            print(f"  ⚠️ {component['full_name']} → {destination}{new_name} (fallback copy)")
+                        except Exception as fallback_error:
+                            print(f"  ❌ Fallback copy also failed: {fallback_error}")
+                    
+                elif component['extension'] == '.xsd':
+                    new_path = schemas_dir / new_name
+                    file_routing_summary['xsd_files'] += 1
+                    destination = "schemas/"
+                    
+                    try:
+                        # Regular file copy for XSD files
+                        shutil.copy2(old_path, new_path)
+                        components_copied += 1
+                        print(f"  ✅ {component['full_name']} → {destination}{new_name}")
+                    except Exception as e:
+                        print(f"  ❌ Failed to copy {component['full_name']}: {e}")
+                    
+                elif component['extension'] == '.xsl':
+                    new_path = transforms_dir / new_name
+                    file_routing_summary['xsl_files'] += 1
+                    destination = "transforms/"
+                    
+                    try:
+                        # Regular file copy for XSL files
+                        shutil.copy2(old_path, new_path)
+                        components_copied += 1
+                        print(f"  ✅ {component['full_name']} → {destination}{new_name}")
+                    except Exception as e:
+                        print(f"  ❌ Failed to copy {component['full_name']}: {e}")
+                    
+                else:
+                    # Other files go to root directory
+                    new_path = project_dir / new_name
+                    file_routing_summary['other_files'] += 1
+                    destination = "root/"
+                    
+                    try:
+                        # Regular file copy for other files
+                        shutil.copy2(old_path, new_path)
+                        components_copied += 1
+                        print(f"  ✅ {component['full_name']} → {destination}{new_name}")
+                    except Exception as e:
+                        print(f"  ❌ Failed to copy {component['full_name']}: {e}")
             
-            # Copy enrichment files as-is (no renaming)
+            # STEP 5: Handle enrichment files (preserve existing logic)
+            print(f"\n📄 Processing enrichment files...")
             self._copy_enrichment_files(project_dir)
             
-            # Generate complete project files
+            # STEP 6: Generate complete project files (root level)
+            print(f"📋 Generating ACE project files...")
             self._generate_complete_project_files(project_dir)
             
+            # STEP 7: Final summary with organized structure info
             print(f"\n📊 Project Creation Summary:")
             print(f"  📦 Project: {project_name}")
-            print(f"  📄 Components: {components_copied} renamed and copied")
+            print(f"  📁 ESQL Directory: {message_flow_base}/ ({file_routing_summary['esql_files']} files)")
+            print(f"  📁 Schemas Directory: schemas/ ({file_routing_summary['xsd_files']} files)")
+            print(f"  📁 Transforms Directory: transforms/ ({file_routing_summary['xsl_files']} files)")
+            print(f"  📁 Enrichment Directory: enrichment/ (consolidated JSON files)")
+            print(f"  📄 Root Files: {file_routing_summary['other_files']} + project files")
             print(f"  🔗 Message Flow Mapping: {len(compute_mapping)} compute references analyzed")
+            
             if self.validation_errors:
                 print(f"  ⚠️ Issues: {len(self.validation_errors)} validation warnings")
             
+            print(f"\n✅ Organized ACE project structure created successfully!")
             return str(project_dir)
             
         except Exception as e:
             print(f"❌ Error creating project structure: {e}")
-            raise
+            self.validation_errors.append(f"Project structure creation failed: {e}")
+            raise Exception(f"Failed to create ACE project structure: {e}")
     
 
 
@@ -685,7 +784,7 @@ class SmartACEQualityReviewer:
     
     def _copy_enrichment_files(self, project_dir: Path):
         """Process enrichment configurations - consolidate into before/after files only"""
-        print(f"\n🔍 Processing enrichment files...")
+        print(f"\n📄 Processing enrichment files...")
         
         # Look for .json files in the Enhanced_ACE_Project subfolder (where Agent3 outputs them)
         enhanced_project_folder = self.ace_components_folder / "Enhanced_ACE_Project"
@@ -719,12 +818,19 @@ class SmartACEQualityReviewer:
         for ef in enrichment_files:
             print(f"    • {ef.name}")
         
-        # Create enrichment directory in final project
+        # 🆕 UPDATED: Work with existing enrichment directory created by _create_ace_project_structure
+        # The enrichment directory is already created by the new structure, so we just verify it exists
         enrichment_dest = project_dir / "enrichment"
-        try:
+        
+        if not enrichment_dest.exists():
+            # This shouldn't happen with the new structure, but create as fallback
+            print(f"  ⚠️ Warning: enrichment directory not found, creating it...")
             os.makedirs(enrichment_dest, exist_ok=True)
-            
-            # 🆕 CONSOLIDATED APPROACH - Only create before/after files
+        else:
+            print(f"  ✅ Using existing enrichment directory: enrichment/")
+        
+        try:
+            # 🆕 CONSOLIDATED APPROACH - Only create before/after files in the existing directory
             print(f"  📄 Consolidating enrichment configurations...")
             consolidation_success = self._consolidate_enrichment_files(project_dir, enrichment_files)
             
@@ -737,9 +843,127 @@ class SmartACEQualityReviewer:
                 print(f"  ⚠️ Enrichment consolidation had issues - check logs")
             
         except Exception as e:
-            print(f"  ❌ Error creating enrichment directory: {e}")
-            self.validation_errors.append(f"Enrichment directory creation failed: {e}")
+            print(f"  ❌ Error processing enrichment directory: {e}")
+            self.validation_errors.append(f"Enrichment directory processing failed: {e}")
 
+
+    def _update_esql_module_name(self, esql_file_path: Path, new_module_name: str) -> str:
+        """
+        Update ESQL file content to match new module name with filename
+        
+        Args:
+            esql_file_path: Path to the original ESQL file
+            new_module_name: New module name (without .esql extension)
+        
+        Returns:
+            str: Updated ESQL file content with corrected module name
+        """
+        try:
+            # Read original ESQL file content
+            with open(esql_file_path, 'r', encoding='utf-8') as f:
+                esql_content = f.read()
+            
+            print(f"    🔧 Updating ESQL module name: {new_module_name}")
+            
+            # Remove .esql extension if present in new_module_name
+            clean_module_name = new_module_name.replace('.esql', '')
+            
+            # Pattern to match CREATE COMPUTE MODULE statements (case-insensitive, flexible spacing)
+            # Matches: CREATE COMPUTE MODULE old_name
+            # Handles variations like:
+            # - CREATE COMPUTE MODULE AGENT2_Message_Flow_SND_AfterTransEventMsg
+            # - CREATE   COMPUTE   MODULE   OldModuleName
+            # - create compute module old_name (case insensitive)
+            
+            import re
+            
+            # Pattern explanation:
+            # (?i) = case insensitive flag
+            # \s+ = one or more whitespace characters
+            # ([A-Za-z0-9_]+) = capture group for module name (alphanumeric + underscore)
+            pattern = r'(?i)(CREATE\s+COMPUTE\s+MODULE\s+)([A-Za-z0-9_]+)'
+            
+            # Find the current module name first for logging
+            current_match = re.search(pattern, esql_content)
+            if current_match:
+                old_module_name = current_match.group(2)
+                print(f"      📝 Found module: '{old_module_name}' → '{clean_module_name}'")
+                
+                # Replace with new module name, preserving the original case style of CREATE COMPUTE MODULE
+                updated_content = re.sub(
+                    pattern, 
+                    rf'\1{clean_module_name}',  # \1 = the "CREATE COMPUTE MODULE " part, then new name
+                    esql_content
+                )
+                
+                # Verify the replacement was successful
+                verification_match = re.search(pattern, updated_content)
+                if verification_match and verification_match.group(2) == clean_module_name:
+                    print(f"      ✅ Module name updated successfully")
+                    return updated_content
+                else:
+                    print(f"      ⚠️ Warning: Module name replacement verification failed")
+                    return updated_content
+                    
+            else:
+                # No CREATE COMPUTE MODULE found - this might be a different type of ESQL file
+                print(f"      ⚠️ Warning: No 'CREATE COMPUTE MODULE' statement found")
+                print(f"      📄 File might be a different ESQL type (PROCEDURE, FUNCTION, etc.)")
+                
+                # Check for other ESQL patterns (PROCEDURE, FUNCTION, etc.)
+                print(f"      📄 Checking for other ESQL patterns...")
+                
+                replacements_made = []
+                updated_content = esql_content
+                
+                # Pattern 1: CREATE PROCEDURE ModuleName
+                procedure_pattern = r'(?i)(CREATE\s+PROCEDURE\s+)([A-Za-z0-9_]+)'
+                procedure_match = re.search(procedure_pattern, esql_content)
+                if procedure_match:
+                    old_name = procedure_match.group(2)
+                    updated_content = re.sub(procedure_pattern, rf'\1{clean_module_name}', updated_content)
+                    replacements_made.append(f"PROCEDURE: '{old_name}' → '{clean_module_name}'")
+                
+                # Pattern 2: CREATE FUNCTION ModuleName  
+                function_pattern = r'(?i)(CREATE\s+FUNCTION\s+)([A-Za-z0-9_]+)'
+                function_match = re.search(function_pattern, esql_content)
+                if function_match:
+                    old_name = function_match.group(2)
+                    updated_content = re.sub(function_pattern, rf'\1{clean_module_name}', updated_content)
+                    replacements_made.append(f"FUNCTION: '{old_name}' → '{clean_module_name}'")
+                
+                # Log what was updated
+                if replacements_made:
+                    print(f"      📝 Other ESQL patterns updated:")
+                    for replacement in replacements_made:
+                        print(f"        • {replacement}")
+                else:
+                    print(f"      ℹ️ No recognizable ESQL patterns found to update")
+                
+                return updated_content
+                
+        except UnicodeDecodeError as e:
+            print(f"      ❌ Error: File encoding issue in {esql_file_path.name}: {e}")
+            # Try with different encoding
+            try:
+                with open(esql_file_path, 'r', encoding='cp1252') as f:
+                    esql_content = f.read()
+                print(f"      🔄 Retrying with cp1252 encoding...")
+                return self._update_esql_module_name(esql_file_path, new_module_name)
+            except Exception as fallback_error:
+                print(f"      ❌ Fallback encoding failed: {fallback_error}")
+                self.validation_errors.append(f"ESQL encoding error: {esql_file_path.name}")
+                return ""
+                
+        except Exception as e:
+            print(f"      ❌ Error updating ESQL module name in {esql_file_path.name}: {e}")
+            self.validation_errors.append(f"ESQL module name update failed: {esql_file_path.name}")
+            # Return original content as fallback
+            try:
+                with open(esql_file_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            except:
+                return ""
 
 
     
