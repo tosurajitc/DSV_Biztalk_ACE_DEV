@@ -2,37 +2,48 @@ CREATE COMPUTE MODULE CW1_IN_Document_SND_DocPackApp_Compute.esql
 
 CREATE FUNCTION Main() RETURNS BOOLEAN
 BEGIN
-    DECLARE shipmentInfo 		REFERENCE TO 	Environment.variables.EventData.shipmentInfo;
-    DECLARE sourceCompany 		REFERENCE TO 	Environment.variables.EventData.sourceCompany;
-    DECLARE targetCompany 		REFERENCE TO 	Environment.variables.EventData.targetCompany;
+    DECLARE documentInfo 		REFERENCE TO 	Environment.variables.EventData.documentInfo;
+    DECLARE sourceSystem 		REFERENCE TO 	Environment.variables.EventData.sourceSystem;
+    DECLARE targetSystem 		REFERENCE TO 	Environment.variables.EventData.targetSystem;
     DECLARE integrationDetails REFERENCE TO 	Environment.variables.EventData.integrationDetails;
     DECLARE dataPayload 		REFERENCE TO 	Environment.variables.EventData.dataPayload;
 
-    DECLARE customsDeclarationId INTEGER;
-    DECLARE eAdapterRecepientId INTEGER;
+    SET sourceSystem = 'DocPackApp';
+    SET targetSystem = 'CDM';
+    SET dataPayload = CAST('Initial Data' AS CHARACTER);
+
     DECLARE isPublishedFlag BOOLEAN;
-    DECLARE mainCompanyInCountry CHARACTER;
-    DECLARE shipmentIdBySSN INTEGER;
+    DECLARE recepientId INTEGER;
+    DECLARE customsDeclarationId INTEGER;
+    DECLARE mainCompanyId INTEGER;
+    DECLARE shipmentId INTEGER;
 
-    SET sourceCompany.CustomsReference = 'ABC123';
-    SET targetCompany.CountryCode = 'US';
-    SET dataPayload.DocumentType = 'CDM';
+    DECLARE xmlRef REFERENCE TO InputRoot.XMLNSC;
+    DECLARE msgRef REFERENCE TO InputRoot;
 
-    SET customsDeclarationId = proc_CustomsDeclaration_GetIdByReference(sourceCompany.CustomsReference);
-    SET eAdapterRecepientId = sp_Get_EAdapterRecepientId(targetCompany.CountryCode);
-    SET isPublishedFlag = proc_EDocument_GetIsPublishedFlag(dataPayload.DocumentType);
-    SET mainCompanyInCountry = sp_GetMainCompanyInCountry(targetCompany.CountryCode);
-    SET shipmentIdBySSN = sp_Shipment_GetIdBySSN(sourceCompany.SSN);
+    SET isPublishedFlag = FALSE;
+    SET recepientId = 0;
+    SET customsDeclarationId = 0;
+    SET mainCompanyId = 0;
+    SET shipmentId = 0;
 
-    SET OutputRoot.ShipmentInfo.ShipmentId = shipmentIdBySSN;
-    SET OutputRoot.SourceCompany.MainCompanyInCountry = mainCompanyInCountry;
-    SET OutputRoot.TargetCompany.EAdapterRecepientId = eAdapterRecepientId;
-    SET OutputRoot.DataPayload.IsPublishedFlag = isPublishedFlag;
-    SET OutputRoot.CustomsDeclarationId = customsDeclarationId;
+    SET isPublishedFlag = proc_EDocument_GetIsPublishedFlag(documentInfo);
+    SET recepientId = sp_Get_EAdapterRecepientId(sourceSystem);
+    SET customsDeclarationId = proc_CustomsDeclaration_GetIdByReference(dataPayload);
+    SET mainCompanyId = sp_GetMainCompanyInCountry(targetSystem);
+    SET shipmentId = sp_Shipment_GetIdBySSN(dataPayload);
 
-    SET OutputRoot.SourceCompany = sourceCompany;
-    SET OutputRoot.TargetCompany = targetCompany;
-    SET OutputRoot.DataPayload = dataPayload;
+    DECLARE transformedData CHARACTER;
+    SET transformedData = CAST(XSLT(xmlRef, 'transform.xsl') AS CHARACTER);
+    SET OutputRoot.XMLNSC = transformedData;
+
+    DECLARE azureBlobData BLOB;
+    SET azureBlobData = BLOB('Azure Blob Data');
+    SET OutputRoot.BLOB = azureBlobData;
+
+    DECLARE cdmDocument CHARACTER;
+    SET cdmDocument = CAST(XSLT(azureBlobData, 'cdm-transform.xsl') AS CHARACTER);
+    SET OutputRoot.CDM = cdmDocument;
 
     RETURN TRUE;
 END;

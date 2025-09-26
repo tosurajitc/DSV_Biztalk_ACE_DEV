@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:schemas:ace:ispublishedflag"
+           xmlns:tns="urn:schemas:ace:ispublishedflag"
+           elementFormDefault="qualified">
+    <xs:annotation>
+        <xs:documentation>
+            IsPublishedFlag Schema: Data structure definition for enterprise data exchange.
+        </xs:documentation>
+    </xs:annotation>
+    <xs:element name="IsPublishedFlag" type="tns:IsPublishedFlagType">
+        <xs:annotation>
+            <xs:documentation>
+                Root element for IsPublishedFlag data structure.
+            </xs:documentation>
+        </xs:annotation>
+    </xs:element>
+    <xs:complexType name="IsPublishedFlagType">
+        <xs:annotation>
+            <xs:documentation>
+                Complex type definition for IsPublishedFlag data structure.
+            </xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <!-- Add elements as required by the data structure -->
+        </xs:sequence>
+    </xs:complexType>
+    <xs:annotation>
+        <xs:appinfo>
+            ACE Considerations: Use ACE database operations for validation.
+        </xs:appinfo>
+    </xs:annotation>
+</xs:schema>

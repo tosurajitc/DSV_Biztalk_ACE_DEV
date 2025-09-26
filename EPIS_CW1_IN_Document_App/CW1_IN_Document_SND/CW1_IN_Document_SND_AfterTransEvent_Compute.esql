@@ -1,16 +1,15 @@
-CREATE COMPUTE MODULE CW1_IN_Document_SND_ErrorHandler_Compute
-
+CREATE COMPUTE MODULE CW1_IN_Document_SND_AfterTransEvent_Compute
 CREATE FUNCTION Main() RETURNS BOOLEAN
 BEGIN
     DECLARE shipmentInfo 		REFERENCE TO 	Environment.variables.EventData.shipmentInfo;
     DECLARE sourceCompany 		REFERENCE TO 	Environment.variables.EventData.sourceCompany;
     DECLARE targetCompany 		REFERENCE TO 	Environment.variables.EventData.targetCompany;
-    DECLARE integrationStatus REFERENCE TO 	Environment.variables.EventData.integrationStatus;
-    DECLARE dataPayload 		REFERENCE TO 	Environment.variables.EventData.dataPayload;
+    DECLARE integrationDetails REFERENCE TO 	Environment.variables.EventData.integrationDetails;
+    DECLARE documentData 		REFERENCE TO 	Environment.variables.EventData.documentData;
 
     SET sourceCompany.CompanyName = 'ABC Corporation';
     SET targetCompany.CompanyName = 'XYZ Inc.';
-    SET dataPayload.ShipmentId = 12345;
+    SET documentData.DocumentType = 'Shipment';
 
     DECLARE isPublishedFlag BOOLEAN;
     DECLARE recepientId INTEGER;
@@ -18,22 +17,24 @@ BEGIN
     DECLARE mainCompanyId INTEGER;
     DECLARE shipmentId INTEGER;
 
-    SET isPublishedFlag = proc_EDocument_GetIsPublishedFlag(shipmentInfo.ShipmentId);
-    SET recepientId = sp_Get_EAdapterRecepientId(sourceCompany.CompanyId);
-    SET customsDeclarationId = proc_CustomsDeclaration_GetIdByReference(shipmentInfo.CustomsReference);
-    SET mainCompanyId = sp_GetMainCompanyInCountry(targetCompany.CountryCode);
+    SET isPublishedFlag = proc_EDocument_GetIsPublishedFlag(documentData.DocumentId);
+    SET recepientId = sp_Get_EAdapterRecepientId(shipmentInfo.ShipmentId);
+    SET customsDeclarationId = proc_CustomsDeclaration_GetIdByReference(documentData.ReferenceId);
+    SET mainCompanyId = sp_GetMainCompanyInCountry(sourceCompany.Country);
     SET shipmentId = sp_Shipment_GetIdBySSN(shipmentInfo.SSN);
 
-    DECLARE xsltOutput BLOB;
-    SET xsltOutput = Transform(shipmentInfo, 'XSLT/TransformShipment.xsl');
-    SET OutputRoot.XMLNSC = xsltOutput;
+    DECLARE xmlRef REFERENCE TO InputRoot.XMLNSC;
+    SET OutputRoot.XMLNSC = xmlRef;
+
+    DECLARE msgRef REFERENCE TO InputRoot;
+    SET OutputRoot = msgRef;
 
     DECLARE azureBlobData BLOB;
-    SET azureBlobData = GetAzureBlobData(shipmentInfo.ShipmentId);
-    SET OutputRoot.AzureBlob = azureBlobData;
+    SET azureBlobData = InputRoot.AzureBlob;
 
-    DECLARE cdmDocument BLOB;
-    SET cdmDocument = Transform(azureBlobData, 'XSLT/TransformAzureBlobToCDM.xsl');
+    DECLARE cdmDocument REFERENCE TO OutputRoot.CDM;
+    SET cdmDocument = TransformUsingXSLT(azureBlobData, 'AzureBlobToCDM.xsl');
+
     SET OutputRoot.CDM = cdmDocument;
 
     RETURN TRUE;

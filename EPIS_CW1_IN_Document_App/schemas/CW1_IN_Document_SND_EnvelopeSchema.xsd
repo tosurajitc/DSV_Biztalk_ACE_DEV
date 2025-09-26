@@ -1,22 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="urn:schemas:ace:universalevent"
-           xmlns:tns="urn:schemas:ace:universalevent"
+           targetNamespace="urn:schemas:ace:envelope"
+           xmlns:tns="urn:schemas:ace:envelope"
            elementFormDefault="qualified"
            attributeFormDefault="unqualified"
            version="1.0">
     <xs:annotation>
         <xs:documentation>
-            UniversalEvent XSD Schema
-            Purpose: Data structure definition for enterprise data exchange
-            Target Namespace: urn:schemas:ace:universalevent
+            Envelope schema definition for enterprise data exchange.
         </xs:documentation>
     </xs:annotation>
-    <xs:element name="UniversalEvent" type="tns:UniversalEventType"/>
-    <xs:complexType name="UniversalEventType">
+    <xs:element name="Envelope" type="tns:EnvelopeType">
         <xs:annotation>
             <xs:documentation>
-                Root element for UniversalEvent data structure
+                Root element for the Envelope data structure.
+            </xs:documentation>
+        </xs:annotation>
+    </xs:element>
+    <xs:complexType name="EnvelopeType">
+        <xs:annotation>
+            <xs:documentation>
+                Complex type definition for the Envelope data structure.
             </xs:documentation>
         </xs:annotation>
         <xs:sequence>

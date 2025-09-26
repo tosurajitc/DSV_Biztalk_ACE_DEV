@@ -1,0 +1,70 @@
+CREATE COMPUTE MODULE CW1_IN_Document_SND_CompanyCodeLookup_Compute
+
+CREATE FUNCTION Main() RETURNS BOOLEAN
+BEGIN
+    DECLARE companyInfo 		REFERENCE TO 	Environment.variables.EventData.companyInfo;
+    DECLARE sourceSystem 		REFERENCE TO 	Environment.variables.EventData.sourceSystem;
+    DECLARE targetSystem 		REFERENCE TO 	Environment.variables.EventData.targetSystem;
+    DECLARE integrationDetails REFERENCE TO 	Environment.variables.EventData.integrationDetails;
+    DECLARE messageData 		REFERENCE TO 	Environment.variables.EventData.messageData;
+
+    SET sourceSystem.CompanyCode = 'SND';
+    SET targetSystem.CompanyCode = 'SND';
+    SET messageData.CompanyCode = 'SND';
+
+    DECLARE isPublishedFlag BOOLEAN;
+    DECLARE recepientId INTEGER;
+    DECLARE customsDeclarationId INTEGER;
+    DECLARE mainCompanyId INTEGER;
+    DECLARE shipmentId INTEGER;
+
+    SET isPublishedFlag = FALSE;
+    SET recepientId = 0;
+    SET customsDeclarationId = 0;
+    SET mainCompanyId = 0;
+    SET shipmentId = 0;
+
+    DECLARE dbResult1 BIT;
+    DECLARE dbResult2 BIT;
+    DECLARE dbResult3 BIT;
+    DECLARE dbResult4 BIT;
+    DECLARE dbResult5 BIT;
+
+    SET dbResult1 = proc_EDocument_GetIsPublishedFlag();
+    SET dbResult2 = sp_Get_EAdapterRecepientId();
+    SET dbResult3 = proc_CustomsDeclaration_GetIdByReference();
+    SET dbResult4 = sp_GetMainCompanyInCountry();
+    SET dbResult5 = sp_Shipment_GetIdBySSN();
+
+    SET isPublishedFlag = dbResult1;
+    SET recepientId = dbResult2;
+    SET customsDeclarationId = dbResult3;
+    SET mainCompanyId = dbResult4;
+    SET shipmentId = dbResult5;
+
+    DECLARE xsltResult BLOB;
+    SET xsltResult = TransformUsingXSLT('GetESBEnvironment()', 'GenerateGuid()', 'GetCurrentDateTime()');
+    SET OutputRoot.XMLNSC = xsltResult;
+
+    DECLARE azureBlobData BLOB;
+    SET azureBlobData = GetAzureBlobData();
+    SET xsltResult = TransformAzureBlobToCDM(azureBlobData);
+    SET OutputRoot.CDM = xsltResult;
+
+    RETURN TRUE;
+END;
+
+CREATE PROCEDURE CopyMessageHeaders() BEGIN
+    DECLARE I INTEGER 1;
+    DECLARE J INTEGER;
+    SET J = CARDINALITY(InputRoot.*[]);
+    WHILE I < J DO
+        SET OutputRoot.*[I] = InputRoot.*[I];
+        SET I = I + 1;
+    END WHILE;
+END;
+
+CREATE PROCEDURE CopyEntireMessage() BEGIN
+    SET OutputRoot = InputRoot;
+END;
+END MODULE;

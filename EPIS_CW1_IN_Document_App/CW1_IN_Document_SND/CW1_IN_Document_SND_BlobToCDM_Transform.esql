@@ -2,23 +2,35 @@ CREATE COMPUTE MODULE CW1_IN_Document_SND_BlobToCDM_Transform.esql
 
 CREATE FUNCTION Main() RETURNS BOOLEAN
 BEGIN
-    DECLARE shipmentInfo 		REFERENCE TO 	Environment.variables.EventData.shipmentInfo;
+    DECLARE documentInfo 		REFERENCE TO 	Environment.variables.EventData.documentInfo;
     DECLARE sourceSystem 		REFERENCE TO 	Environment.variables.EventData.sourceSystem;
     DECLARE targetSystem 		REFERENCE TO 	Environment.variables.EventData.targetSystem;
     DECLARE integrationDetails REFERENCE TO 	Environment.variables.EventData.integrationDetails;
     DECLARE dataPayload 		REFERENCE TO 	Environment.variables.EventData.dataPayload;
 
-    SET sourceSystem.CustomsDeclarationId = CAST(proc_CustomsDeclaration_GetIdByReference(shipmentInfo.Reference) AS INTEGER);
-    SET targetSystem.RecepientId = CAST(sp_Get_EAdapterRecepientId(shipmentInfo.SSN) AS INTEGER);
-    SET shipmentInfo.IsPublished = CAST(proc_EDocument_GetIsPublishedFlag(shipmentInfo.DocumentId) AS BOOLEAN);
-    SET integrationDetails.MainCompanyInCountry = sp_GetMainCompanyInCountry(shipmentInfo.CountryCode);
-    SET dataPayload.ShipmentId = CAST(sp_Shipment_GetIdBySSN(shipmentInfo.SSN) AS INTEGER);
+    SET sourceSystem.SourceName = 'AzureBlob';
+    SET targetSystem.TargetName = 'CDM';
+    SET integrationDetails.IntegrationID = GetESBEnvironment();
+    SET dataPayload.DocumentID = GenerateGuid();
 
-    SET OutputRoot.XMLNSC.ShipmentInfo = shipmentInfo;
-    SET OutputRoot.XMLNSC.SourceSystem = sourceSystem;
-    SET OutputRoot.XMLNSC.TargetSystem = targetSystem;
-    SET OutputRoot.XMLNSC.IntegrationDetails = integrationDetails;
-    SET OutputRoot.XMLNSC.DataPayload = dataPayload;
+    DECLARE isPublishedFlag BOOLEAN;
+    DECLARE recepientId INTEGER;
+    DECLARE customsDeclarationId INTEGER;
+    DECLARE mainCompanyId INTEGER;
+    DECLARE shipmentId INTEGER;
+
+    SET isPublishedFlag = proc_EDocument_GetIsPublishedFlag(documentInfo.DocumentID);
+    SET recepientId = sp_Get_EAdapterRecepientId(sourceSystem.SourceName);
+    SET customsDeclarationId = proc_CustomsDeclaration_GetIdByReference(documentInfo.ReferenceID);
+    SET mainCompanyId = sp_GetMainCompanyInCountry(targetSystem.CountryCode);
+    SET shipmentId = sp_Shipment_GetIdBySSN(documentInfo.SSN);
+
+    DECLARE xsltOutput BLOB;
+    SET xsltOutput = TransformUsingXSLT(InputRoot, 'AzureBlobToCDM.xsl');
+    SET OutputRoot.XMLNSC = xsltOutput;
+
+    SET documentInfo.LastModified = GetCurrentDateTime();
+    SET dataPayload.ProcessingStatus = 'Transformed';
 
     RETURN TRUE;
 END;

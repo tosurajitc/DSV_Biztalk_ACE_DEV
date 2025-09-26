@@ -808,19 +808,25 @@ Extract all enrichment patterns, lookup requirements, and data flow specificatio
         "EnrichConfigs": {{
             "MsgEnrich": [{{
             "DBAlias": "database-alias-from-analysis",
-            "SQLCommand": "exec stored_procedure_name @param1='{{0}}',@param2='{{1}}'",
-            "Scope_prefix": "ns0",
-            "Scope_xmlns": "http://esb.dsv.com/CDM/DocumentMessage_V2",
-            "Scope": "/ns0:DocumentMessage/ns0:Header",
-            "Mandatory": false,
-            "Active": true,
-            "DisableCaching": false,
+            "SQLCommand": "stored_procedure_name @param1='{{0}}',@param2='{{1}}'",
+            "Scope_prefix": "",
+            "Scope_xmlns": "",
+            "Scope": "//DBparameters",
             "Source": [
-                {{"FieldName": "param1", "xPathValue": "./ns0:Target/ns0:Field1/text()", "Source": "Message", "Optional": true}},
-                {{"FieldName": "param2", "xPathValue": "./ns0:Target/ns0:Field2/text()", "Source": "Message", "Optional": true}}
+                {{"FieldName": "param1", 
+                "xPathValue": "//DBparameters/param1", 
+                "Source": "Message", 
+                "Optional": true}},
+                {{"FieldName": "param2", 
+                "xPathValue": "//DBparameters/param2", 
+                "Source": "Message", 
+                "Optional": true}}
             ],
             "Dest": [
-                {{"FieldName": "ResultField", "xPathValue": "", "Optional": true, "DefaultValue": ""}}
+                {{"FieldName": "//DBparameters/ResultField", 
+                "xPathValue": "", 
+                "Optional": true, 
+                "DefaultValue": ""}}
             ]
             }}]
         }}

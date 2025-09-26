@@ -422,14 +422,10 @@ class SmartACEQualityReviewer:
         
         # 🆕 STEP 1: Parse message flow for compute references
         enhanced_project_folder = self.ace_components_folder / "Enhanced_ACE_Project"
-        msgflow_files = list(enhanced_project_folder.glob("*.msgflow")) if enhanced_project_folder.exists() else list(self.ace_components_folder.glob("*.msgflow"))
-        
-        compute_mapping = {}
-        if msgflow_files:
-            print(f"    📋 Analyzing message flow references...")
-            compute_mapping = self._parse_msgflow_compute_references(msgflow_files[0])
-        else:
-            print(f"    ⚠️ No message flow found - using standard naming")
+        msgflow_components = [comp for comp in self.discovered_components if comp['extension'] == '.msgflow']
+        if msgflow_components:
+            msgflow_file_path = Path(msgflow_components[0]['original_path'])
+            compute_mapping = self._parse_msgflow_compute_references(msgflow_file_path)
         
         # Create main project directory (DYNAMIC name)
         project_dir = self.ace_components_folder.parent / f"{project_name}"
@@ -461,10 +457,12 @@ class SmartACEQualityReviewer:
             
             print(f"📊 Created {len(subdirs_created)} organized subdirectories")
             
+
             # STEP 4: Copy and organize components by file type
             components_copied = 0
             file_routing_summary = {
                 'esql_files': 0,
+                'msgflow_files': 0,  # 🆕 ADD THIS LINE
                 'xsd_files': 0, 
                 'xsl_files': 0,
                 'other_files': 0
@@ -509,6 +507,38 @@ class SmartACEQualityReviewer:
                             print(f"  ⚠️ {component['full_name']} → {destination}{new_name} (fallback copy)")
                         except Exception as fallback_error:
                             print(f"  ❌ Fallback copy also failed: {fallback_error}")
+                
+                # 🆕 NEW SECTION: ADD THIS ENTIRE BLOCK RIGHT HERE
+                elif component['extension'] == '.msgflow':
+                    new_path = project_dir / new_name
+                    file_routing_summary['msgflow_files'] += 1
+                    destination = "root/"
+                    
+                    try:
+                        # 🆕 UPDATED LOGIC FOR MSGFLOW FILES - Update computeExpression references
+                        print(f"    🔧 Processing MSGFLOW: {component['full_name']} → {new_name}")
+                        
+                        # Use NEW helper method to update msgflow computeExpression references
+                        updated_content = self._update_msgflow_references(old_path, compute_mapping, message_flow_base)
+                        final_content = self._fix_msgflow_gif_references(updated_content, message_flow_base)
+                        
+                        # Write updated content to new file
+                        with open(new_path, 'w', encoding='utf-8') as f:
+                            f.write(final_content)
+                        
+                        components_copied += 1
+                        print(f"  ✅ {component['full_name']} → {destination}{new_name} (references updated)")
+                        
+                    except Exception as e:
+                        print(f"  ❌ Failed to update MSGFLOW {component['full_name']}: {e}")
+                        # Fallback: copy original file without content updates
+                        try:
+                            shutil.copy2(old_path, new_path)
+                            components_copied += 1
+                            print(f"  ⚠️ {component['full_name']} → {destination}{new_name} (fallback copy)")
+                        except Exception as fallback_error:
+                            print(f"  ❌ Fallback copy also failed: {fallback_error}")
+                # 🆕 END OF NEW SECTION
                     
                 elif component['extension'] == '.xsd':
                     new_path = schemas_dir / new_name
@@ -562,6 +592,7 @@ class SmartACEQualityReviewer:
             print(f"\n📊 Project Creation Summary:")
             print(f"  📦 Project: {project_name}")
             print(f"  📁 ESQL Directory: {message_flow_base}/ ({file_routing_summary['esql_files']} files)")
+            print(f"  📊 Message Flow Files: ({file_routing_summary['msgflow_files']} files)")  
             print(f"  📁 Schemas Directory: schemas/ ({file_routing_summary['xsd_files']} files)")
             print(f"  📁 Transforms Directory: transforms/ ({file_routing_summary['xsl_files']} files)")
             print(f"  📁 Enrichment Directory: enrichment/ (consolidated JSON files)")
@@ -638,9 +669,8 @@ class SmartACEQualityReviewer:
                     compute_expr = element.attrib['computeExpression']
                     
                     # Extract ESQL module name from #ModuleName.Main pattern
-                    match = re.search(r'#([^.]+)\.Main', compute_expr)
-                    if match:
-                        esql_module = match.group(1)
+                    if compute_expr and compute_expr.strip():
+                        esql_module = compute_expr.strip()
                         
                         # Determine logical purpose from node translation
                         node_name = "Unknown"
@@ -964,6 +994,389 @@ class SmartACEQualityReviewer:
                     return f.read()
             except:
                 return ""
+            
+            
+
+    def _update_msgflow_references(self, msgflow_file_path: Path, compute_mapping: Dict[str, str], message_flow_base: str) -> str:
+        """
+        Update .msgflow file to reference renamed ESQL modules and other components
+        
+        Args:
+            msgflow_file_path: Path to original .msgflow file
+            compute_mapping: Dict mapping {old_esql_name: node_purpose}
+            message_flow_base: Base name for new ESQL modules (e.g., "CW1_IN_Document_SND")
+        
+        Returns:
+            str: Updated .msgflow content with corrected references
+        """
+        try:
+            # Read original msgflow content
+            with open(msgflow_file_path, 'r', encoding='utf-8') as f:
+                msgflow_content = f.read()
+            
+            print(f"    🔧 Updating .msgflow references dynamically...")
+            
+            import re
+            
+            # 1. Extract old msgflow name from nsURI
+            msgflow_name_match = re.search(r'nsURI="([^"]+)\.msgflow"', msgflow_content)
+            old_msgflow_name = msgflow_name_match.group(1) if msgflow_name_match else "AGENT2_Message_Flow_SND"
+            
+            print(f"      📝 Detected old msgflow name: {old_msgflow_name}")
+            print(f"      📝 Target msgflow name: {message_flow_base}")
+            
+            # 2. Build project name
+            project_name = f"EPIS_{message_flow_base}_App"
+            print(f"      📝 Target project name: {project_name}")
+            
+            updated_content = msgflow_content
+            total_replacements = 0
+            
+            # 3. Update computeExpression patterns dynamically
+            print(f"    🔧 Updating computeExpression references...")
+            
+            # Find all computeExpression patterns in the content
+            compute_patterns = re.findall(rf'computeExpression="({re.escape(old_msgflow_name)}_[^"]+)"', msgflow_content)
+            compute_replacements = 0
+            
+            for old_compute_expr in compute_patterns:
+                # Extract the suffix after the old msgflow name
+                suffix = old_compute_expr.replace(f"{old_msgflow_name}_", "")
+                
+                # Map the suffix to clean purpose using existing logic
+                clean_purpose = self._clean_node_purpose(suffix)
+                new_compute_expr = f"{message_flow_base}_{clean_purpose}_Compute"
+                
+                # Replace the pattern
+                old_pattern = f'computeExpression="{old_compute_expr}"'
+                new_pattern = f'computeExpression="{new_compute_expr}"'
+                
+                if old_pattern in updated_content:
+                    updated_content = updated_content.replace(old_pattern, new_pattern)
+                    compute_replacements += 1
+                    print(f"      ✅ {old_compute_expr} → {new_compute_expr}")
+            
+            total_replacements += compute_replacements
+            if compute_replacements > 0:
+                print(f"      🎯 Total computeExpression updates: {compute_replacements}")
+            else:
+                print(f"      ℹ️ No computeExpression references found to update")
+            
+            # 4. Update Namespace References
+            print(f"    🔧 Updating .msgflow namespace references...")
+            namespace_replacements = 0
+            
+            namespace_patterns = [
+                (f'nsURI="{old_msgflow_name}.msgflow"', f'nsURI="{message_flow_base}.msgflow"'),
+                (f'nsPrefix="{old_msgflow_name}.msgflow"', f'nsPrefix="{message_flow_base}.msgflow"')
+            ]
+            
+            for old_pattern, new_pattern in namespace_patterns:
+                if old_pattern in updated_content:
+                    updated_content = updated_content.replace(old_pattern, new_pattern)
+                    namespace_replacements += 1
+                    print(f"      ✅ {old_pattern} → {new_pattern}")
+            
+            total_replacements += namespace_replacements
+            
+            # 5. Update XSL Stylesheet References
+            print(f"    🔧 Updating .msgflow stylesheet references...")
+            stylesheet_replacements = 0
+            
+            # Find existing XSL references and update them
+            xsl_patterns = re.findall(r'stylesheetName="([^"]+)"', msgflow_content)
+            for old_xsl in xsl_patterns:
+                if 'DefaultTransform' in old_xsl or 'Transform' in old_xsl:
+                    new_xsl = f"{message_flow_base}_CDMToUniversal_Transform.xsl"
+                    
+                    old_pattern = f'stylesheetName="{old_xsl}"'
+                    new_pattern = f'stylesheetName="{new_xsl}"'
+                    
+                    if old_pattern in updated_content:
+                        updated_content = updated_content.replace(old_pattern, new_pattern)
+                        stylesheet_replacements += 1
+                        print(f"      ✅ {old_xsl} → {new_xsl}")
+            
+            # Also update defaultValueLiteral for XSL files
+            xsl_defaults = re.findall(r'defaultValueLiteral="([^"]*\.xsl)"', msgflow_content)
+            for old_xsl in xsl_defaults:
+                if 'DefaultTransform' in old_xsl or 'Transform' in old_xsl:
+                    new_xsl = f"{message_flow_base}_CDMToUniversal_Transform.xsl"
+                    
+                    old_pattern = f'defaultValueLiteral="{old_xsl}"'
+                    new_pattern = f'defaultValueLiteral="{new_xsl}"'
+                    
+                    if old_pattern in updated_content:
+                        updated_content = updated_content.replace(old_pattern, new_pattern)
+                        stylesheet_replacements += 1
+                        print(f"      ✅ {old_xsl} → {new_xsl}")
+            
+            total_replacements += stylesheet_replacements
+            
+            # 6. Update Path References
+            print(f"    🔧 Updating .msgflow path references...")
+            path_replacements = 0
+            
+            # Extract old app name (AGENT2_App_Name)
+            old_app_pattern = re.search(r'(AGENT\d+_App_Name)', msgflow_content)
+            old_app_name = old_app_pattern.group(1) if old_app_pattern else "AGENT2_App_Name"
+            
+            path_patterns = [
+                # Windows-style paths
+                (f'{old_app_name}\\{old_msgflow_name}\\enrichment', f'{project_name}\\enrichment'),
+                (f'{old_app_name}\\enrichment\\{old_msgflow_name}', f'{project_name}\\enrichment'),
+                # Unix-style paths
+                (f'/{old_app_name}/enrichment/{old_msgflow_name}', f'/{project_name}/enrichment'),
+                (f'/{old_app_name}/{old_msgflow_name}/enrichment', f'/{project_name}/enrichment'),
+                # Generic replacements
+                (old_app_name, project_name)
+            ]
+            
+            for old_pattern, new_pattern in path_patterns:
+                if old_pattern in updated_content:
+                    updated_content = updated_content.replace(old_pattern, new_pattern)
+                    path_replacements += 1
+                    print(f"      ✅ Path: {old_pattern} → {new_pattern}")
+            
+            total_replacements += path_replacements
+            
+            # 7. Update Translation/Branding References
+            print(f"    🔧 Updating .msgflow branding references...")
+            branding_replacements = 0
+            
+            branding_patterns = [
+                (f'key="{old_msgflow_name}"', f'key="{message_flow_base}"'),
+                (f'bundleName="{old_msgflow_name}"', f'bundleName="{message_flow_base}"'),
+                (f'pluginId="{old_app_name}_Developer"', f'pluginId="{project_name}_Developer"'),
+                (f'pluginId="{old_app_name}"', f'pluginId="{project_name}"')
+            ]
+            
+            for old_pattern, new_pattern in branding_patterns:
+                if old_pattern in updated_content:
+                    updated_content = updated_content.replace(old_pattern, new_pattern)
+                    branding_replacements += 1
+                    print(f"      ✅ {old_pattern} → {new_pattern}")
+            
+            total_replacements += branding_replacements
+            
+            # 8. Update Resource/Icon Path References
+            print(f"    🔧 Updating .msgflow resource references...")
+            resource_replacements = 0
+
+            # Extract old app name (AGENT2_App_Name) - Fixed this line
+            old_app_pattern = re.search(r'(AGENT\d+_App_Name)', msgflow_content)
+            old_app_name = old_app_pattern.group(1) if old_app_pattern else "AGENT2_App_Name"
+
+            resource_patterns = [
+                (f'platform:/plugin/{old_app_name}/', f'platform:/plugin/{project_name}/'),
+                (f'resourceName="platform:/plugin/{old_app_name}/', f'resourceName="platform:/plugin/{project_name}/'),
+                (f'/{old_msgflow_name}.gif"', f'/{message_flow_base}.gif"')
+                #('AGENT2_Message_Flow.gif', f'{message_flow_base}.gif')
+            ]
+
+            for old_pattern, new_pattern in resource_patterns:
+                if old_pattern in updated_content:
+                    updated_content = updated_content.replace(old_pattern, new_pattern)
+                    resource_replacements += 1
+                    print(f"      ✅ Resource: {old_pattern} → {new_pattern}")
+
+            total_replacements += resource_replacements
+            
+            # Summary
+            if total_replacements > 0:
+                print(f"    🎯 Total .msgflow updates: {total_replacements}")
+            else:
+                print(f"    ℹ️ No references found to update")
+            
+            return updated_content
+            
+        except UnicodeDecodeError as e:
+            print(f"      ⚠ Error: File encoding issue in {msgflow_file_path.name}: {e}")
+            # Try with different encoding
+            try:
+                with open(msgflow_file_path, 'r', encoding='cp1252') as f:
+                    msgflow_content = f.read()
+                print(f"      📄 Retrying with cp1252 encoding...")
+                return self._update_msgflow_references(msgflow_file_path, compute_mapping, message_flow_base)
+            except Exception as fallback_error:
+                print(f"      ⚠ Fallback encoding failed: {fallback_error}")
+                self.validation_errors.append(f"Msgflow encoding error: {msgflow_file_path.name}")
+                # Return original content as fallback
+                try:
+                    with open(msgflow_file_path, 'r', encoding='utf-8') as f:
+                        return f.read()
+                except:
+                    return ""
+        
+        except Exception as e:
+            print(f"      ⚠ Error updating msgflow references in {msgflow_file_path.name}: {e}")
+            self.validation_errors.append(f"Msgflow reference update failed: {msgflow_file_path.name}")
+            # Return original content as fallback
+            try:
+                with open(msgflow_file_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            except:
+                return ""
+            
+            # 2. NEW: Update Namespace References
+            print(f"    🔧 Updating .msgflow namespace references...")
+            namespace_replacements = 0
+            
+            # Extract old msgflow name from file path for namespace updates
+            old_msgflow_name = msgflow_file_path.stem  # Gets filename without extension
+            new_msgflow_name = message_flow_base
+            
+            # Update nsURI and nsPrefix
+            namespace_patterns = [
+                (f'nsURI="{old_msgflow_name}.msgflow"', f'nsURI="{new_msgflow_name}.msgflow"'),
+                (f'nsPrefix="{old_msgflow_name}.msgflow"', f'nsPrefix="{new_msgflow_name}.msgflow"')
+            ]
+            
+            for old_pattern, new_pattern in namespace_patterns:
+                if old_pattern in updated_content:
+                    updated_content = updated_content.replace(old_pattern, new_pattern)
+                    namespace_replacements += 1
+            
+            if namespace_replacements > 0:
+                print(f"      ✅ Updated {namespace_replacements} namespace reference(s)")
+            
+            # 3. NEW: Update XSL Stylesheet References
+            print(f"    🔧 Updating .msgflow stylesheet references...")
+            stylesheet_replacements = 0
+            
+            # Common XSL file mappings (based on the migration log patterns)
+            xsl_mappings = {
+                'AzureBlobToCDM.xsl': f'{message_flow_base}_BlobToCDM_Transform.xsl',
+                'CDMFreightInvoiceToDocPack.xsl': f'{message_flow_base}_CDMToDocPack_Transform.xsl',
+                'CDMShipmentInstructionToDockPack.xsl': f'{message_flow_base}_CDMToDockPack_Transform.xsl',
+                'CDM_DocumentMessage_To_EE_UniversalEvent.xsl': f'{message_flow_base}_CDMToUniversal_Transform.xsl',
+                'DocPackResponseToEnvelope.xsl': f'{message_flow_base}_DocPackResponseToEnvelope_Transform.xsl'
+            }
+            
+            for old_xsl, new_xsl in xsl_mappings.items():
+                # Update stylesheetName attributes
+                old_pattern = f'stylesheetName="{old_xsl}"'
+                new_pattern = f'stylesheetName="{new_xsl}"'
+                if old_pattern in updated_content:
+                    updated_content = updated_content.replace(old_pattern, new_pattern)
+                    stylesheet_replacements += 1
+                
+                # Update defaultValueLiteral for XSL files
+                old_pattern = f'defaultValueLiteral="{old_xsl}"'
+                new_pattern = f'defaultValueLiteral="{new_xsl}"'
+                if old_pattern in updated_content:
+                    updated_content = updated_content.replace(old_pattern, new_pattern)
+                    stylesheet_replacements += 1
+            
+            if stylesheet_replacements > 0:
+                print(f"      ✅ Updated {stylesheet_replacements} stylesheet reference(s)")
+            
+            # 4. NEW: Update Path References
+            print(f"    🔧 Updating .msgflow path references...")
+            path_replacements = 0
+            
+            # Derive project name from message_flow_base (e.g., CW1_IN_Document_SND -> EPIS_CW1_IN_Document_App)
+            project_name = f"EPIS_{message_flow_base}_App"
+            
+            # Path update patterns
+            path_patterns = [
+                # Windows-style paths
+                (f'AGENT2_App_Name\\AGENT2_Message_Flow\\enrichment', f'{project_name}\\enrichment'),
+                (f'AGENT2_App_Name\\enrichment\\AGENT2_Message_Flow', f'{project_name}\\enrichment'),
+                # Unix-style paths  
+                (f'/AGENT2_App_Name/enrichment/AGENT2_Message_Flow', f'/{project_name}/enrichment'),
+                (f'/AGENT2_App_Name/{old_msgflow_name}/enrichment', f'/{project_name}/enrichment'),
+                # Generic patterns
+                (f'AGENT2_App_Name/{old_msgflow_name}', f'{project_name}'),
+                (f'AGENT2_App_Name\\{old_msgflow_name}', f'{project_name}')
+            ]
+            
+            for old_pattern, new_pattern in path_patterns:
+                if old_pattern in updated_content:
+                    updated_content = updated_content.replace(old_pattern, new_pattern)
+                    path_replacements += 1
+            
+            if path_replacements > 0:
+                print(f"      ✅ Updated {path_replacements} path reference(s)")
+            
+            # 5. NEW: Update Translation/Branding References
+            print(f"    🔧 Updating .msgflow branding references...")
+            branding_replacements = 0
+            
+            # Translation and branding patterns
+            branding_patterns = [
+                (f'key="{old_msgflow_name}"', f'key="{new_msgflow_name}"'),
+                (f'bundleName="{old_msgflow_name}"', f'bundleName="{new_msgflow_name}"'),
+                (f'pluginId="AGENT2_App_Name_Developer"', f'pluginId="{project_name}_Developer"'),
+                (f'pluginId="AGENT2_App_Name"', f'pluginId="{project_name}"')
+            ]
+            
+            for old_pattern, new_pattern in branding_patterns:
+                if old_pattern in updated_content:
+                    updated_content = updated_content.replace(old_pattern, new_pattern)
+                    branding_replacements += 1
+            
+            if branding_replacements > 0:
+                print(f"      ✅ Updated {branding_replacements} branding reference(s)")
+            
+            # 6. NEW: Update Resource/Icon Path References
+            print(f"    🔧 Updating .msgflow resource references...")
+            resource_replacements = 0
+            
+            # Resource path patterns
+            resource_patterns = [
+                (f'platform:/plugin/AGENT2_App_Name/', f'platform:/plugin/{project_name}/'),
+                (f'resourceName="platform:/plugin/AGENT2_App_Name/', f'resourceName="platform:/plugin/{project_name}/')
+                
+            ]
+            
+            for old_pattern, new_pattern in resource_patterns:
+                if old_pattern in updated_content:
+                    updated_content = updated_content.replace(old_pattern, new_pattern)
+                    resource_replacements += 1
+            
+            if resource_replacements > 0:
+                print(f"      ✅ Updated {resource_replacements} resource reference(s)")
+            
+            # Summary
+            total_updates = (replacements_made + namespace_replacements + stylesheet_replacements + 
+                            path_replacements + branding_replacements + resource_replacements)
+            
+            if total_updates > 0:
+                print(f"    🎯 Total .msgflow updates: {total_updates}")
+            else:
+                print(f"    ℹ️ No additional references found to update")
+            
+            return updated_content
+            
+        except UnicodeDecodeError as e:
+            print(f"      ⚠ Error: File encoding issue in {msgflow_file_path.name}: {e}")
+            # Try with different encoding
+            try:
+                with open(msgflow_file_path, 'r', encoding='cp1252') as f:
+                    msgflow_content = f.read()
+                print(f"      📄 Retrying with cp1252 encoding...")
+                return self._update_msgflow_references(msgflow_file_path, compute_mapping, message_flow_base)
+            except Exception as fallback_error:
+                print(f"      ⚠ Fallback encoding failed: {fallback_error}")
+                self.validation_errors.append(f"Msgflow encoding error: {msgflow_file_path.name}")
+                # Return original content as fallback
+                try:
+                    with open(msgflow_file_path, 'r', encoding='utf-8') as f:
+                        return f.read()
+                except:
+                    return ""
+        
+        except Exception as e:
+            print(f"      ⚠ Error updating msgflow references in {msgflow_file_path.name}: {e}")
+            self.validation_errors.append(f"Msgflow reference update failed: {msgflow_file_path.name}")
+            # Return original content as fallback
+            try:
+                with open(msgflow_file_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            except:
+                return ""
+
 
 
     
@@ -1390,6 +1803,19 @@ deployment.target=integration_server
             json.dump(error_report, f, indent=2)
         
         print(f"  📄 Error report saved: {error_dir}/error_report.json")
+
+
+    def _fix_msgflow_gif_references(self, msgflow_content: str, message_flow_base: str) -> str:
+        """
+        Simple post-processing to fix remaining GIF filename references
+        """
+        # Only fix the GIF filenames - everything else already updated
+        updated_content = msgflow_content.replace(
+            'AGENT2_Message_Flow.gif', 
+            f'{message_flow_base}.gif'
+        )
+        return updated_content
+
 
 
 # Compatibility functions for main.py (unchanged interface)

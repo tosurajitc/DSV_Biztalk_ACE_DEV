@@ -1,16 +1,15 @@
-CREATE COMPUTE MODULE CW1_IN_Document_SND_ErrorHandler_Compute
-
+CREATE COMPUTE MODULE CW1_IN_Document_SND_CW1ShipmentLookupHousebill_Compute
 CREATE FUNCTION Main() RETURNS BOOLEAN
 BEGIN
     DECLARE shipmentInfo 		REFERENCE TO 	Environment.variables.EventData.shipmentInfo;
     DECLARE sourceCompany 		REFERENCE TO 	Environment.variables.EventData.sourceCompany;
     DECLARE targetCompany 		REFERENCE TO 	Environment.variables.EventData.targetCompany;
-    DECLARE integrationStatus REFERENCE TO 	Environment.variables.EventData.integrationStatus;
+    DECLARE integrationDetails REFERENCE TO 	Environment.variables.EventData.integrationDetails;
     DECLARE dataPayload 		REFERENCE TO 	Environment.variables.EventData.dataPayload;
 
-    SET sourceCompany.CompanyName = 'ABC Corporation';
-    SET targetCompany.CompanyName = 'XYZ Inc.';
-    SET dataPayload.ShipmentId = 12345;
+    SET sourceCompany.CompanyName = 'CW1';
+    SET targetCompany.CompanyName = 'ShipmentLookupHousebill';
+    SET dataPayload.ShipmentType = 'Housebill';
 
     DECLARE isPublishedFlag BOOLEAN;
     DECLARE recepientId INTEGER;
@@ -20,21 +19,24 @@ BEGIN
 
     SET isPublishedFlag = proc_EDocument_GetIsPublishedFlag(shipmentInfo.ShipmentId);
     SET recepientId = sp_Get_EAdapterRecepientId(sourceCompany.CompanyId);
-    SET customsDeclarationId = proc_CustomsDeclaration_GetIdByReference(shipmentInfo.CustomsReference);
+    SET customsDeclarationId = proc_CustomsDeclaration_GetIdByReference(shipmentInfo.ReferenceNumber);
     SET mainCompanyId = sp_GetMainCompanyInCountry(targetCompany.CountryCode);
     SET shipmentId = sp_Shipment_GetIdBySSN(shipmentInfo.SSN);
 
-    DECLARE xsltOutput BLOB;
-    SET xsltOutput = Transform(shipmentInfo, 'XSLT/TransformShipment.xsl');
-    SET OutputRoot.XMLNSC = xsltOutput;
+    DECLARE xmlRef REFERENCE TO InputRoot.XMLNSC;
+    DECLARE msgRef REFERENCE TO InputRoot;
+
+    SET OutputRoot.XMLNSC = xmlRef;
+    SET OutputRoot = msgRef;
+
+    DECLARE xsltResult BLOB;
+    SET xsltResult = Transform(xmlRef, 'GetESBEnvironment()', 'GenerateGuid()', 'GetCurrentDateTime()');
+    SET OutputRoot.CDM = xsltResult;
 
     DECLARE azureBlobData BLOB;
-    SET azureBlobData = GetAzureBlobData(shipmentInfo.ShipmentId);
-    SET OutputRoot.AzureBlob = azureBlobData;
-
-    DECLARE cdmDocument BLOB;
-    SET cdmDocument = Transform(azureBlobData, 'XSLT/TransformAzureBlobToCDM.xsl');
-    SET OutputRoot.CDM = cdmDocument;
+    SET azureBlobData = GetAzureBlobData(shipmentId);
+    SET xsltResult = Transform(azureBlobData, 'MapAzureBlobToCDM.xsl');
+    SET OutputRoot.CDM = xsltResult;
 
     RETURN TRUE;
 END;

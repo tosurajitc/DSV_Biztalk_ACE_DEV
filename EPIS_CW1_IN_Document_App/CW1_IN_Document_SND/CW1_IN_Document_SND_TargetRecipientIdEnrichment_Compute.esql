@@ -1,0 +1,67 @@
+CREATE COMPUTE MODULE CW1_IN_Document_SND_TargetRecipientIdEnrichment_Compute
+
+CREATE FUNCTION Main() RETURNS BOOLEAN
+BEGIN
+    DECLARE shipmentInfo 		REFERENCE TO 	Environment.variables.EventData.shipmentInfo;
+    DECLARE sourceCompany 		REFERENCE TO 	Environment.variables.EventData.sourceCompany;
+    DECLARE targetRecipient 	REFERENCE TO 	Environment.variables.EventData.targetRecipient;
+    DECLARE integrationDetails REFERENCE TO 	Environment.variables.EventData.integrationDetails;
+    DECLARE documentData 		REFERENCE TO 	Environment.variables.EventData.documentData;
+
+    SET sourceCompany.CompanyName = 'Azure Blob Storage';
+    SET targetRecipient.RecipientId = CAST(proc_EDocument_GetIsPublishedFlag() AS INTEGER);
+    SET documentData.DocumentType = 'CDM Document';
+
+    DECLARE isPublishedFlag BOOLEAN;
+    SET isPublishedFlag = proc_EDocument_GetIsPublishedFlag();
+    IF isPublishedFlag THEN
+        SET targetRecipient.RecipientId = CAST(sp_Get_EAdapterRecepientId() AS INTEGER);
+    END IF;
+
+    DECLARE customsDeclarationId INTEGER;
+    SET customsDeclarationId = proc_CustomsDeclaration_GetIdByReference();
+    SET documentData.CustomsDeclarationId = customsDeclarationId;
+
+    DECLARE mainCompanyId INTEGER;
+    SET mainCompanyId = sp_GetMainCompanyInCountry();
+    SET targetRecipient.MainCompanyId = mainCompanyId;
+
+    DECLARE shipmentId INTEGER;
+    SET shipmentId = sp_Shipment_GetIdBySSN();
+    SET documentData.ShipmentId = shipmentId;
+
+    DECLARE xmlRef REFERENCE TO InputRoot.XMLNSC;
+    DECLARE msgRef REFERENCE TO InputRoot;
+
+    SET OutputRoot.XMLNSC = xmlRef;
+    SET OutputRoot = msgRef;
+
+    DECLARE guid FLOAT;
+    SET guid = GenerateGuid();
+    SET documentData.Guid = guid;
+
+    DECLARE currentDateTime TIMESTAMP;
+    SET currentDateTime = GetCurrentDateTime();
+    SET documentData.CurrentDateTime = currentDateTime;
+
+    DECLARE esbEnvironment CHARACTER;
+    SET esbEnvironment = GetESBEnvironment();
+    SET documentData.ESBEnvironment = esbEnvironment;
+
+    RETURN TRUE;
+END;
+
+CREATE PROCEDURE CopyMessageHeaders() BEGIN
+    DECLARE I INTEGER 1;
+    DECLARE J INTEGER;
+    SET J = CARDINALITY(InputRoot.*[]);
+    WHILE I < J DO
+        SET OutputRoot.*[I] = InputRoot.*[I];
+        SET I = I + 1;
+    END WHILE;
+END;
+
+CREATE PROCEDURE CopyEntireMessage() BEGIN
+    SET OutputRoot = InputRoot;
+END;
+END MODULE;

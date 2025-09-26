@@ -1,28 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="urn:schemas:ace:cw1shipment"
-           xmlns="urn:schemas:ace:cw1shipment"
+           targetNamespace="urn:schemas:ace:cw1eventformat"
+           xmlns="urn:schemas:ace:cw1eventformat"
            elementFormDefault="qualified">
     <xs:annotation>
         <xs:documentation>
-            CW1Shipment Schema: Data structure definition for enterprise data exchange.
+            CW1EventFormat Schema: Data structure definition for enterprise data exchange.
         </xs:documentation>
     </xs:annotation>
-    <xs:element name="CW1Shipment" type="CW1ShipmentType">
+    <xs:element name="CW1EventFormat" type="CW1EventFormatType">
         <xs:annotation>
             <xs:documentation>
-                Root element for CW1Shipment data structure.
+                Root element for CW1EventFormat data structure.
             </xs:documentation>
         </xs:annotation>
     </xs:element>
-    <xs:complexType name="CW1ShipmentType">
+    <xs:complexType name="CW1EventFormatType">
         <xs:annotation>
             <xs:documentation>
-                Complex type definition for CW1Shipment data structure.
+                Complex type definition for CW1EventFormat data structure.
             </xs:documentation>
         </xs:annotation>
         <xs:sequence>
-            <!-- Add data structure elements here -->
+            <!-- Add data structure elements here as needed -->
         </xs:sequence>
     </xs:complexType>
 </xs:schema>

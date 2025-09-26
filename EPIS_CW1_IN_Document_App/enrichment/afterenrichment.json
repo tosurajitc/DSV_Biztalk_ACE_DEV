@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-09-24T17:59:28.398899",
+  "timestamp": "2025-09-26T16:36:09.349639",
   "analysis_phase": "after_enrichment_consolidation",
   "project_info": {
     "name": "EPIS_CW1_IN_Document_App",
@@ -13,30 +13,27 @@
       "sp_Shipment_GetIdBySSN.json"
     ],
     "total_configs_merged": 3,
-    "merged_timestamp": "2025-09-24T17:59:28.398899"
+    "merged_timestamp": "2025-09-26T16:36:09.349639"
   },
   "EnrichConfigs": {
     "MsgEnrich": [
       {
         "DBAlias": "DSV.ESB.Integration",
-        "SQLCommand": "exec proc_Shipment_GetIdByHouseBill @HouseBill='{0}'",
-        "Scope_prefix": "s0",
-        "Scope_xmlns": "http://esb.dsv.com/CDM/DocumentMessage_V2",
-        "Scope": "/s0:DocumentMessage/s0:Document",
-        "Mandatory": false,
-        "Active": true,
-        "DisableCaching": false,
+        "SQLCommand": "proc_Shipment_GetIdByHouseBill @HouseBill='{0}'",
+        "Scope_prefix": "",
+        "Scope_xmlns": "",
+        "Scope": "//DBparameters",
         "Source": [
           {
             "FieldName": "HouseBill",
-            "xPathValue": "s0:EntityReference/s0:Reference[@Type='HouseBill']/text()",
+            "xPathValue": "s0:Document/s0:EntityReference/s0:Reference[@Type='HouseBill']",
             "Source": "Message",
             "Optional": true
           }
         ],
         "Dest": [
           {
-            "FieldName": "ResultField",
+            "FieldName": "//DBparameters/ResultField",
             "xPathValue": "",
             "Optional": true,
             "DefaultValue": ""
@@ -46,24 +43,21 @@
       },
       {
         "DBAlias": "MH.ESB.EDIEnterprise",
-        "SQLCommand": "exec sp_GetMainCompanyInCountry @CountryCode='{0}'",
-        "Scope_prefix": "ns0",
-        "Scope_xmlns": "http://esb.dsv.com/CDM/DocumentMessage_V2",
-        "Scope": "/ns0:DocumentMessage/ns0:Header",
-        "Mandatory": false,
-        "Active": true,
-        "DisableCaching": false,
+        "SQLCommand": "sp_GetMainCompanyInCountry @CountryCode='{0}'",
+        "Scope_prefix": "",
+        "Scope_xmlns": "",
+        "Scope": "//DBparameters",
         "Source": [
           {
             "FieldName": "CountryCode",
-            "xPathValue": "/ns0:DocumentMessage/ns0:Header/ns0:Target/ns0:CountryCode/text()",
+            "xPathValue": "/ns0:DocumentMessage/ns0:Header/ns0:Target/ns0:CountryCode",
             "Source": "Message",
             "Optional": true
           }
         ],
         "Dest": [
           {
-            "FieldName": "ResultField",
+            "FieldName": "//DBparameters/ResultField",
             "xPathValue": "",
             "Optional": true,
             "DefaultValue": ""
@@ -73,36 +67,33 @@
       },
       {
         "DBAlias": "DSV.ESB.Integration",
-        "SQLCommand": "exec sp_Shipment_GetIdBySSN @SSN='{0}',@SID='{1}',@STP='{2}'",
-        "Scope_prefix": "s0",
-        "Scope_xmlns": "http://esb.dsv.com/CDM/DocumentMessage_V2",
-        "Scope": "/s0:DocumentMessage/s0:Header",
-        "Mandatory": false,
-        "Active": true,
-        "DisableCaching": false,
+        "SQLCommand": "sp_Shipment_GetIdBySSN @SSN='{0}',@SID='{1}',@STP='{2}'",
+        "Scope_prefix": "",
+        "Scope_xmlns": "",
+        "Scope": "//DBparameters",
         "Source": [
           {
             "FieldName": "SSN",
-            "xPathValue": "/s0:DocumentMessage/s0:Document/s0:EntityReference/s0:Reference[@Type='SSN']/text()",
+            "xPathValue": "/s0:DocumentMessage/s0:Document/s0:EntityReference/s0:Reference[@Type='SSN']",
             "Source": "Message",
             "Optional": true
           },
           {
             "FieldName": "SID",
-            "xPathValue": "/s0:DocumentMessage/s0:Header/s0:Source/s0:ApplicationCode/text()",
+            "xPathValue": "/s0:DocumentMessage/s0:Header/s0:Source/s0:ApplicationCode",
             "Source": "Message",
             "Optional": true
           },
           {
             "FieldName": "STP",
-            "xPathValue": "/s0:Header/s0:Source/s0:EnterpriseCode/text()",
+            "xPathValue": "/s0:Header/s0:Source/s0:EnterpriseCode",
             "Source": "Message",
             "Optional": true
           }
         ],
         "Dest": [
           {
-            "FieldName": "ResultField",
+            "FieldName": "//DBparameters/ResultField",
             "xPathValue": "",
             "Optional": true,
             "DefaultValue": ""
