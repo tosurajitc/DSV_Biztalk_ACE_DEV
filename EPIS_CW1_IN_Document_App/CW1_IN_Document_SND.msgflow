@@ -64,165 +64,85 @@
 
     <!-- Branding and Graphics -->
     <translation xmi:type="utility:TranslatableString" key="CW1_IN_Document_SND" bundleName="CW1_IN_Document_SND" pluginId="EPIS_CW1_IN_Document_SND_App_Developer"/>
-    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_CW1_IN_Document_SND_App/icons/full/obj16/CW1_IN_Document_SND.gif"/>
-    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_CW1_IN_Document_SND_App/icons/full/obj16/CW1_IN_Document_SND.gif"/>
+    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_CW1_IN_Document_SND_App_Developer/icons/full/obj16/CW1_IN_Document_SND.gif"/>
+    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_CW1_IN_Document_SND_App_Developer/icons/full/obj16/CW1_IN_Document_SND.gif"/>
     
     <composition>
-      <!-- 1. START EVENT MESSAGE NODE -->
+      <!-- STANDARD 6 COMPUTE MODULES -->
+      <!-- 1. INPUT EVENT MESSAGE -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_1" 
-             location="-221,338" rotation="RIGHT_TO_LEFT" 
-             computeExpression="CW1_IN_Document_SND_InputEvent_Compute">
-        <translation xmi:type="utility:ConstantString" string="StartEventMessage"/>
+            location="100,100" 
+            computeExpression="AGENT2_Message_Flow_InputEventMessage">
+        <translation xmi:type="utility:ConstantString" string="InputEventMessage"/>
       </nodes>
 
-      <!-- 2. MQ INPUT NODE -->
-      <nodes xmi:type="epis_common_flows_lib_MQInput.subflow:FCMComposite_1" xmi:id="FCMComposite_1_2" location="-201,103">
-        <translation xmi:type="utility:ConstantString" string="MQInput"/>
-        <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.INPUT_QUEUE" name="INPUT_QUEUE" lowerBound="1" defaultValueLiteral="CW1.IN.DOCUMENT.SND.QL">
-          <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
-        </eStructuralFeatures>
+      <!-- 2. MAIN COMPUTE (Business Logic) -->
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_2" 
+            location="300,100" 
+            computeExpression="AGENT2_Message_Flow_Compute">
+        <translation xmi:type="utility:ConstantString" string="Compute"/>
       </nodes>
 
-      <!-- 3. MESSAGE ENRICHMENT NODE (Before) -->
-      <nodes xmi:type="epis_enrichment_lib_EPIS_MessageEnrichment.subflow:FCMComposite_1" 
-             xmi:id="FCMComposite_1_3" location="30,299" 
-             inputDirectory="/EPIS_CW1_IN_Document_SND_App/enrichment">
-        <translation xmi:type="utility:ConstantString" string="EPIS_MessageEnrichment_Before"/>
+      <!-- 3. AFTER ENRICHMENT -->
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_3" 
+            location="500,100" 
+            computeExpression="AGENT2_Message_Flow_AfterEnrichment">
+        <translation xmi:type="utility:ConstantString" string="AfterEnrichment"/>
       </nodes>
 
-      <!-- 4. DATABASE LOOKUP FOR COMPANY CODE -->
+      <!-- 4. OUTPUT EVENT MESSAGE -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_4" 
-             location="216,222" 
-             computeExpression="CW1_IN_Document_SND_CompanyCodeLookup_Compute">
-        <translation xmi:type="utility:ConstantString" string="CompanyCodeLookup"/>
+            location="700,100" 
+            computeExpression="AGENT2_Message_Flow_OutputEventMessage">
+        <translation xmi:type="utility:ConstantString" string="OutputEventMessage"/>
       </nodes>
 
-      <!-- 5. DATABASE LOOKUP FOR CW1 SHIPMENT BASED ON CUSTOMER REFERENCE -->
+      <!-- 5. AFTER EVENT MESSAGE -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_5" 
-             location="376,68" 
-             computeExpression="CW1_IN_Document_SND_CW1ShipmentLookupCustomerReference_Compute">
-        <translation xmi:type="utility:ConstantString" string="CW1ShipmentLookupCustomerReference"/>
+            location="900,100" 
+            computeExpression="AGENT2_Message_Flow_AfterEventMsg">
+        <translation xmi:type="utility:ConstantString" string="AfterEventMsg"/>
       </nodes>
 
-      <!-- 6. DATABASE LOOKUP FOR CW1 SHIPMENT BASED ON HOUSEBILL -->
+      <!-- 6. FAILURE HANDLER -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_6" 
-             location="596,45" 
-             computeExpression="CW1_IN_Document_SND_CW1ShipmentLookupHousebill_Compute">
-        <translation xmi:type="utility:ConstantString" string="CW1ShipmentLookupHousebill"/>
-      </nodes>
-
-      <!-- 7. DATABASE LOOKUP FOR CW1 ISPUBLISHED FLAG -->
-      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_7" 
-             location="763,212" 
-             computeExpression="CW1_IN_Document_SND_CW1IsPublishedFlagLookup_Compute">
-        <translation xmi:type="utility:ConstantString" string="CW1IsPublishedFlagLookup"/>
-      </nodes>
-
-      <!-- 8. TARGET RECIPIENT ID ENRICHMENT -->
-      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_8" 
-             location="966,59" 
-             computeExpression="CW1_IN_Document_SND_TargetRecipientIdEnrichment_Compute">
-        <translation xmi:type="utility:ConstantString" string="TargetRecipientIdEnrichment"/>
-      </nodes>
-
-      <!-- 9. XSL TRANSFORMATION NODE -->
-      <nodes xmi:type="ComIbmXslMqsi.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_9" 
-             location="1128,370" 
-             stylesheetName="CW1_IN_Document_SND_CDMToUniversal_Transform.xsl" 
-             messageDomainProperty="XMLNSC">
-        <translation xmi:type="utility:ConstantString" string="XSL Transform"/>
-      </nodes>
-
-      <!-- 10. SOAP REQUEST NODE -->
-      <nodes xmi:type="ComIbmSOAPRequest.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_10" 
-             location="1277,66" 
-             wsdlFileName="{WSDL_FILE_NAME}" 
-             selectedPortType="{PORT_TYPE}" 
-             selectedBinding="{BINDING}" 
-             selectedOperation="{OPERATION}" 
-             selectedPort="{PORT}" 
-             useHTTPTransport="true" 
-             webServiceURL="https://eadapterqa.dsv.com/eAdapterStreamedService.svc" 
-             sslProtocol="TLS">
-        <translation xmi:type="utility:ConstantString" string="SOAP Request"/>
-      </nodes>
-
-      <!-- 11. FAILURE HANDLING NODE -->
-      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_11" 
-             location="1490,344" 
-             computeExpression="CW1_IN_Document_SND_Failure_Compute">
-        <translation xmi:type="utility:ConstantString" string="Failure_Handler"/>
-      </nodes>
-
-      <!-- 12. AFTER TRANSFORMATION EVENT MESSAGE -->
-      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_12" 
-             location="760,418" rotation="RIGHT_TO_LEFT" 
-             computeExpression="CW1_IN_Document_SND_AfterTransEventMsg_Compute">
-        <translation xmi:type="utility:ConstantString" string="AfterTransEventMessage"/>
+            location="500,300" 
+            computeExpression="AGENT2_Message_Flow_Failure">
+        <translation xmi:type="utility:ConstantString" string="Failure"/>
       </nodes>
 
       <!-- CONNECTIONS SECTION -->
-      <!-- Input Flow -->
+      <!-- STANDARD 6-MODULE FLOW CONNECTIONS -->
+      <!-- 1. Input → Compute -->
       <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_1" 
-                   targetNode="FCMComposite_1_1" sourceNode="FCMComposite_1_2" 
-                   sourceTerminalName="OutTerminal.Output1" targetTerminalName="InTerminal.in"/>
-      
+                  targetNode="FCMComposite_1_2" sourceNode="FCMComposite_1_1" 
+                  sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+
+      <!-- 2. Compute → AfterEnrichment -->
       <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_2" 
-                   targetNode="FCMComposite_1_2" sourceNode="FCMComposite_1_1" 
-                   sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.Input"/>
+                  targetNode="FCMComposite_1_3" sourceNode="FCMComposite_1_2" 
+                  sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
 
-      <!-- Enrichment Flow -->
+      <!-- 3. AfterEnrichment → OutputEvent -->
       <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_3" 
-                   targetNode="FCMComposite_1_3" sourceNode="FCMComposite_1_2" 
-                   sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.Input"/>
-      
+                  targetNode="FCMComposite_1_4" sourceNode="FCMComposite_1_3" 
+                  sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+
+      <!-- 4. OutputEvent → AfterEvent -->
       <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_4" 
-                   targetNode="FCMComposite_1_4" sourceNode="FCMComposite_1_3" 
-                   sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.Input"/>
+                  targetNode="FCMComposite_1_5" sourceNode="FCMComposite_1_4" 
+                  sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
 
+      <!-- ERROR HANDLING CONNECTIONS -->
+      <!-- Compute → Failure -->
       <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_5" 
-                   targetNode="FCMComposite_1_5" sourceNode="FCMComposite_1_4" 
-                   sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.in"/>
+                  targetNode="FCMComposite_1_6" sourceNode="FCMComposite_1_2" 
+                  sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
 
+      <!-- AfterEnrichment → Failure -->
       <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_6" 
-                   targetNode="FCMComposite_1_6" sourceNode="FCMComposite_1_5" 
-                   sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
-
-      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_7" 
-                   targetNode="FCMComposite_1_7" sourceNode="FCMComposite_1_6" 
-                   sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.Input"/>
-
-      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_8" 
-                   targetNode="FCMComposite_1_8" sourceNode="FCMComposite_1_7" 
-                   sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.Input"/>
-
-      <!-- SOAP Flow -->
-      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_9" 
-                   targetNode="FCMComposite_1_9" sourceNode="FCMComposite_1_8" 
-                   sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.in"/>
-
-      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_10" 
-                   targetNode="FCMComposite_1_10" sourceNode="FCMComposite_1_9" 
-                   sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
-
-      <!-- Error Handling -->
-      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_11" 
-                   targetNode="FCMComposite_1_11" sourceNode="FCMComposite_1_10" 
-                   sourceTerminalName="OutTerminal.fault" targetTerminalName="InTerminal.in"/>
-
-      <!-- Event Messaging Connections -->
-      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_12" 
-                   targetNode="FCMComposite_1_12" sourceNode="FCMComposite_1_7" 
-                   sourceTerminalName="OutTerminal.Output1" targetTerminalName="InTerminal.in"/>
-      
-      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_13" 
-                   targetNode="FCMComposite_1_7" sourceNode="FCMComposite_1_12" 
-                   sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.Input1"/>
-
-      <!-- Alternative path for direct routing -->
-      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_14" 
-                   targetNode="FCMComposite_1_10" sourceNode="FCMComposite_1_8" 
-                   sourceTerminalName="OutTerminal.out1" targetTerminalName="InTerminal.Input1"/>
+                  targetNode="FCMComposite_1_6" sourceNode="FCMComposite_1_3" 
+                  sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
     </composition>
 
     <propertyOrganizer>

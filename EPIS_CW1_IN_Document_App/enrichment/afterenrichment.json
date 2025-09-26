@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-09-26T16:36:09.349639",
+  "timestamp": "2025-09-26T19:48:51.819538",
   "analysis_phase": "after_enrichment_consolidation",
   "project_info": {
     "name": "EPIS_CW1_IN_Document_App",
@@ -8,15 +8,40 @@
   },
   "consolidation_metadata": {
     "source_files": [
+      "proc_EDocument_GetIsPublishedFlag.json",
       "proc_Shipment_GetIdByHouseBill.json",
       "sp_GetMainCompanyInCountry.json",
       "sp_Shipment_GetIdBySSN.json"
     ],
-    "total_configs_merged": 3,
-    "merged_timestamp": "2025-09-26T16:36:09.349639"
+    "total_configs_merged": 4,
+    "merged_timestamp": "2025-09-26T19:48:51.819538"
   },
   "EnrichConfigs": {
     "MsgEnrich": [
+      {
+        "DBAlias": "DSV.ESB.Integration",
+        "SQLCommand": "proc_EDocument_GetIsPublishedFlag @Code='{0}'",
+        "Scope_prefix": "",
+        "Scope_xmlns": "",
+        "Scope": "//DBparameters",
+        "Source": [
+          {
+            "FieldName": "Code",
+            "xPathValue": "//DBparameters/Code",
+            "Source": "Message",
+            "Optional": true
+          }
+        ],
+        "Dest": [
+          {
+            "FieldName": "//DBparameters/IsPublished",
+            "xPathValue": "",
+            "Optional": true,
+            "DefaultValue": ""
+          }
+        ],
+        "_source_file": "proc_EDocument_GetIsPublishedFlag.json"
+      },
       {
         "DBAlias": "DSV.ESB.Integration",
         "SQLCommand": "proc_Shipment_GetIdByHouseBill @HouseBill='{0}'",
@@ -26,14 +51,14 @@
         "Source": [
           {
             "FieldName": "HouseBill",
-            "xPathValue": "s0:Document/s0:EntityReference/s0:Reference[@Type='HouseBill']",
+            "xPathValue": "//DBparameters/HouseBill",
             "Source": "Message",
             "Optional": true
           }
         ],
         "Dest": [
           {
-            "FieldName": "//DBparameters/ResultField",
+            "FieldName": "//DBparameters/EE_ShipmentId_by_HouseBill",
             "xPathValue": "",
             "Optional": true,
             "DefaultValue": ""
@@ -50,14 +75,14 @@
         "Source": [
           {
             "FieldName": "CountryCode",
-            "xPathValue": "/ns0:DocumentMessage/ns0:Header/ns0:Target/ns0:CountryCode",
+            "xPathValue": "//DBparameters/CountryCode",
             "Source": "Message",
             "Optional": true
           }
         ],
         "Dest": [
           {
-            "FieldName": "//DBparameters/ResultField",
+            "FieldName": "//DBparameters/CompanyCode",
             "xPathValue": "",
             "Optional": true,
             "DefaultValue": ""
@@ -74,26 +99,32 @@
         "Source": [
           {
             "FieldName": "SSN",
-            "xPathValue": "/s0:DocumentMessage/s0:Document/s0:EntityReference/s0:Reference[@Type='SSN']",
+            "xPathValue": "//DBparameters/SSN",
             "Source": "Message",
             "Optional": true
           },
           {
             "FieldName": "SID",
-            "xPathValue": "/s0:DocumentMessage/s0:Header/s0:Source/s0:ApplicationCode",
+            "xPathValue": "//DBparameters/SID",
             "Source": "Message",
             "Optional": true
           },
           {
             "FieldName": "STP",
-            "xPathValue": "/s0:Header/s0:Source/s0:EnterpriseCode",
+            "xPathValue": "//DBparameters/STP",
             "Source": "Message",
             "Optional": true
           }
         ],
         "Dest": [
           {
-            "FieldName": "//DBparameters/ResultField",
+            "FieldName": "//DBparameters/EE_ShipmentId_by_SSN",
+            "xPathValue": "",
+            "Optional": true,
+            "DefaultValue": ""
+          },
+          {
+            "FieldName": "//DBparameters/EE_IsBooking",
             "xPathValue": "",
             "Optional": true,
             "DefaultValue": ""

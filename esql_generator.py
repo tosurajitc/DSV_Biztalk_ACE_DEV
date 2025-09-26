@@ -728,31 +728,47 @@ Return ONLY the ESQL code:"""
             
             # Step 2: Comprehensive LLM Analysis combining ALL sources
             print("🧠 LLM Analysis: Extracting ESQL requirements from ALL sources...")
+
+
             
-            analysis_prompt = f"""Analyze ALL sources to extract comprehensive ESQL module requirements:
+            analysis_prompt = f"""Use MessageFlow as the ONLY authoritative source for ESQL modules. Enhance with business context but do NOT create additional modules:
 
-    ## VECTOR DB BUSINESS CONTENT:
-    {vector_content[:2000]}
+            ## BUSINESS REQUIREMENTS (CONTEXT ONLY - DO NOT CREATE NEW MODULES FROM THIS):
+            {vector_content[:2000]}
 
-    ## COMPONENT MAPPINGS ({len(json_mappings_data.get('component_mappings', []))} components):
-    {json.dumps(json_mappings_data.get('component_mappings', [])[:3], indent=2)}
+            ## COMPONENT MAPPINGS (REFERENCE ONLY - DO NOT CREATE NEW MODULES FROM THIS):
+            {json.dumps(json_mappings_data.get('component_mappings', [])[:3], indent=2)}
 
-    ## MESSAGEFLOW ESQL MODULES (LLM extracted):
-    {json.dumps(msgflow_esql_modules, indent=2)}
+            ## MESSAGEFLOW COMPUTE EXPRESSIONS (AUTHORITATIVE SOURCE - CREATE ESQL FOR THESE ONLY):
+            {json.dumps(msgflow_esql_modules, indent=2)}
 
-    ## MESSAGEFLOW STRUCTURE:
-    {msgflow_content_text[:1500]}
+            ## MESSAGEFLOW STRUCTURE:
+            {msgflow_content_text[:5000]}
 
-    Extract and return JSON with:
-    1. "esql_modules": ALL unique ESQL modules (from component mappings + MessageFlow compute expressions)
-    2. "business_logic": Business rules and transformation requirements
-    3. "database_operations": Database procedures and operations needed
-    4. "transformations": Data transformation specifications
-    5. "message_structure": Input/output message structure details
+            CRITICAL RULES:
+            - ONLY create ESQL modules for MessageFlow compute expressions listed above
+            - Use business requirements to understand what each MessageFlow module should do
+            - Use component mappings as reference for understanding existing patterns
+            - Do NOT create additional modules from business requirements or component mappings
+            - Return exactly the same number of modules as MessageFlow compute expressions
+            - Each ESQL module must correspond to a MessageFlow compute expression
 
-    CRITICAL: Include BOTH component mapping ESQL modules AND MessageFlow compute modules. Mark source as "component_mapping" or "messageflow_compute".
+            Extract and return JSON with:
+            1. "esql_modules": List containing ONLY MessageFlow compute expression modules enhanced with business context
+            2. "business_logic": Business logic requirements for each MessageFlow module
+            3. "message_structure": Input/output message structure details from MessageFlow
+            4. "customizations": Specific customizations needed for template based on business requirements
 
-    Return valid JSON only:"""
+            Focus on:
+            - Understanding business context for each MessageFlow compute node
+            - Mapping business requirements to MessageFlow node purposes
+            - Database operations and procedures mentioned in business requirements for MessageFlow nodes
+            - Transformation logic requirements that apply to MessageFlow compute expressions
+            - Custom XPath expressions needed for MessageFlow processing
+
+            VALIDATION: Ensure every module in esql_modules corresponds to a MessageFlow compute expression. Do not add modules from other sources.
+
+            Return valid JSON only:"""
 
             # LLM call for comprehensive requirements analysis
             analysis_response = self.groq_client.chat.completions.create(

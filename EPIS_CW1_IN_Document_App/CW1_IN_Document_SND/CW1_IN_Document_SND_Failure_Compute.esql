@@ -1,0 +1,35 @@
+CREATE COMPUTE MODULE CW1_IN_Document_SND_Failure_Compute
+CREATE FUNCTION Main() RETURNS BOOLEAN
+BEGIN
+    DECLARE failureInfo 		REFERENCE TO 	Environment.variables.EventData.failureInfo;
+    DECLARE sourceSystem 		REFERENCE TO 	Environment.variables.EventData.sourceSystem;
+    DECLARE targetSystem 		REFERENCE TO 	Environment.variables.EventData.targetSystem;
+    DECLARE integrationStatus REFERENCE TO 	Environment.variables.EventData.integrationStatus;
+    DECLARE messageData 		REFERENCE TO 	Environment.variables.EventData.messageData;
+
+    SET failureInfo = 'Message Flow Failure';
+    SET sourceSystem = 'AGENT2';
+    SET targetSystem = 'TARGET_SYSTEM';
+    SET integrationStatus = 'FAILURE';
+    SET OutputRoot.XMLNSC.Failure = failureInfo;
+    SET OutputRoot.XMLNSC.Source = sourceSystem;
+    SET OutputRoot.XMLNSC.Target = targetSystem;
+    SET OutputRoot.XMLNSC.Status = integrationStatus;
+    SET OutputRoot.XMLNSC.Data = messageData;
+    RETURN TRUE;
+END;
+
+CREATE PROCEDURE CopyMessageHeaders() BEGIN
+    DECLARE I INTEGER 1;
+    DECLARE J INTEGER;
+    SET J = CARDINALITY(InputRoot.*[]);
+    WHILE I < J DO
+        SET OutputRoot.*[I] = InputRoot.*[I];
+        SET I = I + 1;
+    END WHILE;
+END;
+
+CREATE PROCEDURE CopyEntireMessage() BEGIN
+    SET OutputRoot = InputRoot;
+END;
+END MODULE;

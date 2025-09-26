@@ -622,8 +622,8 @@ class SmartACEQualityReviewer:
         if original_name in compute_mapping:
             purpose = compute_mapping[original_name]
             clean_purpose = self._clean_node_purpose(purpose)
-            print(f"    🎯 ESQL: {original_name} → {message_flow_base}_{clean_purpose}_Compute.esql")
-            return f"{message_flow_base}_{clean_purpose}_Compute.esql"
+            print(f"    🎯 ESQL: {original_name} → {message_flow_base}_{clean_purpose}.esql")
+            return f"{message_flow_base}_{clean_purpose}.esql"
         else:
             # Fallback to original logic for unreferenced files
             print(f"    🔄 ESQL: {original_name} → fallback naming")
@@ -713,7 +713,7 @@ class SmartACEQualityReviewer:
             
             # Input/Event Processing
             if any(keyword in clean_lower for keyword in ['startevent', 'inputevent', 'input', 'start']):
-                return f"{message_flow_base}_InputEvent_Compute.esql"
+                return f"{message_flow_base}_InputEvent.esql"
             
             # Enrichment/Lookup Operations
             elif 'housebill' in clean_lower:
@@ -735,11 +735,11 @@ class SmartACEQualityReviewer:
             
             # Error Handling
             elif 'failure' in clean_lower or 'error' in clean_lower:
-                return f"{message_flow_base}_ErrorHandler_Compute.esql"
+                return f"{message_flow_base}_ErrorHandler.esql"
             
             # Generic Compute (for any remaining files)
             else:
-                return f"{message_flow_base}_{clean_name}_Compute.esql"
+                return f"{message_flow_base}_{clean_name}.esql"
             
         
         elif extension == '.xsl':

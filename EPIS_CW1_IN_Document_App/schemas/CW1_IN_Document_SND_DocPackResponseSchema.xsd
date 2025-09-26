@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:schemas:ace:docpackresponse"
+           xmlns:tns="urn:schemas:ace:docpackresponse"
+           elementFormDefault="qualified">
+    <xs:annotation>
+        <xs:documentation>
+            DocPackResponse schema definition.
+        </xs:documentation>
+    </xs:annotation>
+    <xs:element name="DocPackResponse" type="tns:DocPackResponseType"/>
+    <xs:complexType name="DocPackResponseType">
+        <xs:annotation>
+            <xs:documentation>
+                Data structure definition for DocPackResponse.
+            </xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <!-- Add elements as per data structure requirements -->
+        </xs:sequence>
+    </xs:complexType>
+</xs:schema>

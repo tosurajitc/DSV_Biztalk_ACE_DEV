@@ -51,6 +51,7 @@ class DSVMessageFlowGenerator:
             print("📄 Loading MessageFlow template...")
             msgflow_template = self._load_msgflow_template()
             print(f"   ✅ Template loaded ({len(msgflow_template)} characters)")
+
             
             # Step 3: Validate inputs
             self._validate_inputs(component_data, msgflow_template, confluence_spec, biztalk_maps_path)
@@ -67,12 +68,16 @@ class DSVMessageFlowGenerator:
             # Step 6: Process component mappings from JSON
             print("🔄 Processing component mappings...")
             component_context = self._process_json_components(component_data['component_mappings'])
+
+            # Step 6.5: Enforce 6-module standard
+            print("🎯 Enforcing 6-module DSV standard...")
+            standard_modules = self._enforce_6_module_standard(self.flow_name)
             
             # Step 7: Generate MessageFlow XML with enhanced context
-            print("🏗️ Generating DSV Standard MessageFlow...")
+            print("Generating DSV Standard MessageFlow...")
             msgflow_file = self._generate_xml_with_enhanced_context(
                 msgflow_template, business_context, component_context, 
-                biztalk_maps, component_data, output_dir
+                biztalk_maps, component_data, output_dir, standard_modules
             )
             
             # Step 8: Validate output
@@ -81,6 +86,18 @@ class DSVMessageFlowGenerator:
             if not validation['valid']:
                 raise MessageFlowGenerationError(f"Generated XML validation failed: {validation['errors']}")
             
+
+
+            # Step 9: Add 6-module validation
+            print("🎯 Validating 6-module DSV standard compliance...")
+            with open(msgflow_file, 'r', encoding='utf-8') as f:
+                xml_content = f.read()
+            module_validation = self._validate_6_module_standard(xml_content)
+
+            if not module_validation['valid']:
+                raise MessageFlowGenerationError(f"6-module standard validation failed: {module_validation['errors']}")
+
+
             print("🎉 DSV Standard MessageFlow generation completed successfully")
             return {
                 'success': True,
@@ -346,9 +363,96 @@ class DSVMessageFlowGenerator:
             }
     
 
+    def _get_6_module_context_for_llm(self, standard_modules: List[Dict]) -> str:
+        """
+        Generate 6-module context information for LLM prompt
+        """
+        context = """
+    ## 6-MODULE DSV STANDARD FRAMEWORK
+
+    This MessageFlow MUST implement exactly 6 compute modules:
+
+    """
+        
+        for i, module in enumerate(standard_modules, 1):
+            context += f"""
+    {i}. **{module['name']}** (Node ID: {module['id']})
+    - Purpose: {module['purpose']}
+    - Type: {module['type']}
+    - computeExpression: "{module['name']}"
+    """
+        
+        context += """
+    ## CRITICAL REQUIREMENTS:
+    - Exactly 6 compute nodes - no more, no less
+    - Node IDs must be FCMComposite_1_1 through FCMComposite_1_6
+    - All modules must be connected in proper sequence
+    - Failure node (FCMComposite_1_6) must connect to error terminals
+    - No dynamic module generation - use only the 6 standard modules
+
+    """
+        return context
+
+
+
+
+    def _validate_6_module_standard(self, xml_content: str) -> Dict:
+        """
+        Validate that generated XML follows 6-module standard
+        """
+        print("🔍 Validating 6-module DSV standard compliance...")
+        
+        validation_result = {
+            'valid': True,
+            'errors': [],
+            'warnings': []
+        }
+        
+        try:
+            # Check for exactly 6 compute nodes
+            compute_count = xml_content.count('ComIbmCompute.msgnode:FCMComposite_1')
+            if compute_count != 6:
+                validation_result['valid'] = False
+                validation_result['errors'].append(f"Expected 6 compute nodes, found {compute_count}")
+            
+            # Check for required module names
+            required_modules = [
+                f"{self.flow_name}_InputEventMessage",
+                f"{self.flow_name}_Compute", 
+                f"{self.flow_name}_AfterEnrichment",
+                f"{self.flow_name}_OutputEventMessage",
+                f"{self.flow_name}_AfterEventMsg",
+                f"{self.flow_name}_Failure"
+            ]
+            
+            for module in required_modules:
+                if module not in xml_content:
+                    validation_result['valid'] = False
+                    validation_result['errors'].append(f"Missing required module: {module}")
+            
+            # Check for proper node IDs
+            for i in range(1, 7):
+                node_id = f"FCMComposite_1_{i}"
+                if node_id not in xml_content:
+                    validation_result['valid'] = False
+                    validation_result['errors'].append(f"Missing required node ID: {node_id}")
+            
+            if validation_result['valid']:
+                print("   ✅ 6-module standard validation passed")
+            else:
+                print(f"   ❌ 6-module standard validation failed: {len(validation_result['errors'])} errors")
+                
+        except Exception as e:
+            validation_result['valid'] = False
+            validation_result['errors'].append(f"Validation exception: {str(e)}")
+        
+        return validation_result
+
+
     def _generate_xml_with_enhanced_context(self, msgflow_template: str, business_context: Dict, 
                                         component_context: List[Dict], biztalk_maps: List[Dict], 
-                                        component_data: Dict, output_dir: str) -> str:
+                                        component_data: Dict, output_dir: str, 
+                                        standard_modules: List[Dict]) -> str:
         """Generate MessageFlow XML - 100% Vector DB + LLM based, NO HARDCODED FALLBACKS"""
         try:
             # Process template placeholders with JSON data
@@ -436,17 +540,22 @@ class DSVMessageFlowGenerator:
             )
             
             # Create prompt using Vector DB derived values
+            module_context = self._get_6_module_context_for_llm(standard_modules)
+            
             prompt = get_msgflow_generation_prompt(
                 flow_name=self.flow_name,
                 project_name=self.app_name,
                 input_queue=primary_input_queue,
                 output_service=primary_output_service,
                 error_queue='ERROR.QUEUE',  # Standard error queue
-                esql_modules=[],
+                esql_modules=standard_modules,  # ← CHANGED FROM [] TO standard_modules
                 msgflow_template=processed_template,
                 confluence_spec=vector_business_spec,
                 components_info=components_info
             )
+            
+            # Add module context to prompt
+            prompt = module_context + "\n\n" + prompt
             
             enhanced_prompt = f"""{prompt}
 
@@ -915,6 +1024,61 @@ Return only JSON:"""
             
         except Exception as e:
             return {'valid': False, 'errors': [f"DSV validation failed: {str(e)}"]}
+
+
+
+    def _enforce_6_module_standard(self, flow_name: str) -> List[Dict]:
+        """
+        Enforce exactly 6 compute modules for any flow - DSV Standard
+        Returns the standardized module list that must be generated
+        """
+        print("📋 Enforcing 6-module DSV standard...")
+        
+        standard_modules = [
+            {
+                "name": f"{flow_name}_InputEventMessage",
+                "id": "FCMComposite_1_1", 
+                "purpose": "Input validation & event capture",
+                "type": "EVENT"
+            },
+            {
+                "name": f"{flow_name}_Compute", 
+                "id": "FCMComposite_1_2",
+                "purpose": "Main business logic and transformations", 
+                "type": "COMPUTE"
+            },
+            {
+                "name": f"{flow_name}_AfterEnrichment",
+                "id": "FCMComposite_1_3",
+                "purpose": "Post-enrichment processing",
+                "type": "COMPUTE" 
+            },
+            {
+                "name": f"{flow_name}_OutputEventMessage",
+                "id": "FCMComposite_1_4", 
+                "purpose": "Output processing & event capture",
+                "type": "EVENT"
+            },
+            {
+                "name": f"{flow_name}_AfterEventMsg",
+                "id": "FCMComposite_1_5",
+                "purpose": "After transformation event processing", 
+                "type": "EVENT"
+            },
+            {
+                "name": f"{flow_name}_Failure",
+                "id": "FCMComposite_1_6",
+                "purpose": "Generic error handling",
+                "type": "ERROR"
+            }
+        ]
+        
+        print(f"   ✅ Standard 6 modules defined for {flow_name}")
+        for module in standard_modules:
+            print(f"      • {module['name']} ({module['purpose']})")
+        
+        return standard_modules
+
 
 
 # Main execution function for main.py compatibility
