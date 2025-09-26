@@ -1,20 +1,18 @@
-CREATE COMPUTE MODULE CW1_IN_Document_SND_InputEventMessage_Compute
+CREATE COMPUTE MODULE CW1_IN_Document_SND_InputEvent
 CREATE FUNCTION Main() RETURNS BOOLEAN
 BEGIN
     DECLARE documentInfo 		REFERENCE TO 	Environment.variables.EventData.documentInfo;
     DECLARE sourceQueue 		REFERENCE TO 	Environment.variables.EventData.sourceQueue;
-    DECLARE targetQueue 		REFERENCE TO 	Environment.variables.EventData.targetQueue;
-    DECLARE integrationInfo REFERENCE TO 	Environment.variables.EventData.integrationInfo;
-    DECLARE dataInfo 		REFERENCE TO 	Environment.variables.EventData.dataInfo;
+    DECLARE targetSystem 		REFERENCE TO 	Environment.variables.EventData.targetSystem;
+    DECLARE integrationData 	REFERENCE TO 	Environment.variables.EventData.integrationData;
+    DECLARE inputData 		REFERENCE TO 	Environment.variables.EventData.inputData;
 
     SET sourceQueue = 'CW1.IN.DOCUMENT.SND.QL';
-    SET targetQueue = 'CW1.OUT.DOCUMENT.RCV.QL';
-    SET dataInfo = 'CDM document message';
+    SET targetSystem = 'CW1_IN_Document_SND_InputEventMessage';
+    SET integrationData = 'XML Parsing';
+    SET inputData = 'Input Message';
 
     SET OutputRoot.XMLNSC = InputRoot.XMLNSC;
-    SET OutputRoot.LocalEnvironment.Destination.QueueName = targetQueue;
-    SET OutputRoot.LocalEnvironment.Destination.Data = dataInfo;
-
     RETURN TRUE;
 END;
 

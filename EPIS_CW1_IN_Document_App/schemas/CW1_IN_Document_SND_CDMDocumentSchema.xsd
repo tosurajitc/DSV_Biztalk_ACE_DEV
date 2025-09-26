@@ -1,36 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="urn:schemas:ace:cdmdocument"
-           xmlns:cdm="urn:schemas:ace:cdmdocument"
-           elementFormDefault="qualified"
-           attributeFormDefault="unqualified"
-           version="1.0">
-
+           xmlns="urn:schemas:ace:cdmdocument"
+           elementFormDefault="qualified">
     <xs:annotation>
         <xs:documentation>
             CDMDocument Schema: Data structure definition for enterprise data exchange.
         </xs:documentation>
     </xs:annotation>
-
-    <!-- Import ACE message sets for validation -->
-    <xs:import namespace="http://www.ibm.com/ace"
-               schemaLocation="http://www.ibm.com/ace/ACEMessageSet.xsd"/>
-
-    <!-- Root element: CDMDocument -->
-    <xs:element name="CDMDocument">
+    <xs:element name="CDMDocument" type="CDMDocumentType"/>
+    <xs:complexType name="CDMDocumentType">
         <xs:annotation>
             <xs:documentation>
                 Root element for the CDMDocument data structure.
             </xs:documentation>
         </xs:annotation>
-        <xs:complexType>
-            <xs:sequence>
-                <!-- Add child elements as required by the data structure -->
-            </xs:sequence>
-        </xs:complexType>
-    </xs:element>
-
-    <!-- No validation rules specified, add as required -->
-    <!-- No data structure requirements specified, add as required -->
-
+        <xs:sequence>
+            <!-- Add data structure elements here -->
+        </xs:sequence>
+    </xs:complexType>
 </xs:schema>

@@ -1,98 +1,70 @@
 ```xsl
 <?xml version="1.0" encoding="UTF-8"?>
 <xsl:stylesheet version="2.0"
-                xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-                xmlns:xs="http://www.w3.org/2001/XMLSchema"
-                xmlns:cdm="http://www.example.com/cdm"
-                xmlns:dp="http://www.example.com/dockpack"
-                exclude-result-prefixes="xs cdm dp">
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:cdm="http://example.com/cdm"
+  xmlns:ee="http://example.com/ee"
+  exclude-result-prefixes="xs cdm ee"
+>
 
-    <!-- 
-        Transformation Name: CDM_ShipmentInstruction_To_DockPackRequest
-        Purpose: Transforms CDM Shipment Instruction to DockPack Request
-    -->
+  <!--
+    Transformation Name: CDM_DocumentMessage_To_EE_UniversalEvent
+    Purpose: Transform CDM Document Message to Universal Event
+    Type: XSL Transform
+  -->
 
-    <!-- 
-        Field Mapping Requirements: 
-        No specific field mappings are provided, so we will create a generic mapping template.
-    -->
+  <!-- Define the output method -->
+  <xsl:output method="xml" indent="yes" encoding="UTF-8"/>
 
-    <!-- 
-        Business Rules: 
-        No specific business rules are provided, so we will create a generic validation template.
-    -->
+  <!-- Define a template to match the root element of the source document -->
+  <xsl:template match="/">
+    <!-- Create the root element of the target document -->
+    <ee:UniversalEvent>
+      <!-- Apply templates to the child elements of the source document -->
+      <xsl:apply-templates select="*"/>
+    </ee:UniversalEvent>
+  </xsl:template>
 
-    <!-- 
-        Source Schema: 
-        No specific source schema is provided, so we will assume a generic CDM Shipment Instruction schema.
-    -->
+  <!-- Define a template to match each element in the source document -->
+  <xsl:template match="*">
+    <!-- Check if the current element has any child elements or text content -->
+    <xsl:choose>
+      <xsl:when test="node()">
+        <!-- Create an element with the same name as the current element -->
+        <xsl:element name="{local-name()}">
+          <!-- Apply templates to the child elements of the current element -->
+          <xsl:apply-templates select="*"/>
+        </xsl:element>
+      </xsl:when>
+      <xsl:otherwise>
+        <!-- Create an element with the same name as the current element and set its text content -->
+        <xsl:element name="{local-name()}">
+          <xsl:value-of select="."/>
+        </xsl:element>
+      </xsl:otherwise>
+    </xsl:choose>
+  </xsl:template>
 
-    <!-- 
-        Target Schema: 
-        No specific target schema is provided, so we will assume a generic DockPack Request schema.
-    -->
+  <!-- Define a template to handle errors -->
+  <xsl:template match="*" mode="error">
+    <!-- Create an error element with the name of the current element and a message -->
+    <error>
+      <xsl:value-of select="concat('Error: ', local-name(), ' is missing or invalid')"/>
+    </error>
+  </xsl:template>
 
-    <!-- 
-        Transformation Patterns: 
-        No specific transformation patterns are provided, so we will create a generic transformation template.
-    -->
+  <!-- Define a function to validate business rules -->
+  <xsl:function name="cdm:validate-business-rules">
+    <!-- TO DO: implement business rule validation logic here -->
+    <xsl:value-of select="'true'"/>
+  </xsl:function>
 
-    <!-- 
-        XSL Requirements: 
-        This XSL transformation includes proper namespace declarations, field mapping requirements, business rule validation, 
-        error handling, and follows enterprise XSL transformation patterns.
-    -->
-
-    <xsl:output method="xml" indent="yes" encoding="UTF-8"/>
-
-    <!-- 
-        Template to match the root element of the source document.
-    -->
-    <xsl:template match="/cdm:ShipmentInstruction">
-        <dp:DockPackRequest>
-            <!-- 
-                Apply templates to all child elements of the root element.
-            -->
-            <xsl:apply-templates select="*"/>
-        </dp:DockPackRequest>
-    </xsl:template>
-
-    <!-- 
-        Template to match all child elements of the root element.
-    -->
-    <xsl:template match="*">
-        <!-- 
-            Check if the current element has any child elements or text content.
-        -->
-        <xsl:choose>
-            <xsl:when test="* or text()">
-                <!-- 
-                    If the current element has child elements or text content, apply templates to them.
-                -->
-                <xsl:apply-templates select="*"/>
-                <xsl:value-of select="text()"/>
-            </xsl:when>
-            <xsl:otherwise>
-                <!-- 
-                    If the current element does not have any child elements or text content, 
-                    add an error message to the output document.
-                -->
-                <xsl:message terminate="yes">
-                    <xsl:text>Missing or invalid data: </xsl:text>
-                    <xsl:value-of select="name()"/>
-                </xsl:message>
-            </xsl:otherwise>
-        </xsl:choose>
-    </xsl:template>
-
-    <!-- 
-        Template to handle any unknown elements.
-    -->
-    <xsl:template match="@* | node()">
-        <xsl:copy>
-            <xsl:apply-templates select="@* | node()"/>
-        </xsl:copy>
-    </xsl:template>
+  <!-- Define a function to perform complex data conversions -->
+  <xsl:function name="cdm:perform-data-conversion">
+    <!-- TO DO: implement complex data conversion logic here -->
+    <xsl:value-of select="'converted value'"/>
+  </xsl:function>
 
 </xsl:stylesheet>
 ```

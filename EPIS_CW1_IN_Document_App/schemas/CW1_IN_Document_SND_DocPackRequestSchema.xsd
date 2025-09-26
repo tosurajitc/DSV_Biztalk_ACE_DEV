@@ -2,9 +2,7 @@
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="urn:schemas:ace:docpackrequest"
            xmlns:tns="urn:schemas:ace:docpackrequest"
-           elementFormDefault="qualified"
-           attributeFormDefault="unqualified"
-           version="1.0">
+           elementFormDefault="qualified">
     <xs:annotation>
         <xs:documentation>
             DocPackRequest schema definition for enterprise data exchange.

@@ -1,21 +1,15 @@
-CREATE COMPUTE MODULE CW1_IN_Document_SND_AfterEventMsg_Compute
+CREATE COMPUTE MODULE CW1_IN_Document_SND_CW1_IN_Document_SND_OutputEventMessage
 CREATE FUNCTION Main() RETURNS BOOLEAN
 BEGIN
-    DECLARE eventDetails 		REFERENCE TO 	Environment.variables.EventData.eventInfo;
+    DECLARE documentInfo 		REFERENCE TO 	Environment.variables.EventData.documentInfo;
     DECLARE sourceSystem 		REFERENCE TO 	Environment.variables.EventData.sourceSystem;
     DECLARE targetSystem 		REFERENCE TO 	Environment.variables.EventData.targetSystem;
     DECLARE integrationDetails REFERENCE TO 	Environment.variables.EventData.integrationDetails;
-    DECLARE messageData 		REFERENCE TO 	Environment.variables.EventData.messageData;
+    DECLARE eventData 		REFERENCE TO 	Environment.variables.EventData.eventData;
 
-    SET sourceSystem.Name = 'SourceSystemName';
-    SET targetSystem.Name = 'TargetSystemName';
-    SET messageData.Status = 'Processed';
-
-    SET OutputRoot.EventData.eventInfo = eventDetails;
-    SET OutputRoot.EventData.sourceSystem = sourceSystem;
-    SET OutputRoot.EventData.targetSystem = targetSystem;
-    SET OutputRoot.EventData.integrationDetails = integrationDetails;
-    SET OutputRoot.EventData.messageData = messageData;
+    SET sourceSystem.URL = 'https://eadapter.dsv.com/eAdapterStreamedService.svc';
+    SET targetSystem.URL = 'https://eadapter.dsv.com/eAdapterStreamedService.svc';
+    SET eventData.Description = 'Sending output message to eAdapterStreamedService';
 
     RETURN TRUE;
 END;

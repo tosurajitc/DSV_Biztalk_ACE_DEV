@@ -927,8 +927,8 @@ def render_program_2_ui():
     st.info("**Business Requirements**: Automatically extracted from Vector DB focusing on message flow patterns, routing logic, and integration specifications")
 
     # DSV MessageFlow Configuration - Generic hardcoded values (not displayed to user)
-    app_name = "AGENT2_App_Name"
-    flow_name = "AGENT2_Message_Flow"
+    app_name = None
+    flow_name = None
 
     groq_api_key = os.getenv('GROQ_API_KEY', '')    
     groq_model=os.getenv('GROQ_MODEL', '')
@@ -936,8 +936,6 @@ def render_program_2_ui():
     missing_inputs = []
     if not groq_api_key.strip():
         missing_inputs.append("GROQ API Key")
-    if not app_name.strip() or not flow_name.strip():
-        missing_inputs.append("Application/Flow Names")
     
     if missing_inputs:
         st.error(f"  **Missing Required Inputs**: {', '.join(missing_inputs)}")
@@ -953,6 +951,35 @@ def render_program_2_ui():
             groq_api_key=groq_api_key,
             groq_model=groq_model
         )
+
+
+def extract_messageflow_details_from_pdf_content(confluence_content: str) -> dict:
+    """Extract Message Flow Name and ACE Application from PDF content"""
+    import re
+    
+    # Dynamic pattern matching - no hardcoded text
+    flow_pattern = re.search(r'Message\s+Flow\s+Name\(?s?\)?[:\s]*([A-Za-z0-9_]+)', confluence_content, re.IGNORECASE)
+    app_pattern = re.search(r'ACE\s+Application\(?s?\)?[:\s]*([A-Za-z0-9_]+)', confluence_content, re.IGNORECASE)
+    
+    flow_name = flow_pattern.group(1).strip() if flow_pattern else None
+    app_name = app_pattern.group(1).strip() if app_pattern else None
+    
+    # Validation and fallback
+    if flow_name and len(flow_name) > 3 and '_' in flow_name:
+        if app_name and app_name.startswith('EPIS_') and len(app_name) > 8:
+            return {'flow_name': flow_name, 'app_name': app_name, 'extraction_success': True}
+    
+    # Generate fallback based on any extracted flow name
+    if flow_name:
+        return {
+            'flow_name': flow_name, 
+            'app_name': f'EPIS_{flow_name}_App', 
+            'extraction_success': True
+        }
+    
+    # Final fallback
+    return {'flow_name': 'Dynamic_MessageFlow', 'app_name': 'EPIS_Dynamic_App', 'extraction_success': False}
+
 
 
 def run_messageflow_generation(confluence_doc, app_name, flow_name, groq_api_key, groq_model):
@@ -977,15 +1004,16 @@ def run_messageflow_generation(confluence_doc, app_name, flow_name, groq_api_key
             # Create agent function that run_messageflow_generator expects
             def agent_function(focused_content):
                 """Agent function that receives focused vector content"""
+                extracted_details = extract_messageflow_details_from_pdf_content(focused_content)
                 return run_messageflow_generator(
-                    confluence_content=focused_content,  # Vector focused content
-                    biztalk_maps_path="",  # Optional - empty for simplified version
-                    app_name=app_name,
-                    flow_name=flow_name,
+                    confluence_content=focused_content,
+                    biztalk_maps_path="",
+                    app_name=extracted_details['app_name'],      # ✅ DYNAMIC
+                    flow_name=extracted_details['flow_name'],    # ✅ DYNAMIC
                     groq_api_key=groq_api_key,
                     groq_model=groq_model
                 )
-            
+                        
             progress_placeholder.progress(60)
             status_placeholder.info("  Running MessageFlow generation with Vector optimization...")
             

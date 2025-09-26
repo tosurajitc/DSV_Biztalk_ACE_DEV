@@ -1,0 +1,36 @@
+CREATE COMPUTE MODULE CW1_IN_Document_SND_CW1_IN_Document_SND
+CREATE FUNCTION Main() RETURNS BOOLEAN
+BEGIN
+    DECLARE documentInfo 		REFERENCE TO 	Environment.variables.EventData.documentInfo;
+    DECLARE senderInfo 		REFERENCE TO 	Environment.variables.EventData.senderInfo;
+    DECLARE receiverInfo 		REFERENCE TO 	Environment.variables.EventData.receiverInfo;
+    DECLARE packagingInfo 		REFERENCE TO 	Environment.variables.EventData.packagingInfo;
+    DECLARE fileInfo 		REFERENCE TO 	Environment.variables.EventData.fileInfo;
+
+    SET senderInfo.DocumentType = 'SND';
+    SET receiverInfo.DocumentStatus = 'PENDING';
+    SET packagingInfo.PackageName = 'DOCUMENT_PACKAGE';
+    SET fileInfo.FileName = 'DOCUMENT_FILE';
+
+    SET OutputRoot.XMLNSC.Document = senderInfo;
+    SET OutputRoot.XMLNSC.DocumentStatus = receiverInfo;
+    SET OutputRoot.XMLNSC.Package = packagingInfo;
+    SET OutputRoot.XMLNSC.File = fileInfo;
+
+    RETURN TRUE;
+END;
+
+CREATE PROCEDURE CopyMessageHeaders() BEGIN
+    DECLARE I INTEGER 1;
+    DECLARE J INTEGER;
+    SET J = CARDINALITY(InputRoot.*[]);
+    WHILE I <= J DO
+        SET OutputRoot.*[I] = InputRoot.*[I];
+        SET I = I + 1;
+    END WHILE;
+END;
+
+CREATE PROCEDURE CopyEntireMessage() BEGIN
+    SET OutputRoot = InputRoot;
+END;
+END MODULE;
