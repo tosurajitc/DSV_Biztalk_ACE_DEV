@@ -135,19 +135,12 @@ class ACEModuleCreatorOrchestrator:
             self.end_time = datetime.now()
             print(f"\n❌ Orchestration failed: {str(e)}")
             return self._generate_error_results(inputs, str(e))
+        
+
     
     def _validate_inputs(self, inputs: ACEGenerationInputs) -> None:
         """
         Validate all required input files exist
-        
-        Note: Currently in Vector DB transition state:
-        - Schema Generator (Step 1): Uses Vector DB ✅
-        - ESQL Generator (Step 2): Uses Vector DB ✅  
-        - XSL Generator (Step 3): Uses Vector DB ✅
-        - Application Descriptor (Step 4): Uses Vector DB ✅
-        - EEnrichment Generator (Step 5): Uses Vector DB ✅  
-        - Project Generator (Step 6): Still uses PDF
-        
         PDF validation maintained until all modules converted to Vector DB
         """
         required_files = {
@@ -166,7 +159,7 @@ class ACEModuleCreatorOrchestrator:
         if missing_files:
             raise FileNotFoundError(f"Missing required input files:\n" + "\n".join(missing_files))
         
-        # Additional Vector DB validation for schema generation
+        # Additional Vector DB validation 
         import streamlit as st
         if not (st.session_state.get('vector_enabled', False) and 
                 st.session_state.get('vector_ready', False) and 
@@ -176,6 +169,70 @@ class ACEModuleCreatorOrchestrator:
                 "Schema Generator requires Vector DB for business requirement processing. "
                 "Please setup Vector Knowledge Base in Agent 1."
             )
+        
+        # 🔧 FORCE: Initialize knowledge base for enhanced ESQL search
+        print("  🔧 Forcing Vector DB knowledge base initialization for enhanced ESQL...")
+        try:
+            pipeline = st.session_state.vector_pipeline
+            
+            # Check if knowledge base is already ready
+            if not pipeline.knowledge_ready:
+                print("  ⚡ Knowledge base not ready - forcing initialization...")
+                
+                # Try multiple approaches to force initialization
+                if hasattr(pipeline, 'setup_knowledge_base'):
+                    # Look for uploaded PDF in common session state locations
+                    pdf_sources = ['uploaded_pdf', 'confluence_pdf', 'vector_pdf_file']
+                    pdf_found = False
+                    
+                    for pdf_key in pdf_sources:
+                        if pdf_key in st.session_state and st.session_state[pdf_key] is not None:
+                            try:
+                                pipeline.setup_knowledge_base(st.session_state[pdf_key])
+                                pdf_found = True
+                                print(f"  ✅ Knowledge base initialized using {pdf_key}")
+                                break
+                            except Exception as setup_error:
+                                print(f"  ⚠️ Failed to setup with {pdf_key}: {setup_error}")
+                                continue
+                    
+                    if not pdf_found:
+                        print("  ⚠️ No uploaded PDF found in session state")
+                else:
+                    print("  ⚠️ setup_knowledge_base method not available")
+            else:
+                print("  ✅ Knowledge base already ready")
+            
+            # Verify enhanced search is now available
+            if (pipeline.knowledge_ready and 
+                pipeline.search_engine is not None and
+                hasattr(pipeline.search_engine, 'collection')):
+                print("  ✅ Enhanced search ready for all modules")
+            else:
+                print("  ⚠️ Enhanced search still not available")
+                print(f"    knowledge_ready: {pipeline.knowledge_ready}")
+                print(f"    search_engine exists: {pipeline.search_engine is not None}")
+                if pipeline.search_engine:
+                    print(f"    collection exists: {hasattr(pipeline.search_engine, 'collection')}")
+                    
+                    # 🔍 NEW DIAGNOSTIC CODE
+                    print("  🔍 Investigating search_engine methods...")
+                    search_engine = pipeline.search_engine
+                    print(f"    search_engine type: {type(search_engine)}")
+                    print(f"    search_engine methods: {[m for m in dir(search_engine) if not m.startswith('_')]}")
+                    
+                    # Test if calling get_agent_content creates collection
+                    print("  🧪 Testing if get_agent_content creates collection...")
+                    try:
+                        content = search_engine.get_agent_content("schema_generator")
+                        print(f"    get_agent_content returned: {len(content)} characters")
+                        print(f"    collection exists after call: {hasattr(search_engine, 'collection')}")
+                    except Exception as e:
+                        print(f"    get_agent_content failed: {e}")
+                
+        except Exception as e:
+            print(f"  ⚠️ Knowledge base initialization warning: {e}")
+            # Don't fail - modules can still work with basic content
         
         print("  ✅ All input files validated successfully")
         print("  🚀 Vector DB validated for schema generation")
@@ -252,87 +309,141 @@ class ACEModuleCreatorOrchestrator:
                 error_message=str(e)
             )
         
+
+
+    def esql_agent_function(self, inputs: ACEGenerationInputs, focused_content):
+        """Agent function that receives Vector DB focused content for ESQL processing"""
+        
+        # Enhanced Vector search for maximum business logic (same pattern as enrichment_agent_function)
+        try:
+            import streamlit as st
+
+            if (st.session_state.vector_pipeline.knowledge_ready and 
+                hasattr(st.session_state.vector_pipeline.search_engine, 'collection')):
+                
+                collection = st.session_state.vector_pipeline.search_engine.collection
+                
+                business_queries = [
+                    "stored procedure database lookup exec procedure",
+                    "IF BEGIN EXEC conditional business logic validation", 
+                    "database lookup enrichment operations transformation",
+                    "XPath field mapping transformation ns0 DocumentMessage",
+                    "queue message routing integration endpoint",
+                    "business entity reference lookup validation",
+                    "database connection alias integration service",
+                    "enrichment business rules validation transformation",
+                    "conditional logic IF THEN ELSE BEGIN END",
+                    "API service call integration endpoint operation",
+                    "message transformation mapping field conversion",
+                    "business validation rules entity processing",
+                    "database operations INSERT UPDATE SELECT",
+                    "error handling exception business logic",
+                    "routing logic distribution target system"
+                ]
+                
+                enhanced_content = []
+                for query in business_queries:
+                    try:
+                        results = collection.query(query_texts=[query], n_results=50, include=['documents'])
+                        if 'documents' in results and results['documents']:
+                            for doc_list in results['documents']:
+                                if isinstance(doc_list, list):
+                                    enhanced_content.extend(doc_list)
+                    except Exception as e:
+                        continue
+                
+                combined_content = focused_content
+                if enhanced_content:
+                    unique_enhanced = list(set(enhanced_content))
+                    enhanced_text = "\n\n---ENHANCED_BUSINESS_LOGIC---\n\n".join(unique_enhanced)
+                    combined_content = f"{focused_content}\n\n---ENHANCED_SEARCH---\n\n{enhanced_text}"
+                
+                print(f"Enhanced Vector Search Results:")
+                print(f"   Original content: {len(focused_content):,} characters")
+                print(f"   Enhanced sections: {len(enhanced_content)} pieces")
+                print(f"   Combined content: {len(combined_content):,} characters")
+            
+            else:
+                print("Enhanced search skipped: Knowledge base not ready yet")
+                combined_content = focused_content
+
+        except Exception as e:
+            print(f"Enhanced search failed, using original: {e}")
+            combined_content = focused_content
+        
+        # DEBUG: Check data types being passed
+        print(f"DEBUG: focused_content type = {type(focused_content)}")
+        print(f"DEBUG: combined_content type = {type(combined_content)}")
+        
+        if isinstance(combined_content, list):
+            print(f"DEBUG: combined_content is LIST with {len(combined_content)} items")
+            if combined_content:
+                print(f"DEBUG: first item type = {type(combined_content[0])}")
+        elif isinstance(combined_content, dict):
+            print(f"DEBUG: combined_content is DICT with keys = {list(combined_content.keys())}")
+        else:
+            print(f"DEBUG: combined_content is STRING with length = {len(combined_content)}")
+        
+        # Generate ESQL with enhanced content
+        from esql_generator import ESQLGenerator
+        generator = ESQLGenerator(groq_api_key=self.groq_api_key)
+        return generator.generate_esql_files(
+            vector_content=combined_content,
+            esql_template={'path': inputs.esql_template_path},
+            msgflow_content={'path': inputs.msgflow_path}, 
+            json_mappings={'path': inputs.component_mapping_json_path}
+        )
+
+
+
+        
     def _execute_esql_generation(self, inputs: ACEGenerationInputs) -> ModuleExecutionResult:
-        """Execute ESQL Generation module with Vector DB integration - NO FALLBACKS"""
-        print("\n⚡ Step 2: ESQL Generation")
-        print("  🧠 Vector DB Processing: ESQL-focused content extraction")
+        """Execute ESQL Generation module with Vector DB integration"""
+        print("\nESSQL Generation")
+        print("  Vector DB Processing: ESQL-focused content extraction")
         
         start_time = time.time()
         
         try:
-            # ✅ Vector DB Integration - Following exact schema_generator pattern
             import streamlit as st
             
-            if (st.session_state.get('vector_enabled', False) and 
-                st.session_state.get('vector_ready', False) and 
-                st.session_state.get('vector_pipeline')):
-                
-                print("  🚀 Using Vector DB for ESQL-focused content...")
-                print("  🔍 Vector search focus: ESQL transformation logic, business rules, database operations")
-                
-                # Create agent function for ESQL generation
-                def esql_agent_function(focused_content):
-                    """Agent function that receives Vector DB focused content for ESQL processing"""
-                    from esql_generator import ESQLGenerator
-                    
-                    generator = ESQLGenerator(groq_api_key=self.groq_api_key)
-                    return generator.generate_esql_files(
-                        vector_content=focused_content,  # ← Vector DB content instead of PDF
-                        esql_template={'path': inputs.esql_template_path},
-                        msgflow_content={'path': inputs.msgflow_path}, 
-                        json_mappings={'path': inputs.component_mapping_json_path}
-                    )
-                
-                print("  🤖 Running LLM-based ESQL generation with Vector optimization...")
-                
-                # Use Vector DB pipeline to get focused content and run agent
-                result = st.session_state.vector_pipeline.run_agent_with_vector_search(
-                    agent_name="esql_generator",  # ← Vector search for ESQL-specific content
-                    agent_function=esql_agent_function
-                )
-                
-                print("  ✅ Vector DB processing completed!")
-                print(f"  📊 ESQL modules analysis: {result.get('llm_calls_made', 'N/A')} LLM calls")
-                print(f"  🎯 Generated modules: {result.get('total_modules', 'N/A')}")
-                
-            else:
-                # ❌ Vector DB not available - raise error (NO FALLBACK)
-                error_details = []
-                if not st.session_state.get('vector_enabled', False):
-                    error_details.append("Vector DB is disabled")
-                if not st.session_state.get('vector_ready', False):
-                    error_details.append("Vector Knowledge Base not ready")
-                if not st.session_state.get('vector_pipeline'):
-                    error_details.append("Vector pipeline not initialized")
-                
-                raise Exception(
-                    f"Vector DB Error: {', '.join(error_details)}. "
-                    "ESQL Generator requires Vector DB for business requirement processing. "
-                    "Please setup Vector Knowledge Base in Agent 1."
-                )
-                
-            execution_time = time.time() - start_time
+            # Vector DB validation
+            if not (st.session_state.get('vector_enabled', False) and 
+                    st.session_state.get('vector_ready', False) and 
+                    st.session_state.get('vector_pipeline')):
+                raise Exception("Vector DB Error: ESQL Generator requires Vector DB for business requirement processing. Please setup Vector Knowledge Base in Agent 1.")
             
-            # Track LLM calls from ESQL generation
+            print("  Using Vector DB for ESQL-focused content...")
+            print("  Running LLM-based ESQL generation with Vector optimization...")
+            
+            # Execute Vector DB pipeline with external agent function
+            def esql_agent_wrapper(focused_content):
+                return self.esql_agent_function(inputs, focused_content)
+            
+            result = st.session_state.vector_pipeline.run_agent_with_vector_search(
+                agent_name="esql_generator",
+                agent_function=esql_agent_wrapper  # ← Use wrapper instead
+            )
+            
+            print("  Vector DB processing completed!")
+            
+            # Calculate execution metrics
+            execution_time = time.time() - start_time
             llm_calls_made = result.get('llm_calls_made', 0)
             self.total_llm_calls += llm_calls_made
             
-            print(f"  ✅ ESQL generation completed in {execution_time:.2f}s")
-            print(f"  🔥 100% LLM-based generation: {result.get('generation_method', 'Unknown')}")
+            print(f"  ESQL generation completed in {execution_time:.2f}s")
+            print(f"  100% LLM-based generation: {result.get('generation_method', 'Unknown')}")
             
-            # Prepare output files list
-            output_files = []
-            generated_modules = result.get('generated_modules', [])
-            for module in generated_modules:
-                if 'file_path' in module:
-                    output_files.append(module['file_path'])
+            # Prepare output files
+            output_files = [module.get('file_path') for module in result.get('generated_modules', []) if module.get('file_path')]
             
             return ModuleExecutionResult(
                 module_name="ESQL Generator",
                 status="success",
                 execution_time=execution_time,
-                llm_analysis_calls=llm_calls_made,  # All calls are combined for ESQL
-                llm_generation_calls=0,  # Already counted above
+                llm_analysis_calls=llm_calls_made,
+                llm_generation_calls=0,
                 output_files=output_files,
                 metadata={
                     'vector_processing': True,
@@ -347,7 +458,7 @@ class ACEModuleCreatorOrchestrator:
             
         except Exception as e:
             execution_time = time.time() - start_time
-            print(f"  ❌ ESQL generation failed: {str(e)}")
+            print(f"  ESQL generation failed: {str(e)}")
             
             return ModuleExecutionResult(
                 module_name="ESQL Generator",
@@ -363,6 +474,9 @@ class ACEModuleCreatorOrchestrator:
                 },
                 error_message=str(e)
             )
+        
+
+
     
     def _execute_xsl_generation(self, inputs: ACEGenerationInputs) -> ModuleExecutionResult:
         """Execute XSL Generation module with Vector DB integration - NO FALLBACKS"""
@@ -547,87 +661,59 @@ class ACEModuleCreatorOrchestrator:
 
     
     def _execute_enrichment_generation(self, inputs: ACEGenerationInputs) -> ModuleExecutionResult:
-        """
-        Execute Enrichment Generation module - FIXED: Consistent pipeline approach + correct file count
-        ✅ SOLUTION: Use pipeline approach like project generator + fix output_files key
-        """
-        print("\n🔋 Step 5: Enrichment Configuration Generation")
-        print("  🧠 Vector DB Processing: CW1 enrichment-focused content extraction")
+        """Execute Enrichment Generation module with Vector DB integration"""
+        print("\nEnrichment Configuration Generation")
+        print("  Vector DB Processing: CW1 enrichment-focused content extraction")
         
         start_time = time.time()
         
         try:
-            # ✅ CONSISTENT: Same pattern as project generator
             import streamlit as st
             
-            if (st.session_state.get('vector_enabled', False) and 
-                st.session_state.get('vector_ready', False) and 
-                st.session_state.get('vector_pipeline')):
-                
-                print("  🚀 Using Vector DB for CW1 enrichment-focused content...")
-                print("  🔍 Vector search focus: CW1 database operations, enrichment logic, CargoWise One integration")
-                
-                # ✅ CONSISTENT: Create agent function that receives Vector DB focused content
-                def enrichment_agent_function(focused_content):
-                    """Agent function that receives Vector DB focused content for CW1 enrichment processing"""
-                    from enrichment_generator import EnrichmentGenerator
-                    
-                    generator = EnrichmentGenerator(groq_api_key=self.groq_api_key)
-                    return generator.generate_enrichment_files(
-                        vector_content=focused_content,  # ← Vector DB content
-                        component_mapping_json_path=inputs.component_mapping_json_path,
-                        msgflow_path=inputs.msgflow_path,
-                        output_dir=inputs.output_dir
-                    )
-                
-                print("  🤖 Running LLM-based CW1 enrichment generation with Vector optimization...")
-                
-                # ✅ CONSISTENT: Use Vector DB pipeline like project generator
-                result = st.session_state.vector_pipeline.run_agent_with_vector_search(
-                    agent_name="enrichment_generator",  # ← Vector search for enrichment-specific content
-                    agent_function=enrichment_agent_function
-                )
-                
-                print("  ✅ Vector DB processing completed!")
-                print(f"  📊 CW1 enrichment analysis: {result.get('llm_analysis_calls', 'N/A')} LLM calls")
-                print(f"  🎯 Generated configurations: {result.get('enrichment_configs_generated', 'N/A')}")
-                
-            else:
-                # ❌ Vector DB not available - raise error (NO FALLBACK)
-                error_details = []
-                if not st.session_state.get('vector_enabled', False):
-                    error_details.append("Vector DB is disabled")
-                if not st.session_state.get('vector_ready', False):
-                    error_details.append("Vector Knowledge Base not ready")
-                if not st.session_state.get('vector_pipeline'):
-                    error_details.append("Vector pipeline not initialized")
-                
-                raise Exception(
-                    f"Vector DB Error: {', '.join(error_details)}. "
-                    "Enrichment Generator requires Vector DB for business requirement processing. "
-                    "Please setup Vector Knowledge Base in Agent 1."
-                )
-                    
-            execution_time = time.time() - start_time
-            self.total_llm_calls += result['llm_analysis_calls'] + result['llm_generation_calls']
+            # Vector DB validation
+            if not (st.session_state.get('vector_enabled', False) and 
+                    st.session_state.get('vector_ready', False) and 
+                    st.session_state.get('vector_pipeline')):
+                raise Exception("Vector DB Error: Enrichment Generator requires Vector DB for business requirement processing. Please setup Vector Knowledge Base in Agent 1.")
             
-            print(f"  ✅ Enrichment generation completed in {execution_time:.2f}s")
-            print(f"  📊 Generated enrichment configuration files")
-            print(f"  🧠 LLM calls: {result['llm_analysis_calls']} analysis + {result['llm_generation_calls']} generation")
+            print("  Using Vector DB for CW1 enrichment-focused content...")
+            print("  Running LLM-based enrichment generation with Vector optimization...")
+            
+            # Execute Vector DB pipeline with external agent function
+            def enrichment_agent_wrapper(focused_content):
+                """Local wrapper for external enrichment_agent_function"""
+                return self.enrichment_agent_function(inputs, focused_content)
+            
+            result = st.session_state.vector_pipeline.run_agent_with_vector_search(
+                agent_name="enrichment_generator",
+                agent_function=enrichment_agent_wrapper
+            )
+            
+            print("  Vector DB processing completed!")
+            
+            # Calculate execution metrics
+            execution_time = time.time() - start_time
+            analysis_calls = result.get('llm_analysis_calls', 0)
+            generation_calls = result.get('llm_generation_calls', 0)
+            self.total_llm_calls += analysis_calls + generation_calls
+            
+            print(f"  Enrichment generation completed in {execution_time:.2f}s")
+            print(f"  Generated enrichment configuration files")
+            print(f"  LLM calls: {analysis_calls} analysis + {generation_calls} generation")
             
             return ModuleExecutionResult(
                 module_name="Enrichment Generator",
                 status="success",
                 execution_time=execution_time,
-                llm_analysis_calls=result['llm_analysis_calls'],
-                llm_generation_calls=result['llm_generation_calls'],
-                output_files=result.get('config_files', []),  # ✅ FIXED: Use correct key for file count
+                llm_analysis_calls=analysis_calls,
+                llm_generation_calls=generation_calls,
+                output_files=result.get('config_files', []),
                 metadata=result.get('processing_metadata', {})
             )
             
         except Exception as e:
             execution_time = time.time() - start_time
-            print(f"  ❌ Enrichment generation failed: {str(e)}")
+            print(f"  Enrichment generation failed: {str(e)}")
             
             return ModuleExecutionResult(
                 module_name="Enrichment Generator",
@@ -636,12 +722,53 @@ class ACEModuleCreatorOrchestrator:
                 llm_analysis_calls=0,
                 llm_generation_calls=0,
                 output_files=[],
-                metadata={},
+                metadata={'timestamp': datetime.now().isoformat()},
                 error_message=str(e)
             )
+
+
+    def enrichment_agent_function(self, inputs: ACEGenerationInputs, focused_content):
+        """Agent function for enrichment processing with enhanced Vector search"""
         
-
-
+        try:
+            import streamlit as st
+            collection = st.session_state.vector_pipeline.search_engine.collection
+            
+            enrichment_queries = [
+                "enrichment business logic validation rules",
+                "database operations lookup validation",
+                "CargoWise eAdapter service integration",
+                "business validation rules entity processing"
+            ]
+            
+            enhanced_content = []
+            for query in enrichment_queries:
+                try:
+                    results = collection.query(query_texts=[query], n_results=50, include=['documents'])
+                    if 'documents' in results and results['documents']:
+                        for doc_list in results['documents']:
+                            if isinstance(doc_list, list):
+                                enhanced_content.extend(doc_list)
+                except Exception as e:
+                    continue
+            
+            combined_content = focused_content
+            if enhanced_content:
+                unique_enhanced = list(set(enhanced_content))
+                enhanced_text = "\n\n---ENRICHMENT_LOGIC---\n\n".join(unique_enhanced)
+                combined_content = f"{focused_content}\n\n---ENHANCED_ENRICHMENT---\n\n{enhanced_text}"
+            
+        except Exception as e:
+            combined_content = focused_content
+        
+        from enrichment_generator import EnrichmentGenerator
+        generator = EnrichmentGenerator(groq_api_key=self.groq_api_key)
+        return generator.generate_enrichment_files(
+            vector_content=combined_content,
+            component_mapping_json_path=inputs.component_mapping_json_path,
+            msgflow_path=inputs.msgflow_path,
+            output_dir=inputs.output_dir
+        )
 
     
     def _execute_project_generation(self, inputs: ACEGenerationInputs) -> ModuleExecutionResult:

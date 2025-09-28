@@ -4,7 +4,7 @@ from .vector_store import ChromaVectorStore
 class SemanticSearchEngine:
     def __init__(self, vector_store: ChromaVectorStore):
         self.vector_store = vector_store
-        
+        self.collection = None
         # Define agent-specific search queries
         self.agent_queries = {
             'component_mapper': [
@@ -75,7 +75,26 @@ class SemanticSearchEngine:
 
 
 
-
+    def ensure_collection_exists(self):
+        """Ensure collection is properly initialized"""
+        try:
+            if self.collection is None:
+                # Re-create collection if missing
+                if hasattr(self, 'vector_store') and self.vector_store:
+                    self.collection = self.vector_store.collection
+                else:
+                    # Force collection creation
+                    print("🔧 Force creating collection in SemanticSearchEngine")
+                    # Import and create ChromaVectorStore if needed
+                    from .vector_store import ChromaVectorStore
+                    self.vector_store = ChromaVectorStore()
+                    if hasattr(self.vector_store, 'collection'):
+                        self.collection = self.vector_store.collection
+            
+            return self.collection is not None
+        except Exception as e:
+            print(f"Collection creation failed: {e}")
+            return False
 
 
 

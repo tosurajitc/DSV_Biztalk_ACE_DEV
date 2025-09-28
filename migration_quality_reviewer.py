@@ -414,18 +414,12 @@ class SmartACEQualityReviewer:
     def _create_ace_project_structure(self) -> str:
         """Create final ACE project structure with organized subdirectories"""
         print("\n🗃️ Creating ACE Project Structure with Organized Folders...")
-        
+        compute_mapping = {} 
         # Get dynamic names from naming convention
         project_naming = self.naming_convention.get('project_naming', {})
         project_name = project_naming.get('ace_application_name', 'EPIS_MIGRATION_App')
         message_flow_base = project_naming.get('message_flow_name', 'MIGRATION_Flow')
         
-        # 🆕 STEP 1: Parse message flow for compute references
-        enhanced_project_folder = self.ace_components_folder / "Enhanced_ACE_Project"
-        msgflow_components = [comp for comp in self.discovered_components if comp['extension'] == '.msgflow']
-        if msgflow_components:
-            msgflow_file_path = Path(msgflow_components[0]['original_path'])
-            compute_mapping = self._parse_msgflow_compute_references(msgflow_file_path)
         
         # Create main project directory (DYNAMIC name)
         project_dir = self.ace_components_folder.parent / f"{project_name}"
@@ -471,42 +465,26 @@ class SmartACEQualityReviewer:
             for component in self.discovered_components:
                 old_path = Path(component['original_path'])
                 
-                # 🆕 Generate new name with message flow awareness
-                if component['extension'] == '.esql' and compute_mapping:
-                    new_name = self._generate_esql_name_from_msgflow(component, compute_mapping, message_flow_base)
+                if component['extension'] == '.esql':
+                    new_name = component['full_name']  # Keep original ESQL filename
                 else:
                     new_name = self._generate_component_name(component, message_flow_base)
                 
                 # 🗂️ ROUTE FILES TO APPROPRIATE SUBDIRECTORIES
                 if component['extension'] == '.esql':
-                    new_path = esql_dir / new_name
+                    # Use original filename (no renaming)
+                    original_filename = component['full_name']  # Keep original name
+                    new_path = esql_dir / original_filename
                     file_routing_summary['esql_files'] += 1
                     destination = f"{message_flow_base}/"
                     
                     try:
-                        # 🆕 UPDATED LOGIC FOR ESQL FILES - Update content AND filename
-                        new_module_name = new_name.replace('.esql', '')  # Remove extension for module name
-                        print(f"    🔧 Processing ESQL: {component['full_name']} → {new_name}")
-                        
-                        # Use helper method to update ESQL content
-                        updated_content = self._update_esql_module_name(old_path, new_module_name)
-                        
-                        # Write updated content to new file
-                        with open(new_path, 'w', encoding='utf-8') as f:
-                            f.write(updated_content)
-                        
+                        # Simple file copy - no content changes, no name changes
+                        shutil.copy2(old_path, new_path)
                         components_copied += 1
-                        print(f"  ✅ {component['full_name']} → {destination}{new_name} (content updated)")
-                        
+                        print(f"  ✅ {component['full_name']} → {destination}{original_filename}")
                     except Exception as e:
-                        print(f"  ❌ Failed to update ESQL {component['full_name']}: {e}")
-                        # Fallback: copy original file without content updates
-                        try:
-                            shutil.copy2(old_path, new_path)
-                            components_copied += 1
-                            print(f"  ⚠️ {component['full_name']} → {destination}{new_name} (fallback copy)")
-                        except Exception as fallback_error:
-                            print(f"  ❌ Fallback copy also failed: {fallback_error}")
+                        print(f"  ❌ Failed to copy {component['full_name']}: {e}")
                 
                 # 🆕 NEW SECTION: ADD THIS ENTIRE BLOCK RIGHT HERE
                 elif component['extension'] == '.msgflow':
@@ -613,82 +591,6 @@ class SmartACEQualityReviewer:
 
 
 
-
-    def _generate_esql_name_from_msgflow(self, component: Dict, compute_mapping: Dict, message_flow_base: str) -> str:
-        """Generate ESQL name based on message flow references"""
-        original_name = component['full_name']
-        
-        # Check if this ESQL file is referenced in the message flow
-        if original_name in compute_mapping:
-            purpose = compute_mapping[original_name]
-            clean_purpose = self._clean_node_purpose(purpose)
-            print(f"    🎯 ESQL: {original_name} → {message_flow_base}_{clean_purpose}.esql")
-            return f"{message_flow_base}_{clean_purpose}.esql"
-        else:
-            # Fallback to original logic for unreferenced files
-            print(f"    🔄 ESQL: {original_name} → fallback naming")
-            return self._generate_component_name(component, message_flow_base)
-        
-
-    def _clean_node_purpose(self, purpose: str) -> str:
-        """Clean node purpose name for file naming"""
-        # Remove spaces and special characters
-        clean = purpose.replace(' ', '').replace('_', '').replace('-', '')
-        
-        # Handle specific cases
-        purpose_mapping = {
-            'StartEventMessage': 'InputEvent',
-            'AfterEnrichment': 'AfterEnrichment', 
-            'PrepareSoapmessage': 'PrepareSoap',
-            'Failure_Handler': 'ErrorHandler',
-            'FailureHandler': 'ErrorHandler',
-            'AfterTransEventMessage': 'AfterTransEvent'
-        }
-        
-        return purpose_mapping.get(clean, clean)
-    
-
-    def _parse_msgflow_compute_references(self, msgflow_file: Path) -> Dict[str, str]:
-        """
-        Parse message flow file to extract compute expression references
-        Returns mapping: {original_esql_name: logical_purpose}
-        """
-        import re
-        import xml.etree.ElementTree as ET
-        
-        compute_references = {}
-        
-        try:
-            # Parse the message flow XML
-            tree = ET.parse(msgflow_file)
-            root = tree.getroot()
-            
-            # Find all computeExpression attributes
-            for element in root.iter():
-                if 'computeExpression' in element.attrib:
-                    compute_expr = element.attrib['computeExpression']
-                    
-                    # Extract ESQL module name from #ModuleName.Main pattern
-                    if compute_expr and compute_expr.strip():
-                        esql_module = compute_expr.strip()
-                        
-                        # Determine logical purpose from node translation
-                        node_name = "Unknown"
-                        for child in element:
-                            if 'translation' in child.tag:
-                                node_name = child.attrib.get('string', 'Unknown')
-                                break
-                        
-                        compute_references[f"{esql_module}.esql"] = node_name
-                        print(f"    🔗 Found compute: {esql_module}.esql → {node_name}")
-            
-            return compute_references
-            
-        except Exception as e:
-            print(f"    ⚠️ Error parsing message flow: {e}")
-            return {}
-
-
     def _generate_component_name(self, component: Dict, message_flow_base: str) -> str:
         """Generate correct component name based on ACE naming conventions"""
         extension = component['extension']
@@ -698,48 +600,6 @@ class SmartACEQualityReviewer:
         if extension == '.msgflow':
             # Message flows: Use exact message flow name from PDF
             return f"{message_flow_base}.msgflow"
-        
-        elif extension == '.esql':
-            # 🆕 INTELLIGENT ESQL NAMING - Dynamic prefix removal using patterns
-            original_lower = original_name.lower()
-            
-            # Step 1: Intelligently detect and remove Agent-generated prefixes
-            clean_name = self._remove_agent_prefixes(original_name)
-            
-            print(f"    🔄 ESQL: '{original_name}' → '{clean_name}' (cleaned)")
-            
-            # Step 2: Apply purpose-based naming based on cleaned name
-            clean_lower = clean_name.lower()
-            
-            # Input/Event Processing
-            if any(keyword in clean_lower for keyword in ['startevent', 'inputevent', 'input', 'start']):
-                return f"{message_flow_base}_InputEvent.esql"
-            
-            # Enrichment/Lookup Operations
-            elif 'housebill' in clean_lower:
-                return f"{message_flow_base}_HousebillLookup_Enrichment.esql"
-            elif 'shipment' in clean_lower:
-                return f"{message_flow_base}_ShipmentLookup_Enrichment.esql"
-            elif 'company' in clean_lower:
-                return f"{message_flow_base}_CompanyLookup_Enrichment.esql"
-            elif 'ispublished' in clean_lower:
-                return f"{message_flow_base}_IsPublishedLookup_Enrichment.esql"
-            elif 'targetrecipient' in clean_lower or 'target' in clean_lower:
-                return f"{message_flow_base}_TargetRecipientLookup_Enrichment.esql"
-            
-            # Transformation Operations
-            elif 'azureblob' in clean_lower or 'blob' in clean_lower:
-                return f"{message_flow_base}_BlobToCDM_Transform.esql"
-            elif 'cdm' in clean_lower and 'universal' in clean_lower:
-                return f"{message_flow_base}_CDMToUniversal_Transform.esql"
-            
-            # Error Handling
-            elif 'failure' in clean_lower or 'error' in clean_lower:
-                return f"{message_flow_base}_ErrorHandler.esql"
-            
-            # Generic Compute (for any remaining files)
-            else:
-                return f"{message_flow_base}_{clean_name}.esql"
             
         
         elif extension == '.xsl':
@@ -768,47 +628,6 @@ class SmartACEQualityReviewer:
             # Other files: keep original name or apply simple prefix
             return original_name
         
-
-
-    def _remove_agent_prefixes(self, filename: str) -> str:
-        """
-        Intelligently remove Agent-generated prefixes using pattern detection
-        Handles: AGENT2_Message_Flow_HUB_, AGENT2_Message_Flow_SND_, AGENT2_Message_Flow_XYZ_, etc.
-        """
-        import re
-        
-        clean_name = filename
-        
-        # Pattern 1: Remove AGENT[NUMBER]_Message_Flow_[ANYTHING]_ 
-        # Matches: AGENT2_Message_Flow_HUB_, AGENT3_Message_Flow_SND_, etc.
-        pattern1 = r'^AGENT\d+_Message_Flow_\w+_'
-        if re.match(pattern1, clean_name):
-            clean_name = re.sub(pattern1, '', clean_name)
-            print(f"  Removed Agent pattern: {pattern1}")
-        
-        # Pattern 2: Remove standalone Message_Flow_[ANYTHING]_
-        # Matches: Message_Flow_HUB_, Message_Flow_SND_, etc.
-        pattern2 = r'^Message_Flow_\w+_'
-        if re.match(pattern2, clean_name):
-            clean_name = re.sub(pattern2, '', clean_name)
-            print(f" Removed Message_Flow pattern: {pattern2}")
-        
-        # Pattern 3: Remove any remaining AGENT[NUMBER]_ prefix
-        # Matches: AGENT2_, AGENT3_, etc.
-        pattern3 = r'^AGENT\d+_'
-        if re.match(pattern3, clean_name):
-            clean_name = re.sub(pattern3, '', clean_name)
-            print(f"   Removed Agent prefix: {pattern3}")
-        
-        # Clean up common suffixes
-        clean_name = clean_name.replace('_Compute', '').replace('.esql', '')
-        
-        # If we ended up with an empty name, use a fallback
-        if not clean_name or clean_name.strip() == '':
-            clean_name = 'GenericCompute'
-            print(f"  Used fallback name: {clean_name}")
-        
-        return clean_name
 
 
     
@@ -876,196 +695,34 @@ class SmartACEQualityReviewer:
             print(f"  ❌ Error processing enrichment directory: {e}")
             self.validation_errors.append(f"Enrichment directory processing failed: {e}")
 
-
-    def _update_esql_module_name(self, esql_file_path: Path, new_module_name: str) -> str:
-        """
-        Update ESQL file content to match new module name with filename
-        
-        Args:
-            esql_file_path: Path to the original ESQL file
-            new_module_name: New module name (without .esql extension)
-        
-        Returns:
-            str: Updated ESQL file content with corrected module name
-        """
-        try:
-            # Read original ESQL file content
-            with open(esql_file_path, 'r', encoding='utf-8') as f:
-                esql_content = f.read()
-            
-            print(f"    🔧 Updating ESQL module name: {new_module_name}")
-            
-            # Remove .esql extension if present in new_module_name
-            clean_module_name = new_module_name.replace('.esql', '')
-            
-            # Pattern to match CREATE COMPUTE MODULE statements (case-insensitive, flexible spacing)
-            # Matches: CREATE COMPUTE MODULE old_name
-            # Handles variations like:
-            # - CREATE COMPUTE MODULE AGENT2_Message_Flow_SND_AfterTransEventMsg
-            # - CREATE   COMPUTE   MODULE   OldModuleName
-            # - create compute module old_name (case insensitive)
-            
-            import re
-            
-            # Pattern explanation:
-            # (?i) = case insensitive flag
-            # \s+ = one or more whitespace characters
-            # ([A-Za-z0-9_]+) = capture group for module name (alphanumeric + underscore)
-            pattern = r'(?i)(CREATE\s+COMPUTE\s+MODULE\s+)([A-Za-z0-9_]+)'
-            
-            # Find the current module name first for logging
-            current_match = re.search(pattern, esql_content)
-            if current_match:
-                old_module_name = current_match.group(2)
-                print(f"      📝 Found module: '{old_module_name}' → '{clean_module_name}'")
-                
-                # Replace with new module name, preserving the original case style of CREATE COMPUTE MODULE
-                updated_content = re.sub(
-                    pattern, 
-                    rf'\1{clean_module_name}',  # \1 = the "CREATE COMPUTE MODULE " part, then new name
-                    esql_content
-                )
-                
-                # Verify the replacement was successful
-                verification_match = re.search(pattern, updated_content)
-                if verification_match and verification_match.group(2) == clean_module_name:
-                    print(f"      ✅ Module name updated successfully")
-                    return updated_content
-                else:
-                    print(f"      ⚠️ Warning: Module name replacement verification failed")
-                    return updated_content
-                    
-            else:
-                # No CREATE COMPUTE MODULE found - this might be a different type of ESQL file
-                print(f"      ⚠️ Warning: No 'CREATE COMPUTE MODULE' statement found")
-                print(f"      📄 File might be a different ESQL type (PROCEDURE, FUNCTION, etc.)")
-                
-                # Check for other ESQL patterns (PROCEDURE, FUNCTION, etc.)
-                print(f"      📄 Checking for other ESQL patterns...")
-                
-                replacements_made = []
-                updated_content = esql_content
-                
-                # Pattern 1: CREATE PROCEDURE ModuleName
-                procedure_pattern = r'(?i)(CREATE\s+PROCEDURE\s+)([A-Za-z0-9_]+)'
-                procedure_match = re.search(procedure_pattern, esql_content)
-                if procedure_match:
-                    old_name = procedure_match.group(2)
-                    updated_content = re.sub(procedure_pattern, rf'\1{clean_module_name}', updated_content)
-                    replacements_made.append(f"PROCEDURE: '{old_name}' → '{clean_module_name}'")
-                
-                # Pattern 2: CREATE FUNCTION ModuleName  
-                function_pattern = r'(?i)(CREATE\s+FUNCTION\s+)([A-Za-z0-9_]+)'
-                function_match = re.search(function_pattern, esql_content)
-                if function_match:
-                    old_name = function_match.group(2)
-                    updated_content = re.sub(function_pattern, rf'\1{clean_module_name}', updated_content)
-                    replacements_made.append(f"FUNCTION: '{old_name}' → '{clean_module_name}'")
-                
-                # Log what was updated
-                if replacements_made:
-                    print(f"      📝 Other ESQL patterns updated:")
-                    for replacement in replacements_made:
-                        print(f"        • {replacement}")
-                else:
-                    print(f"      ℹ️ No recognizable ESQL patterns found to update")
-                
-                return updated_content
-                
-        except UnicodeDecodeError as e:
-            print(f"      ❌ Error: File encoding issue in {esql_file_path.name}: {e}")
-            # Try with different encoding
-            try:
-                with open(esql_file_path, 'r', encoding='cp1252') as f:
-                    esql_content = f.read()
-                print(f"      🔄 Retrying with cp1252 encoding...")
-                return self._update_esql_module_name(esql_file_path, new_module_name)
-            except Exception as fallback_error:
-                print(f"      ❌ Fallback encoding failed: {fallback_error}")
-                self.validation_errors.append(f"ESQL encoding error: {esql_file_path.name}")
-                return ""
-                
-        except Exception as e:
-            print(f"      ❌ Error updating ESQL module name in {esql_file_path.name}: {e}")
-            self.validation_errors.append(f"ESQL module name update failed: {esql_file_path.name}")
-            # Return original content as fallback
-            try:
-                with open(esql_file_path, 'r', encoding='utf-8') as f:
-                    return f.read()
-            except:
-                return ""
             
             
 
     def _update_msgflow_references(self, msgflow_file_path: Path, compute_mapping: Dict[str, str], message_flow_base: str) -> str:
         """
-        Update .msgflow file to reference renamed ESQL modules and other components
-        
-        Args:
-            msgflow_file_path: Path to original .msgflow file
-            compute_mapping: Dict mapping {old_esql_name: node_purpose}
-            message_flow_base: Base name for new ESQL modules (e.g., "CW1_IN_Document_SND")
-        
-        Returns:
-            str: Updated .msgflow content with corrected references
+        Update .msgflow file references - simplified version
+        Only updates namespace and project references since ESQL files keep original names
         """
         try:
             # Read original msgflow content
             with open(msgflow_file_path, 'r', encoding='utf-8') as f:
                 msgflow_content = f.read()
             
-            print(f"    🔧 Updating .msgflow references dynamically...")
+            print(f"    🔧 Updating .msgflow references (simplified)...")
             
             import re
-            
-            # 1. Extract old msgflow name from nsURI
-            msgflow_name_match = re.search(r'nsURI="([^"]+)\.msgflow"', msgflow_content)
-            old_msgflow_name = msgflow_name_match.group(1) if msgflow_name_match else "AGENT2_Message_Flow_SND"
-            
-            print(f"      📝 Detected old msgflow name: {old_msgflow_name}")
-            print(f"      📝 Target msgflow name: {message_flow_base}")
-            
-            # 2. Build project name
-            project_name = f"EPIS_{message_flow_base}_App"
-            print(f"      📝 Target project name: {project_name}")
-            
             updated_content = msgflow_content
             total_replacements = 0
             
-            # 3. Update computeExpression patterns dynamically
-            print(f"    🔧 Updating computeExpression references...")
+            # Extract old msgflow name from nsURI
+            msgflow_name_match = re.search(r'nsURI="([^"]+)\.msgflow"', msgflow_content)
+            old_msgflow_name = msgflow_name_match.group(1) if msgflow_name_match else "AGENT2_Message_Flow"
+            project_name = f"EPIS_{message_flow_base}_App"
             
-            # Find all computeExpression patterns in the content
-            compute_patterns = re.findall(rf'computeExpression="({re.escape(old_msgflow_name)}_[^"]+)"', msgflow_content)
-            compute_replacements = 0
+            print(f"      📝 {old_msgflow_name} → {message_flow_base}")
+            print(f"      📝 Project: {project_name}")
             
-            for old_compute_expr in compute_patterns:
-                # Extract the suffix after the old msgflow name
-                suffix = old_compute_expr.replace(f"{old_msgflow_name}_", "")
-                
-                # Map the suffix to clean purpose using existing logic
-                clean_purpose = self._clean_node_purpose(suffix)
-                new_compute_expr = f"{message_flow_base}_{clean_purpose}_Compute"
-                
-                # Replace the pattern
-                old_pattern = f'computeExpression="{old_compute_expr}"'
-                new_pattern = f'computeExpression="{new_compute_expr}"'
-                
-                if old_pattern in updated_content:
-                    updated_content = updated_content.replace(old_pattern, new_pattern)
-                    compute_replacements += 1
-                    print(f"      ✅ {old_compute_expr} → {new_compute_expr}")
-            
-            total_replacements += compute_replacements
-            if compute_replacements > 0:
-                print(f"      🎯 Total computeExpression updates: {compute_replacements}")
-            else:
-                print(f"      ℹ️ No computeExpression references found to update")
-            
-            # 4. Update Namespace References
-            print(f"    🔧 Updating .msgflow namespace references...")
-            namespace_replacements = 0
-            
+            # 1. Update namespace references
             namespace_patterns = [
                 (f'nsURI="{old_msgflow_name}.msgflow"', f'nsURI="{message_flow_base}.msgflow"'),
                 (f'nsPrefix="{old_msgflow_name}.msgflow"', f'nsPrefix="{message_flow_base}.msgflow"')
@@ -1074,302 +731,52 @@ class SmartACEQualityReviewer:
             for old_pattern, new_pattern in namespace_patterns:
                 if old_pattern in updated_content:
                     updated_content = updated_content.replace(old_pattern, new_pattern)
-                    namespace_replacements += 1
-                    print(f"      ✅ {old_pattern} → {new_pattern}")
+                    total_replacements += 1
+                    print(f"      ✅ Namespace: {old_pattern} → {new_pattern}")
             
-            total_replacements += namespace_replacements
-            
-            # 5. Update XSL Stylesheet References
-            print(f"    🔧 Updating .msgflow stylesheet references...")
-            stylesheet_replacements = 0
-            
-            # Find existing XSL references and update them
-            xsl_patterns = re.findall(r'stylesheetName="([^"]+)"', msgflow_content)
-            for old_xsl in xsl_patterns:
-                if 'DefaultTransform' in old_xsl or 'Transform' in old_xsl:
-                    new_xsl = f"{message_flow_base}_CDMToUniversal_Transform.xsl"
-                    
-                    old_pattern = f'stylesheetName="{old_xsl}"'
-                    new_pattern = f'stylesheetName="{new_xsl}"'
-                    
-                    if old_pattern in updated_content:
-                        updated_content = updated_content.replace(old_pattern, new_pattern)
-                        stylesheet_replacements += 1
-                        print(f"      ✅ {old_xsl} → {new_xsl}")
-            
-            # Also update defaultValueLiteral for XSL files
-            xsl_defaults = re.findall(r'defaultValueLiteral="([^"]*\.xsl)"', msgflow_content)
-            for old_xsl in xsl_defaults:
-                if 'DefaultTransform' in old_xsl or 'Transform' in old_xsl:
-                    new_xsl = f"{message_flow_base}_CDMToUniversal_Transform.xsl"
-                    
-                    old_pattern = f'defaultValueLiteral="{old_xsl}"'
-                    new_pattern = f'defaultValueLiteral="{new_xsl}"'
-                    
-                    if old_pattern in updated_content:
-                        updated_content = updated_content.replace(old_pattern, new_pattern)
-                        stylesheet_replacements += 1
-                        print(f"      ✅ {old_xsl} → {new_xsl}")
-            
-            total_replacements += stylesheet_replacements
-            
-            # 6. Update Path References
-            print(f"    🔧 Updating .msgflow path references...")
-            path_replacements = 0
-            
-            # Extract old app name (AGENT2_App_Name)
-            old_app_pattern = re.search(r'(AGENT\d+_App_Name)', msgflow_content)
-            old_app_name = old_app_pattern.group(1) if old_app_pattern else "AGENT2_App_Name"
-            
-            path_patterns = [
-                # Windows-style paths
-                (f'{old_app_name}\\{old_msgflow_name}\\enrichment', f'{project_name}\\enrichment'),
-                (f'{old_app_name}\\enrichment\\{old_msgflow_name}', f'{project_name}\\enrichment'),
-                # Unix-style paths
-                (f'/{old_app_name}/enrichment/{old_msgflow_name}', f'/{project_name}/enrichment'),
-                (f'/{old_app_name}/{old_msgflow_name}/enrichment', f'/{project_name}/enrichment'),
-                # Generic replacements
-                (old_app_name, project_name)
+            # 2. Update project references (simple patterns only)
+            project_patterns = [
+                ('AGENT2_App_Name', project_name),
+                (f'platform:/plugin/AGENT2_App_Name/', f'platform:/plugin/{project_name}/'),
+                (f'pluginId="AGENT2_App_Name"', f'pluginId="{project_name}"')
             ]
             
-            for old_pattern, new_pattern in path_patterns:
+            for old_pattern, new_pattern in project_patterns:
                 if old_pattern in updated_content:
                     updated_content = updated_content.replace(old_pattern, new_pattern)
-                    path_replacements += 1
-                    print(f"      ✅ Path: {old_pattern} → {new_pattern}")
+                    total_replacements += 1
+                    print(f"      ✅ Project: {old_pattern} → {new_pattern}")
             
-            total_replacements += path_replacements
+            # 3. Update GIF references
+            gif_pattern = f'{old_msgflow_name}.gif'
+            new_gif = f'{message_flow_base}.gif'
+            if gif_pattern in updated_content:
+                updated_content = updated_content.replace(gif_pattern, new_gif)
+                total_replacements += 1
+                print(f"      ✅ GIF: {gif_pattern} → {new_gif}")
             
-            # 7. Update Translation/Branding References
-            print(f"    🔧 Updating .msgflow branding references...")
-            branding_replacements = 0
-            
-            branding_patterns = [
-                (f'key="{old_msgflow_name}"', f'key="{message_flow_base}"'),
-                (f'bundleName="{old_msgflow_name}"', f'bundleName="{message_flow_base}"'),
-                (f'pluginId="{old_app_name}_Developer"', f'pluginId="{project_name}_Developer"'),
-                (f'pluginId="{old_app_name}"', f'pluginId="{project_name}"')
-            ]
-            
-            for old_pattern, new_pattern in branding_patterns:
-                if old_pattern in updated_content:
-                    updated_content = updated_content.replace(old_pattern, new_pattern)
-                    branding_replacements += 1
-                    print(f"      ✅ {old_pattern} → {new_pattern}")
-            
-            total_replacements += branding_replacements
-            
-            # 8. Update Resource/Icon Path References
-            print(f"    🔧 Updating .msgflow resource references...")
-            resource_replacements = 0
-
-            # Extract old app name (AGENT2_App_Name) - Fixed this line
-            old_app_pattern = re.search(r'(AGENT\d+_App_Name)', msgflow_content)
-            old_app_name = old_app_pattern.group(1) if old_app_pattern else "AGENT2_App_Name"
-
-            resource_patterns = [
-                (f'platform:/plugin/{old_app_name}/', f'platform:/plugin/{project_name}/'),
-                (f'resourceName="platform:/plugin/{old_app_name}/', f'resourceName="platform:/plugin/{project_name}/'),
-                (f'/{old_msgflow_name}.gif"', f'/{message_flow_base}.gif"')
-                #('AGENT2_Message_Flow.gif', f'{message_flow_base}.gif')
-            ]
-
-            for old_pattern, new_pattern in resource_patterns:
-                if old_pattern in updated_content:
-                    updated_content = updated_content.replace(old_pattern, new_pattern)
-                    resource_replacements += 1
-                    print(f"      ✅ Resource: {old_pattern} → {new_pattern}")
-
-            total_replacements += resource_replacements
+            # 4. Skip computeExpression updates (ESQL files keep original names)
+            print(f"      ℹ️ Skipped computeExpression updates (ESQL files not renamed)")
             
             # Summary
             if total_replacements > 0:
-                print(f"    🎯 Total .msgflow updates: {total_replacements}")
+                print(f"    🎯 Total updates: {total_replacements}")
             else:
                 print(f"    ℹ️ No references found to update")
             
             return updated_content
             
-        except UnicodeDecodeError as e:
-            print(f"      ⚠ Error: File encoding issue in {msgflow_file_path.name}: {e}")
-            # Try with different encoding
+        except UnicodeDecodeError:
+            # Try alternative encoding
             try:
                 with open(msgflow_file_path, 'r', encoding='cp1252') as f:
-                    msgflow_content = f.read()
-                print(f"      📄 Retrying with cp1252 encoding...")
-                return self._update_msgflow_references(msgflow_file_path, compute_mapping, message_flow_base)
-            except Exception as fallback_error:
-                print(f"      ⚠ Fallback encoding failed: {fallback_error}")
-                self.validation_errors.append(f"Msgflow encoding error: {msgflow_file_path.name}")
-                # Return original content as fallback
-                try:
-                    with open(msgflow_file_path, 'r', encoding='utf-8') as f:
-                        return f.read()
-                except:
-                    return ""
-        
-        except Exception as e:
-            print(f"      ⚠ Error updating msgflow references in {msgflow_file_path.name}: {e}")
-            self.validation_errors.append(f"Msgflow reference update failed: {msgflow_file_path.name}")
-            # Return original content as fallback
-            try:
-                with open(msgflow_file_path, 'r', encoding='utf-8') as f:
-                    return f.read()
-            except:
-                return ""
-            
-            # 2. NEW: Update Namespace References
-            print(f"    🔧 Updating .msgflow namespace references...")
-            namespace_replacements = 0
-            
-            # Extract old msgflow name from file path for namespace updates
-            old_msgflow_name = msgflow_file_path.stem  # Gets filename without extension
-            new_msgflow_name = message_flow_base
-            
-            # Update nsURI and nsPrefix
-            namespace_patterns = [
-                (f'nsURI="{old_msgflow_name}.msgflow"', f'nsURI="{new_msgflow_name}.msgflow"'),
-                (f'nsPrefix="{old_msgflow_name}.msgflow"', f'nsPrefix="{new_msgflow_name}.msgflow"')
-            ]
-            
-            for old_pattern, new_pattern in namespace_patterns:
-                if old_pattern in updated_content:
-                    updated_content = updated_content.replace(old_pattern, new_pattern)
-                    namespace_replacements += 1
-            
-            if namespace_replacements > 0:
-                print(f"      ✅ Updated {namespace_replacements} namespace reference(s)")
-            
-            # 3. NEW: Update XSL Stylesheet References
-            print(f"    🔧 Updating .msgflow stylesheet references...")
-            stylesheet_replacements = 0
-            
-            # Common XSL file mappings (based on the migration log patterns)
-            xsl_mappings = {
-                'AzureBlobToCDM.xsl': f'{message_flow_base}_BlobToCDM_Transform.xsl',
-                'CDMFreightInvoiceToDocPack.xsl': f'{message_flow_base}_CDMToDocPack_Transform.xsl',
-                'CDMShipmentInstructionToDockPack.xsl': f'{message_flow_base}_CDMToDockPack_Transform.xsl',
-                'CDM_DocumentMessage_To_EE_UniversalEvent.xsl': f'{message_flow_base}_CDMToUniversal_Transform.xsl',
-                'DocPackResponseToEnvelope.xsl': f'{message_flow_base}_DocPackResponseToEnvelope_Transform.xsl'
-            }
-            
-            for old_xsl, new_xsl in xsl_mappings.items():
-                # Update stylesheetName attributes
-                old_pattern = f'stylesheetName="{old_xsl}"'
-                new_pattern = f'stylesheetName="{new_xsl}"'
-                if old_pattern in updated_content:
-                    updated_content = updated_content.replace(old_pattern, new_pattern)
-                    stylesheet_replacements += 1
+                    return self._update_msgflow_references(msgflow_file_path, compute_mapping, message_flow_base)
+            except Exception:
+                print(f"      ❌ Encoding error in {msgflow_file_path.name}")
+                return msgflow_content
                 
-                # Update defaultValueLiteral for XSL files
-                old_pattern = f'defaultValueLiteral="{old_xsl}"'
-                new_pattern = f'defaultValueLiteral="{new_xsl}"'
-                if old_pattern in updated_content:
-                    updated_content = updated_content.replace(old_pattern, new_pattern)
-                    stylesheet_replacements += 1
-            
-            if stylesheet_replacements > 0:
-                print(f"      ✅ Updated {stylesheet_replacements} stylesheet reference(s)")
-            
-            # 4. NEW: Update Path References
-            print(f"    🔧 Updating .msgflow path references...")
-            path_replacements = 0
-            
-            # Derive project name from message_flow_base (e.g., CW1_IN_Document_SND -> EPIS_CW1_IN_Document_App)
-            project_name = f"EPIS_{message_flow_base}_App"
-            
-            # Path update patterns
-            path_patterns = [
-                # Windows-style paths
-                (f'AGENT2_App_Name\\AGENT2_Message_Flow\\enrichment', f'{project_name}\\enrichment'),
-                (f'AGENT2_App_Name\\enrichment\\AGENT2_Message_Flow', f'{project_name}\\enrichment'),
-                # Unix-style paths  
-                (f'/AGENT2_App_Name/enrichment/AGENT2_Message_Flow', f'/{project_name}/enrichment'),
-                (f'/AGENT2_App_Name/{old_msgflow_name}/enrichment', f'/{project_name}/enrichment'),
-                # Generic patterns
-                (f'AGENT2_App_Name/{old_msgflow_name}', f'{project_name}'),
-                (f'AGENT2_App_Name\\{old_msgflow_name}', f'{project_name}')
-            ]
-            
-            for old_pattern, new_pattern in path_patterns:
-                if old_pattern in updated_content:
-                    updated_content = updated_content.replace(old_pattern, new_pattern)
-                    path_replacements += 1
-            
-            if path_replacements > 0:
-                print(f"      ✅ Updated {path_replacements} path reference(s)")
-            
-            # 5. NEW: Update Translation/Branding References
-            print(f"    🔧 Updating .msgflow branding references...")
-            branding_replacements = 0
-            
-            # Translation and branding patterns
-            branding_patterns = [
-                (f'key="{old_msgflow_name}"', f'key="{new_msgflow_name}"'),
-                (f'bundleName="{old_msgflow_name}"', f'bundleName="{new_msgflow_name}"'),
-                (f'pluginId="AGENT2_App_Name_Developer"', f'pluginId="{project_name}_Developer"'),
-                (f'pluginId="AGENT2_App_Name"', f'pluginId="{project_name}"')
-            ]
-            
-            for old_pattern, new_pattern in branding_patterns:
-                if old_pattern in updated_content:
-                    updated_content = updated_content.replace(old_pattern, new_pattern)
-                    branding_replacements += 1
-            
-            if branding_replacements > 0:
-                print(f"      ✅ Updated {branding_replacements} branding reference(s)")
-            
-            # 6. NEW: Update Resource/Icon Path References
-            print(f"    🔧 Updating .msgflow resource references...")
-            resource_replacements = 0
-            
-            # Resource path patterns
-            resource_patterns = [
-                (f'platform:/plugin/AGENT2_App_Name/', f'platform:/plugin/{project_name}/'),
-                (f'resourceName="platform:/plugin/AGENT2_App_Name/', f'resourceName="platform:/plugin/{project_name}/')
-                
-            ]
-            
-            for old_pattern, new_pattern in resource_patterns:
-                if old_pattern in updated_content:
-                    updated_content = updated_content.replace(old_pattern, new_pattern)
-                    resource_replacements += 1
-            
-            if resource_replacements > 0:
-                print(f"      ✅ Updated {resource_replacements} resource reference(s)")
-            
-            # Summary
-            total_updates = (replacements_made + namespace_replacements + stylesheet_replacements + 
-                            path_replacements + branding_replacements + resource_replacements)
-            
-            if total_updates > 0:
-                print(f"    🎯 Total .msgflow updates: {total_updates}")
-            else:
-                print(f"    ℹ️ No additional references found to update")
-            
-            return updated_content
-            
-        except UnicodeDecodeError as e:
-            print(f"      ⚠ Error: File encoding issue in {msgflow_file_path.name}: {e}")
-            # Try with different encoding
-            try:
-                with open(msgflow_file_path, 'r', encoding='cp1252') as f:
-                    msgflow_content = f.read()
-                print(f"      📄 Retrying with cp1252 encoding...")
-                return self._update_msgflow_references(msgflow_file_path, compute_mapping, message_flow_base)
-            except Exception as fallback_error:
-                print(f"      ⚠ Fallback encoding failed: {fallback_error}")
-                self.validation_errors.append(f"Msgflow encoding error: {msgflow_file_path.name}")
-                # Return original content as fallback
-                try:
-                    with open(msgflow_file_path, 'r', encoding='utf-8') as f:
-                        return f.read()
-                except:
-                    return ""
-        
         except Exception as e:
-            print(f"      ⚠ Error updating msgflow references in {msgflow_file_path.name}: {e}")
-            self.validation_errors.append(f"Msgflow reference update failed: {msgflow_file_path.name}")
+            print(f"      ❌ Error updating {msgflow_file_path.name}: {e}")
             # Return original content as fallback
             try:
                 with open(msgflow_file_path, 'r', encoding='utf-8') as f:

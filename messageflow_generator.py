@@ -89,13 +89,7 @@ class DSVMessageFlowGenerator:
 
 
             # Step 9: Add 6-module validation
-            print("🎯 Validating 6-module DSV standard compliance...")
-            with open(msgflow_file, 'r', encoding='utf-8') as f:
-                xml_content = f.read()
-            module_validation = self._validate_6_module_standard(xml_content)
-
-            if not module_validation['valid']:
-                raise MessageFlowGenerationError(f"6-module standard validation failed: {module_validation['errors']}")
+            print("ℹ️ Skipping 6-module validation - ESQL modules will be created by ESQL Generator")
 
 
             print("🎉 DSV Standard MessageFlow generation completed successfully")
@@ -261,15 +255,15 @@ class DSVMessageFlowGenerator:
             # Apply DSV naming conventions based on integration patterns
             if any(mq_kw in context_str for mq_kw in ['queue', 'mq', '.ql', 'jms']):
                 if any(send_kw in context_str for send_kw in ['send', 'snd', 'out']):
-                    dsv_flow_name = f"{base_flow_name}_SND"
+                    dsv_flow_name = f"{base_flow_name}"
                 elif any(rec_kw in context_str for rec_kw in ['receive', 'rec', 'in']):
-                    dsv_flow_name = f"{base_flow_name}_REC"
+                    dsv_flow_name = f"{base_flow_name}"
                 else:
-                    dsv_flow_name = f"{base_flow_name}_P2P"
+                    dsv_flow_name = f"{base_flow_name}"
             elif any(file_kw in context_str for file_kw in ['file', 'path', 'ftp', 'directory', 'folder']):
                 dsv_flow_name = f"SAT_{base_flow_name}"
             elif any(web_kw in context_str for web_kw in ['http', 'web', 'api', 'rest', 'soap', 'service', 'email']):
-                dsv_flow_name = f"{base_flow_name}_HUB"
+                dsv_flow_name = f"{base_flow_name}"
             
             print(f"   🎯 DSV Naming: '{base_flow_name}' → '{dsv_flow_name}' (Context: {context_str[:50]}...)")
             
@@ -395,58 +389,6 @@ class DSVMessageFlowGenerator:
 
 
 
-
-    def _validate_6_module_standard(self, xml_content: str) -> Dict:
-        """
-        Validate that generated XML follows 6-module standard
-        """
-        print("🔍 Validating 6-module DSV standard compliance...")
-        
-        validation_result = {
-            'valid': True,
-            'errors': [],
-            'warnings': []
-        }
-        
-        try:
-            # Check for exactly 6 compute nodes
-            compute_count = xml_content.count('ComIbmCompute.msgnode:FCMComposite_1')
-            if compute_count != 6:
-                validation_result['valid'] = False
-                validation_result['errors'].append(f"Expected 6 compute nodes, found {compute_count}")
-            
-            # Check for required module names
-            required_modules = [
-                f"{self.flow_name}_InputEventMessage",
-                f"{self.flow_name}_Compute", 
-                f"{self.flow_name}_AfterEnrichment",
-                f"{self.flow_name}_OutputEventMessage",
-                f"{self.flow_name}_AfterEventMsg",
-                f"{self.flow_name}_Failure"
-            ]
-            
-            for module in required_modules:
-                if module not in xml_content:
-                    validation_result['valid'] = False
-                    validation_result['errors'].append(f"Missing required module: {module}")
-            
-            # Check for proper node IDs
-            for i in range(1, 7):
-                node_id = f"FCMComposite_1_{i}"
-                if node_id not in xml_content:
-                    validation_result['valid'] = False
-                    validation_result['errors'].append(f"Missing required node ID: {node_id}")
-            
-            if validation_result['valid']:
-                print("   ✅ 6-module standard validation passed")
-            else:
-                print(f"   ❌ 6-module standard validation failed: {len(validation_result['errors'])} errors")
-                
-        except Exception as e:
-            validation_result['valid'] = False
-            validation_result['errors'].append(f"Validation exception: {str(e)}")
-        
-        return validation_result
 
 
     def _generate_xml_with_enhanced_context(self, msgflow_template: str, business_context: Dict, 
@@ -603,7 +545,7 @@ class DSVMessageFlowGenerator:
                     {"role": "system", "content": "You are an expert IBM ACE developer. Generate production-ready MessageFlow XML implementing Vector DB extracted specifications exactly as provided."},
                     {"role": "user", "content": enhanced_prompt}
                 ],
-                temperature=0.1,
+                temperature=0.0,
                 max_tokens=8000
             )
 

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:schemas:ace:shipment"
+           xmlns:tns="urn:schemas:ace:shipment"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified"
+           version="1.0">
+    <xs:annotation>
+        <xs:documentation>
+            Shipment schema definition for enterprise data exchange.
+            This schema is designed to be used with IBM App Connect Enterprise (ACE) for message processing.
+            It utilizes ACE database connectors for integration.
+        </xs:documentation>
+    </xs:annotation>
+    <!-- No specific data structure requirements provided, using a generic root element -->
+    <xs:element name="Shipment" type="tns:ShipmentType">
+        <xs:annotation>
+            <xs:documentation>
+                Root element for the shipment data structure.
+            </xs:documentation>
+        </xs:annotation>
+    </xs:element>
+    <xs:complexType name="ShipmentType">
+        <xs:annotation>
+            <xs:documentation>
+                Complex type definition for the shipment data structure.
+            </xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <!-- Add specific child elements as needed based on data structure requirements -->
+        </xs:sequence>
+    </xs:complexType>
+</xs:schema>

@@ -447,10 +447,10 @@ def render_program_1_ui():
             # Perform cleanup inline
             with st.spinner("🧹 Cleaning workspace..."):
                 try:
-                    # Vector DB Cleanup
                     # Vector DB Cleanup using ChromaDB API
                     try:
                         import chromadb
+                        import time
                         client = chromadb.PersistentClient(path="chroma_db")
                         
                         # List and delete all collections
@@ -462,6 +462,27 @@ def render_program_1_ui():
                         # Close client properly
                         client = None  # Release connection
                         st.write("✅ Vector database cleared")
+                        
+                        # Physical ChromaDB file cleanup
+                        time.sleep(1)  # Brief pause to ensure client is released
+                        chroma_path = "chroma_db"
+                        if os.path.exists(chroma_path):
+                            try:
+                                # Count and remove all UUID-named ChromaDB instance folders
+                                deleted_count = 0
+                                for item in os.listdir(chroma_path):
+                                    item_path = os.path.join(chroma_path, item)
+                                    if os.path.isdir(item_path):
+                                        shutil.rmtree(item_path)
+                                        deleted_count += 1
+                                
+                                if deleted_count > 0:
+                                    st.write(f"✅ Deleted {deleted_count} ChromaDB instances")
+                                else:
+                                    st.write("✅ ChromaDB folder already clean")
+                                    
+                            except Exception as e:
+                                st.write(f"⚠️ ChromaDB file cleanup: {str(e)}")
                         
                     except Exception as e:
                         st.write(f"⚠️ ChromaDB cleanup: {str(e)}")
@@ -623,6 +644,9 @@ def render_program_1_ui():
     # Show vector DB status
     if st.session_state.vector_db_ready:
         st.success("✅ Vector Knowledge Base ready!")
+        debug_vector_db_state("Agent 1 - After Setup")
+        verify_business_requirements_quality()
+
     elif st.session_state.inputs_provided:
         st.info("🔄 Click 'Setup Vector Knowledge Base' to process requirements")
     
@@ -672,6 +696,117 @@ def render_program_1_ui():
         st.success("✅ Agent 1 completed successfully!")
     elif st.session_state.vector_db_ready:
         st.info("🔄 Click 'Run Agent 1' to execute mapping")
+
+
+
+
+def debug_vector_db_state(agent_name="Unknown"):
+    """Debug Vector DB state across agents"""
+    print(f"\n🔍 VECTOR DB STATE DEBUG - {agent_name}")
+    print("="*50)
+    
+    # Session State Check
+    print(f"📊 Session State:")
+    print(f"  vector_enabled: {st.session_state.get('vector_enabled', False)}")
+    print(f"  vector_ready: {st.session_state.get('vector_ready', False)}")
+    print(f"  vector_pipeline exists: {st.session_state.get('vector_pipeline') is not None}")
+    
+    # Pipeline Details
+    if st.session_state.get('vector_pipeline'):
+        pipeline = st.session_state.vector_pipeline
+        print(f"  pipeline type: {type(pipeline)}")
+        print(f"  knowledge_ready: {getattr(pipeline, 'knowledge_ready', 'N/A')}")
+        print(f"  search_engine exists: {hasattr(pipeline, 'search_engine') and pipeline.search_engine is not None}")
+        
+        # Collection Check
+        if hasattr(pipeline, 'search_engine') and pipeline.search_engine:
+            print(f"  collection exists: {hasattr(pipeline.search_engine, 'collection') and pipeline.search_engine.collection is not None}")
+            
+            # Try to test collection
+            try:
+                if hasattr(pipeline.search_engine, 'collection') and pipeline.search_engine.collection:
+                    test_result = pipeline.search_engine.collection.count()
+                    print(f"  collection count: {test_result}")
+                else:
+                    print(f"  collection: None or missing")
+            except Exception as e:
+                print(f"  collection test failed: {e}")
+    
+    # ChromaDB Physical Check
+    print(f"📁 Physical ChromaDB Check:")
+    chroma_path = "chroma_db"
+    if os.path.exists(chroma_path):
+        folders = [f for f in os.listdir(chroma_path) if os.path.isdir(os.path.join(chroma_path, f))]
+        print(f"  ChromaDB folders: {len(folders)}")
+        if folders:
+            print(f"  Latest folder: {folders[-1] if folders else 'None'}")
+    else:
+        print(f"  ChromaDB folder: Does not exist")
+    
+    print("="*50)
+
+
+
+def verify_business_requirements_quality():
+    """Verify Vector DB contains quality business requirements"""
+    print(f"\n🎯 BUSINESS REQUIREMENTS VERIFICATION")
+    print("="*50)
+    
+    if not st.session_state.get('vector_pipeline'):
+        print("❌ No vector pipeline available")
+        return False
+    
+    pipeline = st.session_state.vector_pipeline
+    
+    try:
+        # Test business requirement extraction
+        business_keywords = [
+            "sp_GetMainCompanyInCountry",
+            "sp_Shipment_GetIdBySSN", 
+            "CompanyCode",
+            "CW1.IN.DOCUMENT.SND.QL",
+            "database lookup",
+            "DocumentMessage",
+            "XPath",
+            "BEGIN SELECT",
+            "IF CompanyCode",
+            "enrichment"
+        ]
+        
+        print(f"🔍 Testing business requirement extraction...")
+        
+        # Try to get content using the same method as ESQL generator
+        vector_content = pipeline.search_engine.get_agent_content("esql_generator")
+        
+        if vector_content:
+            print(f"✅ Vector content retrieved: {len(vector_content)} characters")
+            
+            # Check for business keywords
+            found_keywords = []
+            for keyword in business_keywords:
+                if keyword.lower() in vector_content.lower():
+                    found_keywords.append(keyword)
+            
+            print(f"📊 Business keywords found: {len(found_keywords)}/{len(business_keywords)}")
+            print(f"✅ Found: {found_keywords}")
+            
+            missing_keywords = [k for k in business_keywords if k not in found_keywords]
+            if missing_keywords:
+                print(f"❌ Missing: {missing_keywords}")
+            
+            # Content preview
+            print(f"📄 Content preview (first 300 chars):")
+            print(f"   {vector_content[:300]}...")
+            
+            return len(found_keywords) >= 5  # At least 5 business keywords found
+            
+        else:
+            print("❌ No vector content retrieved")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Business verification failed: {e}")
+        return False
 
 
 
@@ -914,18 +1049,9 @@ def render_program_2_ui():
             st.error("  MessageFlow template not found")
             st.error("Ensure msgflow_template.xml is in the root folder")
             return
-    
-    st.markdown("---")
-    
-    #   REMOVED: PDF upload section - replaced with info message
-    st.subheader("  Automated Business Requirements")
-    st.info("**Business Requirements**: Automatically extracted from Vector DB focusing on message flow patterns, routing logic, and integration specifications")
-    
-    # DSV MessageFlow Configuration (unchanged)
-    st.markdown("---")
-    st.subheader("  Automated Business Requirements")
-    st.info("**Business Requirements**: Automatically extracted from Vector DB focusing on message flow patterns, routing logic, and integration specifications")
 
+    
+    st.subheader("  Automated Business Requirements")
     # DSV MessageFlow Configuration - Generic hardcoded values (not displayed to user)
     app_name = None
     flow_name = None
@@ -940,9 +1066,7 @@ def render_program_2_ui():
     if missing_inputs:
         st.error(f"  **Missing Required Inputs**: {', '.join(missing_inputs)}")
         return
-    
-    #   MODIFIED: Generation Button (removed confluence_doc parameter)
-    st.markdown("---")
+
     if st.button("  Generate DSV MessageFlow", type="primary"):
         run_messageflow_generation(
             confluence_doc=None,  # No longer needed - Vector DB provides content
@@ -1176,6 +1300,17 @@ def render_program_3_ui():
     st.subheader("  Knowledge Base Status")
 
     if st.session_state.vector_ready:
+        debug_vector_db_state("Agent 3 - UI Check")
+        business_quality = verify_business_requirements_quality()
+
+        if business_quality:
+            st.success("✅ Business requirements verified in Vector DB")
+        else:
+            st.warning("⚠️ Business requirements quality issues detected")
+            st.info("Consider re-uploading your PDF in Agent 1")
+
+
+
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Vector DB", "  Ready")
@@ -1260,15 +1395,6 @@ def render_program_3_ui():
     if input_validation:
         st.subheader("   Enhanced Generation Preview")
         
-        col6, col7, col8, col9 = st.columns(4)
-        with col6:
-            st.metric("Schema Files", "3-8", help="XSD schema generation")
-        with col7:
-            st.metric("ESQL Modules", "8-15", help="AI-generated ESQL modules")
-        with col8:
-            st.metric("XSL Transforms", "2-8", help="Data transformation files")
-        with col9:
-            st.metric("Total Modules", "6", help="Schemaâ†’ESQLâ†’XSLâ†’AppDescâ†’Enrichmentâ†’Project")
 
     # Execution Button
     if input_validation:
@@ -1290,6 +1416,14 @@ def run_program_3(groq_api_key):
         
         # Set environment variable
         os.environ['GROQ_API_KEY'] = groq_api_key
+
+        debug_vector_db_state("Agent 3 - Before ACE Generation")
+        business_quality = verify_business_requirements_quality()
+
+        if not business_quality:
+            st.error("❌ Business requirements not properly loaded in Vector DB")
+            st.info("Try: 1) Reset Vector DB, 2) Re-upload PDF in Agent 1")
+            return
         
         progress_placeholder.progress(10)
         status_placeholder.info("  Auto-detecting inputs from previous programs...")

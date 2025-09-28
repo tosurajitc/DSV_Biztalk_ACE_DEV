@@ -14,6 +14,33 @@ class VectorOptimizedPipeline:
         self.knowledge_ready = False
         self.pdf_processor = PDFProcessor()
     
+
+
+    def fix_collection_issue(self):
+        """Fix the collection not being available issue"""
+        try:
+            if (hasattr(self, 'search_engine') and 
+                self.search_engine and 
+                not hasattr(self.search_engine, 'collection')):
+                
+                print("🔧 Fixing missing collection in search_engine")
+                
+                # Link the collection from vector_store to search_engine
+                if (hasattr(self, 'vector_store') and 
+                    self.vector_store and 
+                    hasattr(self.vector_store, 'collection')):
+                    
+                    self.search_engine.collection = self.vector_store.collection
+                    print("✅ Collection linked successfully")
+                    return True
+                else:
+                    print("❌ No vector_store.collection found")
+                    return False
+        except Exception as e:
+            print(f"Failed to fix collection: {e}")
+            return False
+
+
     def setup_knowledge_base(self, uploaded_file):
         """
         Setup vector knowledge base from uploaded PDF file

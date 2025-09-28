@@ -1,0 +1,275 @@
+{
+  "info": {
+    "name": "Logistics Document Processing",
+    "description": "Testing of document processing in logistics domain",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "45a6f7c5-93b4-4f9f-8a6d-1313f9f9f9f9",
+    "updatedAt": "2024-09-16T14:30:00.000Z"
+  },
+  "item": [
+    {
+      "name": "Test Customer Format to CDM Document Transformation",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/xml"
+          },
+          {
+            "key": "Authorization",
+            "value": "Basic QWxhZGprakdFRReGR5ZGF3"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "<CustomerFormat><Document>Example Document</Document></CustomerFormat>"
+        },
+        "url": {
+          "raw": "https://ace-server-airandsea.cw1-generic.in-server.com/EPIS_CW1_IN_Document_App",
+          "host": [
+            "ace-server-airandsea"
+          ],
+          "path": [
+            "cw1-generic",
+            "in-server",
+            "com",
+            "EPIS_CW1_IN_Document_App"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Customer format is transformed to CDM document', function () {",
+              "  pm.expect(pm.response.text()).to.include('CDM Document');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test CDM Document to CW1 Universal Event Format Transformation",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/xml"
+          },
+          {
+            "key": "Authorization",
+            "value": "Basic QWxhZGprakdFRReGR5ZGF3"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "<CDMDocument><Event>Example Event</Event></CDMDocument>"
+        },
+        "url": {
+          "raw": "https://ace-server-airandsea.cw1-generic.in-server.com/EPIS_CW1_IN_Document_App",
+          "host": [
+            "ace-server-airandsea"
+          ],
+          "path": [
+            "cw1-generic",
+            "in-server",
+            "com",
+            "EPIS_CW1_IN_Document_App"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('CDM document is transformed to CW1 universal event format', function () {",
+              "  pm.expect(pm.response.text()).to.include('CW1 Universal Event Format');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test Database Lookup for CW1 Shipment",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/xml"
+          },
+          {
+            "key": "Authorization",
+            "value": "Basic QWxhZGprakdFRReGR5ZGF3"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "<DatabaseLookup><Shipment>Example Shipment</Shipment></DatabaseLookup>"
+        },
+        "url": {
+          "raw": "https://ace-server-airandsea.cw1-generic.in-server.com/EPIS_CW1_IN_Document_App",
+          "host": [
+            "ace-server-airandsea"
+          ],
+          "path": [
+            "cw1-generic",
+            "in-server",
+            "com",
+            "EPIS_CW1_IN_Document_App"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Database lookup returns CW1 shipment', function () {",
+              "  pm.expect(pm.response.text()).to.include('CW1 Shipment');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test Database Lookup for IsPublished Flag",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/xml"
+          },
+          {
+            "key": "Authorization",
+            "value": "Basic QWxhZGprakdFRReGR5ZGF3"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "<DatabaseLookup><IsPublished>Example IsPublished</IsPublished></DatabaseLookup>"
+        },
+        "url": {
+          "raw": "https://ace-server-airandsea.cw1-generic.in-server.com/EPIS_CW1_IN_Document_App",
+          "host": [
+            "ace-server-airandsea"
+          ],
+          "path": [
+            "cw1-generic",
+            "in-server",
+            "com",
+            "EPIS_CW1_IN_Document_App"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Database lookup returns IsPublished flag', function () {",
+              "  pm.expect(pm.response.text()).to.include('IsPublished Flag');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test Database Lookup for CW1BrokerageId",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/xml"
+          },
+          {
+            "key": "Authorization",
+            "value": "Basic QWxhZGprakdFRReGR5ZGF3"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "<DatabaseLookup><CW1BrokerageId>Example CW1BrokerageId</CW1BrokerageId></DatabaseLookup>"
+        },
+        "url": {
+          "raw": "https://ace-server-airandsea.cw1-generic.in-server.com/EPIS_CW1_IN_Document_App",
+          "host": [
+            "ace-server-airandsea"
+          ],
+          "path": [
+            "cw1-generic",
+            "in-server",
+            "com",
+            "EPIS_CW1_IN_Document_App"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Database lookup returns CW1BrokerageId', function () {",
+              "  pm.expect(pm.response.text()).to.include('CW1BrokerageId');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Test Target Recipient Id Enrichment",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/xml"
+          },
+          {
+            "key": "Authorization",
+            "value": "Basic QWxhZGprakdFRReGR5ZGF3"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "<TargetRecipientId>Example TargetRecipientId</TargetRecipientId>"
+        },
+        "url": {
+          "raw": "https://ace-server-airandsea.cw1-generic.in-server.com/EPIS_CW1_IN_Document_App",
+          "host": [
+            "ace-server-airandsea"
+          ],
+          "path": [
+            "cw1-generic",
+            "in-server",
+            "com",
+            "EPIS_CW1_IN_Document_App"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Target recipient id is enriched', function () {",
+              "  pm.expect(pm.response.text()).to.include('TargetRecipientId');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

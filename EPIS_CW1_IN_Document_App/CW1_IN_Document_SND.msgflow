@@ -30,7 +30,7 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
     </eStructuralFeatures>
     
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.STYLESHEET_NAME" name="STYLESHEET_NAME" defaultValueLiteral="CW1_IN_Document_SND_CDMToUniversal_Transform.xsl">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.STYLESHEET_NAME" name="STYLESHEET_NAME" defaultValueLiteral="DefaultTransform.xsl">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -46,7 +46,7 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
     </eStructuralFeatures>
     
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.BEFORE_INPUT_DIR" name="BEFORE_INPUT_DIR" defaultValueLiteral="EPIS_CW1_IN_Document_SND_App\CW1_IN_Document_SND_SND\enrichment">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.BEFORE_INPUT_DIR" name="BEFORE_INPUT_DIR" defaultValueLiteral="EPIS_CW1_IN_Document_SND_App\CW1_IN_Document_SND\enrichment">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -54,7 +54,7 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AFTER_INPUT_DIR" name="AFTER_INPUT_DIR" defaultValueLiteral="EPIS_CW1_IN_Document_SND_App\CW1_IN_Document_SND_SND\enrichment">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AFTER_INPUT_DIR" name="AFTER_INPUT_DIR" defaultValueLiteral="EPIS_CW1_IN_Document_SND_App\CW1_IN_Document_SND\enrichment">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -70,163 +70,101 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
 
-    <!-- Branding and Graphics -->
-    <translation xmi:type="utility:TranslatableString" key="CW1_IN_Document_SND" bundleName="CW1_IN_Document_SND" pluginId="EPIS_CW1_IN_Document_SND_App_Developer"/>
+    <!-- Graphic Resources -->
     <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_CW1_IN_Document_SND_App/icons/full/obj16/CW1_IN_Document_SND.gif"/>
     <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_CW1_IN_Document_SND_App/icons/full/obj16/CW1_IN_Document_SND.gif"/>
-    
+
     <composition>
-      <!-- ================================================== -->
-      <!-- IBM ACE INTEGRATION NODES -->
-      <!-- ================================================== -->
-      
-      <!-- 1. MQ INPUT SUBFLOW - Entry point for messages -->
+      <!-- 1. MQInput Node -->
       <nodes xmi:type="epis_common_flows_lib_MQInput.subflow:FCMComposite_1" xmi:id="FCMComposite_1_1" location="-201,103">
         <translation xmi:type="utility:ConstantString" string="MQInput"/>
       </nodes>
 
-      <!-- 2. CW1_IN_Document_SND_InputEventMessage - Input validation & event capture -->
-      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_2" 
-             location="30,299" 
+      <!-- 2. Compute Node - CW1_IN_Document_SND_InputEventMessage -->
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_2" location="30,299" 
              computeExpression="esql://routine/#CW1_IN_Document_SND_InputEventMessage.Main">
         <translation xmi:type="utility:ConstantString" string="InputEventMessage"/>
       </nodes>
 
-      <!-- 3. CW1_IN_Document_SND_Compute - Main business logic and transformations -->
-      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_3" 
-             location="216,222" 
+      <!-- 3. Compute Node - CW1_IN_Document_SND_Compute -->
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_3" location="216,222" 
              computeExpression="esql://routine/#CW1_IN_Document_SND_Compute.Main">
-        <translation xmi:type="utility:ConstantString" string="Compute"/>
+        <translation xmi:type="utility:ConstantString" string="MainCompute"/>
       </nodes>
 
-      <!-- 4. CW1_IN_Document_SND_AfterEnrichment - Post-enrichment processing -->
-      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_4" 
-             location="376,68" 
+      <!-- 4. Compute Node - CW1_IN_Document_SND_AfterEnrichment -->
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_4" location="596,45" 
              computeExpression="esql://routine/#CW1_IN_Document_SND_AfterEnrichment.Main">
         <translation xmi:type="utility:ConstantString" string="AfterEnrichment"/>
       </nodes>
 
-      <!-- 5. CW1_IN_Document_SND_OutputEventMessage - Output processing & event capture -->
-      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_5" 
-             location="596,45" 
+      <!-- 5. Compute Node - CW1_IN_Document_SND_OutputEventMessage -->
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_5" location="763,212" 
              computeExpression="esql://routine/#CW1_IN_Document_SND_OutputEventMessage.Main">
         <translation xmi:type="utility:ConstantString" string="OutputEventMessage"/>
       </nodes>
 
-      <!-- 6. CW1_IN_Document_SND_AfterEventMsg - After transformation event processing -->
-      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_6" 
-             location="760,418" 
+      <!-- 6. Compute Node - CW1_IN_Document_SND_AfterEventMsg -->
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_6" location="966,59" 
              computeExpression="esql://routine/#CW1_IN_Document_SND_AfterEventMsg.Main">
-        <translation xmi:type="utility:ConstantString" string="AfterEventMsg"/>
+        <translation xmi:type="utility:ConstantString" string="AfterEventMessage"/>
+      </nodes>
+
+      <!-- SOAP Request Node -->
+      <nodes xmi:type="ComIbmSOAPRequest.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_7" location="1277,66" 
+             wsdlFileName="eAdapterStreamedService.wsdl" selectedPortType="eAdapterStreamedService" 
+             selectedBinding="BasicHttpBinding_eAdapterStreamedService" selectedOperation="SendStream" 
+             selectedPort="BasicHttpBinding_eAdapterStreamedService" useHTTPTransport="true" 
+             webServiceURL="https://eadapterqa.dsv.com/eAdapterStreamedService.svc" sslProtocol="TLS">
+        <translation xmi:type="utility:ConstantString" string="SOAPRequest"/>
       </nodes>
 
       <!-- Failure Node -->
-      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_7" 
-             location="1490,200" 
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_8" location="1490,344" 
              computeExpression="esql://routine/#CW1_IN_Document_SND_Failure.Main">
         <translation xmi:type="utility:ConstantString" string="FailureHandler"/>
       </nodes>
 
-      <!-- SOAP Request Node -->
-      <nodes xmi:type="ComIbmSOAPRequest.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_8" 
-             location="1277,66" 
-             wsdlFileName="eAdapterStreamedService.wsdl" 
-             selectedPortType="eAdapterStreamedService" 
-             selectedBinding="BasicHttpBinding_eAdapterStreamedService" 
-             selectedOperation="SendStream" 
-             selectedPort="BasicHttpBinding_eAdapterStreamedService" 
-             useHTTPTransport="true" 
-             webServiceURL="https://eadapterqa.dsv.com/eAdapterStreamedService.svc" 
-             sslProtocol="TLS">
-        <translation xmi:type="utility:ConstantString" string="SOAPRequest"/>
+      <!-- Error Queue Node -->
+      <nodes xmi:type="epis_common_flows_lib_MQOutput.subflow:FCMComposite_1" xmi:id="FCMComposite_1_9" location="1490,200" 
+             NonCDM="_ROUTE_NON_CDM_" STATIC_OUTPUT_QUEUE="ERROR.QUEUE" IS_OUTPUT_MQ="false">
+        <translation xmi:type="utility:ConstantString" string="ErrorQueue"/>
       </nodes>
 
-      <!-- ================================================== -->
-      <!-- FLOW CONNECTIONS - Complete Message Flow -->
-      <!-- ================================================== -->
-
-      <!-- PRIMARY FLOW PATH -->
-      <!-- MQInput → InputEventMessage -->
-      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_104" 
+      <!-- PRIMARY FLOW CONNECTIONS -->
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_1" 
                   targetNode="FCMComposite_1_2" sourceNode="FCMComposite_1_1" 
-                  sourceTerminalName="OutTerminal.Output1" targetTerminalName="InTerminal.in"/>
-
-      <!-- InputEventMessage → Compute -->
-      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_105" 
+                  sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_2" 
                   targetNode="FCMComposite_1_3" sourceNode="FCMComposite_1_2" 
                   sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
-
-      <!-- Compute → AfterEnrichment -->
-      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_2" 
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_3" 
                   targetNode="FCMComposite_1_4" sourceNode="FCMComposite_1_3" 
-                  sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.Input"/>
-
-      <!-- AfterEnrichment → OutputEventMessage -->
-      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_7" 
+                  sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_4" 
                   targetNode="FCMComposite_1_5" sourceNode="FCMComposite_1_4" 
-                  sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.in"/>
-
-      <!-- OutputEventMessage → AfterEventMsg -->
-      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_1" 
+                  sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_5" 
                   targetNode="FCMComposite_1_6" sourceNode="FCMComposite_1_5" 
                   sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
-
-      <!-- AfterEventMsg → SOAPRequest -->
-      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_3" 
-                  targetNode="FCMComposite_1_8" sourceNode="FCMComposite_1_6" 
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_6" 
+                  targetNode="FCMComposite_1_7" sourceNode="FCMComposite_1_6" 
                   sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
 
       <!-- ERROR HANDLING CONNECTIONS -->
-      <!-- SOAPRequest → FailureHandler -->
-      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_9" 
-                  targetNode="FCMComposite_1_7" sourceNode="FCMComposite_1_8" 
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_7" 
+                  targetNode="FCMComposite_1_8" sourceNode="FCMComposite_1_7" 
                   sourceTerminalName="OutTerminal.fault" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_8" 
+                  targetNode="FCMComposite_1_9" sourceNode="FCMComposite_1_8" 
+                  sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.Input"/>
 
     </composition>
 
-    <!-- ================================================== -->
     <!-- PROPERTY ORGANIZATION -->
-    <!-- ================================================== -->
     <propertyOrganizer>
-      <propertyDescriptor groupName="Group.COMPRESSION" configurable="true" userDefined="true" describedAttribute="Property.COMPRESS_MSG_SIZE">
-        <propertyName xmi:type="utility:TranslatableString" key="Property.COMPRESS_MSG_SIZE" bundleName="epis/common/flows/lib/MQInput" pluginId="EPIS_CommonFlows_Lib"/>
-        <propertyDescriptor groupName="Group.INPUT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.MRMessageDomainPropertyEditor" describedAttribute="Property.INPUT_MSG_PARSING">
-          <propertyName xmi:type="utility:TranslatableString" key="Property.INPUT_MSG_PARSING" bundleName="epis/common/flows/lib/MQInput" pluginId="EPIS_CommonFlows_Lib"/>
-          <propertyDescriptor groupName="Group.INPUT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.mq.MQQueueNameEditor" configurable="true" describedAttribute="Property.INPUT_QUEUE">
-            <propertyName xmi:type="utility:TranslatableString" key="Property.INPUT_QUEUE" bundleName="epis/common/flows/lib/MQInput" pluginId="EPIS_CommonFlows_Lib"/>
-            <propertyDescriptor groupName="Group.BEFORE_ENRICHMENT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileReadNodeFilePropertyEditor" configurable="true" describedAttribute="Property.BEFORE_FILE_NAME">
-              <propertyName xmi:type="utility:TranslatableString" key="Property.BEFORE_FILE_NAME" bundleName="ComIbmFileRead" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
-              <propertyDescriptor groupName="Group.BEFORE_ENRICHMENT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileNodesBrowseDirPropertyEditor" configurable="true" describedAttribute="Property.BEFORE_INPUT_DIR">
-                <propertyName xmi:type="utility:TranslatableString" key="Property.BEFORE_INPUT_DIR" bundleName="ComIbmFileRead" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
-              </propertyDescriptor>
-            </propertyDescriptor>
-          </propertyDescriptor>
-        </propertyDescriptor>
-      </propertyDescriptor>
+      <!-- Add properties here if needed -->
     </propertyOrganizer>
-
-    <!-- ================================================== -->
-    <!-- ATTRIBUTE LINKS - Property Bindings -->
-    <!-- ================================================== -->
-    <attributeLinks promotedAttribute="Property.COMPRESS_MSG_SIZE" overriddenNodes="FCMComposite_1_1">
-      <overriddenAttribute href="epis/common/flows/lib/MQInput.subflow#Property.COMPRESS_MSG_SIZE"/>
-    </attributeLinks>
-    
-    <attributeLinks promotedAttribute="Property.INPUT_MSG_PARSING" overriddenNodes="FCMComposite_1_1">
-      <overriddenAttribute href="epis/common/flows/lib/MQInput.subflow#Property.INPUT_MSG_PARSING"/>
-    </attributeLinks>
-    
-    <attributeLinks promotedAttribute="Property.INPUT_QUEUE" overriddenNodes="FCMComposite_1_1">
-      <overriddenAttribute href="epis/common/flows/lib/MQInput.subflow#Property.INPUT_QUEUE"/>
-    </attributeLinks>
-    
-    <attributeLinks promotedAttribute="Property.BEFORE_FILE_NAME" overriddenNodes="FCMComposite_1_2">
-      <overriddenAttribute href="epis/enrichment/lib/EPIS_MessageEnrichment.subflow#Property.filenamePattern"/>
-    </attributeLinks>
-    
-    <attributeLinks promotedAttribute="Property.BEFORE_INPUT_DIR" overriddenNodes="FCMComposite_1_2">
-      <overriddenAttribute href="epis/enrichment/lib/EPIS_MessageEnrichment.subflow#Property.inputDirectory"/>
-    </attributeLinks>
 
     <stickyBoard/>
   </eClassifiers>

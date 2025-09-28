@@ -1,28 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="urn:schemas:ace:envelope"
-           xmlns:ace="urn:schemas:ace:envelope"
+           xmlns:tns="urn:schemas:ace:envelope"
            elementFormDefault="qualified">
-  <xs:annotation>
-    <xs:documentation>
-      Envelope Schema: Data structure definition for enterprise data exchange.
-    </xs:documentation>
-  </xs:annotation>
-  <xs:element name="Envelope" type="ace:EnvelopeType">
     <xs:annotation>
-      <xs:documentation>
-        Root element of the Envelope schema.
-      </xs:documentation>
+        <xs:documentation>
+            Envelope schema for enterprise data exchange.
+        </xs:documentation>
     </xs:annotation>
-  </xs:element>
-  <xs:complexType name="EnvelopeType">
-    <xs:annotation>
-      <xs:documentation>
-        Complex type definition for the Envelope element.
-      </xs:documentation>
-    </xs:annotation>
-    <xs:sequence>
-      <!-- Add child elements as required by the data structure -->
-    </xs:sequence>
-  </xs:complexType>
+    <xs:element name="Envelope" type="tns:EnvelopeType">
+        <xs:annotation>
+            <xs:documentation>
+                Root element for the Envelope data structure.
+            </xs:documentation>
+        </xs:annotation>
+    </xs:element>
+    <xs:complexType name="EnvelopeType">
+        <xs:annotation>
+            <xs:documentation>
+                Complex type definition for the Envelope data structure.
+            </xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <!-- Add elements and attributes as per data structure requirements -->
+        </xs:sequence>
+    </xs:complexType>
 </xs:schema>
