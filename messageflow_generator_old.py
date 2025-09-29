@@ -207,49 +207,99 @@ class DSVMessageFlowGenerator:
         return enhanced_components
     
     
-        
-    def _process_template_placeholders(self, template_content: str, component_data: Dict, flow_details: Dict) -> str:
-        """Process template by preserving structure and replacing placeholders only"""
-        
-        # Get standard ESQL module definitions
-        esql_modules = self._enforce_6_module_standard(flow_details['flow_name'])
-        
-        # Build complete replacement map
-        replacements = {
-            '{FLOW_NAME}': flow_details['flow_name'],
-            '{APP_NAME}': flow_details['app_name'],
-            '{INPUT_QUEUE_NAME}': component_data.get('input_queue', f"{flow_details['flow_name']}.INPUT.QL"),
-            '{XSL_STYLESHEET_NAME}': component_data.get('stylesheet', 'DefaultTransform.xsl'),
-            '{SOAP_SERVICE_URL}': component_data.get('soap_url', 'https://eadapterqa.dsv.com/eAdapterStreamedService.svc'),
-            '{WSDL_FILE_NAME}': component_data.get('wsdl_file', 'eAdapterStreamedService.wsdl'),
-            '{LOCAL_ENRICHMENT_PATH}': f"{flow_details['app_name']}\\{flow_details['flow_name']}\\enrichment"
-        }
-        
-        # Start with template content
-        processed = template_content
-        
-        # Replace all placeholders
-        for placeholder, value in replacements.items():
-            processed = processed.replace(placeholder, value)
-        
-        # Update ALL compute expressions to use correct flow_name prefix
-        # Match pattern: computeExpression="esql://routine/#ANYTHING_BEFORE_FLOWNAME...
-        import re
-        
-        # Replace module names in compute expressions - preserve the suffix (e.g., _InputEventMessage, _Compute)
-        patterns = [
-            (r'(computeExpression="esql://routine/#)[^_]+(_InputEventMessage\.Main")', rf'\1{flow_details["flow_name"]}\2'),
-            (r'(computeExpression="esql://routine/#)[^_]+(_Compute\.Main")', rf'\1{flow_details["flow_name"]}\2'),
-            (r'(computeExpression="esql://routine/#)[^_]+(_AfterEnrichment\.Main")', rf'\1{flow_details["flow_name"]}\2'),
-            (r'(computeExpression="esql://routine/#)[^_]+(_OutputEventMessage\.Main")', rf'\1{flow_details["flow_name"]}\2'),
-            (r'(computeExpression="esql://routine/#)[^_]+(_AfterEventMsg\.Main")', rf'\1{flow_details["flow_name"]}\2'),
-            (r'(computeExpression="esql://routine/#)[^_]+(_Failure\.Main")', rf'\1{flow_details["flow_name"]}\2'),
-        ]
-        
-        for pattern, replacement in patterns:
-            processed = re.sub(pattern, replacement, processed)
-        
-        return processed
+    
+    def _process_template_placeholders(self, template: str, component_data: Dict, flow_details: Dict) -> str:
+        """Replace template placeholders with actual values from JSON data"""
+        try:
+            processed_template = template
+            
+            # Extract primary component for queue and endpoint info
+            primary_component = None
+            component_mappings = component_data.get('component_mappings', [])
+            
+            # Find the primary/highest priority component
+            for mapping in component_mappings:
+                if mapping.get('implementation_priority') == 'high':
+                    primary_component = mapping
+                    break
+            
+            # Fallback to first component if no high priority found
+            if not primary_component and component_mappings:
+                primary_component = component_mappings[0]
+            
+            # DSV Flow Naming Convention - Apply suffix based on integration pattern
+            base_flow_name = flow_details.get('flow_name', 'DefaultFlow')
+            dsv_flow_name = base_flow_name
+            
+            # Collect integration context from available component data
+            integration_context = []
+            if primary_component:
+                integration_details = primary_component.get('ace_components', {}).get('integration_details', {})
+                if integration_details.get('input_queue'):
+                    integration_context.append(integration_details['input_queue'].lower())
+                if integration_details.get('output_endpoint'):
+                    integration_context.append(integration_details['output_endpoint'].lower())
+                if primary_component.get('component_type'):
+                    integration_context.append(primary_component['component_type'].lower())
+            
+            # Add context from all components for better pattern detection
+            for mapping in component_mappings:
+                integration_details = mapping.get('ace_components', {}).get('integration_details', {})
+                if integration_details.get('input_queue'):
+                    integration_context.append(integration_details['input_queue'].lower())
+                if integration_details.get('output_endpoint'):
+                    integration_context.append(integration_details['output_endpoint'].lower())
+            
+            context_str = ' '.join(integration_context)
+            
+            # Apply DSV naming conventions based on integration patterns
+            if any(mq_kw in context_str for mq_kw in ['queue', 'mq', '.ql', 'jms']):
+                if any(send_kw in context_str for send_kw in ['send', 'snd', 'out']):
+                    dsv_flow_name = f"{base_flow_name}"
+                elif any(rec_kw in context_str for rec_kw in ['receive', 'rec', 'in']):
+                    dsv_flow_name = f"{base_flow_name}"
+                else:
+                    dsv_flow_name = f"{base_flow_name}"
+            elif any(file_kw in context_str for file_kw in ['file', 'path', 'ftp', 'directory', 'folder']):
+                dsv_flow_name = f"SAT_{base_flow_name}"
+            elif any(web_kw in context_str for web_kw in ['http', 'web', 'api', 'rest', 'soap', 'service', 'email']):
+                dsv_flow_name = f"{base_flow_name}"
+            
+            print(f"   🎯 DSV Naming: '{base_flow_name}' → '{dsv_flow_name}' (Context: {context_str[:50]}...)")
+            
+            # Default replacement values
+            replacements = {
+                '{FLOW_NAME}': dsv_flow_name,
+                '{APP_NAME}': flow_details.get('app_name', 'DefaultApp'),
+                '{INPUT_QUEUE_NAME}': 'CW1.IN.DOCUMENT.SND.QL',  # Default from documentation
+                '{XSL_STYLESHEET_NAME}': 'DefaultTransform.xsl',
+                '{LOCAL_ENRICHMENT_PATH}': f"/{flow_details.get('app_name', 'DefaultApp')}/enrichment/{flow_details.get('flow_name', 'DefaultFlow')}"
+            }
+            
+            # Extract enhanced values from primary component if available
+            if primary_component:
+                integration_details = primary_component.get('ace_components', {}).get('integration_details', {})
+                
+                # Update with actual values from JSON
+                if integration_details.get('input_queue'):
+                    replacements['{INPUT_QUEUE_NAME}'] = integration_details['input_queue']
+                
+                # Find XSL stylesheet name from primary artifact
+                primary_artifact = primary_component.get('ace_components', {}).get('primary_artifact', {})
+                if primary_artifact.get('type') == 'xsl_transform' and primary_artifact.get('name'):
+                    replacements['{XSL_STYLESHEET_NAME}'] = primary_artifact['name']
+            
+            # Apply replacements
+            for placeholder, value in replacements.items():
+                if placeholder in processed_template:
+                    processed_template = processed_template.replace(placeholder, value)
+                    print(f"   🔄 {placeholder} → {value}")
+            
+            return processed_template
+            
+        except Exception as e:
+            print(f"   ⚠️ Template placeholder processing failed: {e}")
+            return template  # Return original template if processing fails
         
 
     def _analyze_source_destination_protocols(self, component_data: Dict, business_context: Dict) -> Dict:
@@ -340,65 +390,193 @@ class DSVMessageFlowGenerator:
 
 
 
+
     def _generate_xml_with_enhanced_context(self, msgflow_template: str, business_context: Dict, 
                                         component_context: List[Dict], biztalk_maps: List[Dict], 
                                         component_data: Dict, output_dir: str, 
                                         standard_modules: List[Dict]) -> str:
-        """Generate MessageFlow XML by preserving template structure"""
+        """Generate MessageFlow XML - 100% Vector DB + LLM based, NO HARDCODED FALLBACKS"""
         try:
+            # Process template placeholders with JSON data
             flow_details = {
                 'flow_name': self.flow_name,
                 'app_name': self.app_name
             }
-            
-            print("  Analyzing source and destination protocols...")
+            print("  🔍 Analyzing source and destination protocols...")
             protocol_analysis = self._analyze_source_destination_protocols(component_data, business_context)
-            print(f"    Detected: Source={protocol_analysis['source_protocol']}, Dest={protocol_analysis['dest_protocol']}, Flow Type={protocol_analysis['flow_type']}")
+            print(f"    ✅ Detected: Source={protocol_analysis['source_protocol']}, Dest={protocol_analysis['dest_protocol']}, Flow Type={protocol_analysis['flow_type']}")
 
-            # Process template - this preserves ALL nodes and connections
-            print("  Processing template with placeholder replacement...")
-            processed_xml = self._process_template_placeholders(msgflow_template, component_data, flow_details)
-            print("  Template placeholders processed")
+            processed_template = self._process_template_placeholders(msgflow_template, component_data, flow_details)
+            print(f"  ✅ Template placeholders processed")      
+                  
+            # Import prompt function from prompt_module.py
+            from prompt_module import get_msgflow_generation_prompt
             
-            # Validate the processed XML structure
-            try:
-                root = ET.fromstring(processed_xml)
+            # Extract Vector DB specifications - PURE VECTOR DB CONTENT
+            technical_specs = business_context.get('technical_specs', {})
+            integration_flows = business_context.get('integration_flows', {})
+            message_flow_specs = business_context.get('message_flow_specifications', {})
+            business_ctx = business_context.get('business_context', {})
+            
+            # Validate Vector DB content exists
+            if not technical_specs or not integration_flows:
+                raise MessageFlowGenerationError("Vector DB processing failed - missing technical specifications or integration flows")
+            
+            # Extract Vector DB derived patterns and logic
+            message_flow_patterns = technical_specs.get('message_flow_patterns', [])
+            routing_logic = technical_specs.get('routing_logic', [])
+            integration_patterns = integration_flows.get('integration_patterns', [])
+            
+            if not message_flow_patterns or not routing_logic:
+                raise MessageFlowGenerationError("Vector DB extraction failed - missing essential message flow patterns or routing logic")
+            
+            print(f"   🎯 Vector DB technical specs: {len(message_flow_patterns)} flow patterns, {len(routing_logic)} routing rules")
+            
+            # Process component context for prompt
+            components_info = []
+            for comp in component_context[:5]:
+                components_info.append({
+                    'biztalk_component': comp.get('biztalk_component', 'Unknown'),
+                    'component_type': comp.get('component_type', 'Unknown'),
+                    'ace_library': comp.get('primary_artifact', {}).get('name', 'Unknown'),
+                    'business_purpose': comp.get('business_purpose', ''),
+                    'input_queue': comp.get('input_queue', ''),
+                    'output_endpoint': comp.get('output_endpoint', ''),
+                    'database_operations': comp.get('database_operations', []),
+                    'transformation_logic': comp.get('transformation_logic', '')
+                })
+            
+            # Extract queue and service details from Vector DB - NO DEFAULTS
+            queue_configs = message_flow_specs.get('queue_configurations', [])
+            service_endpoints = message_flow_specs.get('service_endpoints', [])
+            
+            # Determine primary queue and service from Vector DB or components - NO HARDCODED FALLBACKS
+            primary_input_queue = None
+            primary_output_service = None
+            
+            if queue_configs:
+                primary_input_queue = queue_configs[0]
+            elif components_info:
+                for comp in components_info:
+                    if comp.get('input_queue'):
+                        primary_input_queue = comp['input_queue']
+                        break
+            
+            if service_endpoints:
+                primary_output_service = service_endpoints[0]
+            elif components_info:
+                for comp in components_info:
+                    if comp.get('output_endpoint'):
+                        primary_output_service = comp['output_endpoint']
+                        break
+            
+            # Validate we have essential connection details
+            if not primary_input_queue or not primary_output_service:
+                raise MessageFlowGenerationError("Vector DB/Component processing failed - missing input queue or output service configuration")
+            
+            # Create business specification from Vector DB extraction
+
+            vector_business_spec = self._create_safe_business_spec(
+                message_flow_patterns, routing_logic, integration_patterns, 
+                technical_specs, business_ctx
+            )
+            
+            # Create prompt using Vector DB derived values
+            module_context = self._get_6_module_context_for_llm(standard_modules)
+            
+            prompt = get_msgflow_generation_prompt(
+                flow_name=self.flow_name,
+                project_name=self.app_name,
+                input_queue=primary_input_queue,
+                output_service=primary_output_service,
+                error_queue='ERROR.QUEUE',  # Standard error queue
+                esql_modules=standard_modules,  # ← CHANGED FROM [] TO standard_modules
+                msgflow_template=processed_template,
+                confluence_spec=vector_business_spec,
+                components_info=components_info
+            )
+            
+            # Add module context to prompt
+            prompt = module_context + "\n\n" + prompt
+            
+            enhanced_prompt = f"""{prompt}
+
+        ## VECTOR DB TECHNICAL SPECIFICATIONS (PRIMARY AUTHORITY):
+        **Message Flow Patterns:** {', '.join(message_flow_patterns[:5]) if message_flow_patterns else 'ERROR: No patterns extracted'}
+        **Routing Logic:** {', '.join(routing_logic[:5]) if routing_logic else 'ERROR: No routing logic extracted'}
+        **Integration Patterns:** {', '.join(integration_patterns[:3]) if integration_patterns else 'ERROR: No integration patterns'}
+        **Queue Configurations:** {', '.join(queue_configs[:3]) if queue_configs else 'ERROR: No queue configs'}
+        **Service Endpoints:** {', '.join(service_endpoints[:3]) if service_endpoints else 'ERROR: No endpoints'}
+
+        ## PRIORITY HIERARCHY:
+        1. **HIGHEST PRIORITY**: Vector DB specifications (technical requirements)
+        2. **MEDIUM PRIORITY**: Template structure (adaptable framework) 
+        3. **LOWEST PRIORITY**: Standard conventions (override if needed)
+
+        ## CRITICAL REQUIREMENTS (Vector DB Driven):
+        1. Use the template as ADAPTABLE foundation - modify structure to meet Vector DB requirements
+        2. **MANDATORY**: Implement Vector DB routing logic: {routing_logic[:3] if routing_logic else ['ERROR: No routing logic']}
+        3. **MANDATORY**: Apply Vector DB message flow patterns: {message_flow_patterns[:3] if message_flow_patterns else ['ERROR: No patterns']}
+        4. Preserve namespace declarations unless Vector DB requires changes
+        5. Create node connections based on Vector DB specifications, not template defaults
+        6. Include propertyOrganizer and stickyBoard elements unless Vector DB specifies otherwise
+        7. Start event - implement per Vector DB requirements (may override no-transformation rule)
+        8. Ensure subflow uniqueness per Vector DB patterns
+        9. End event placement per Vector DB flow specifications
+
+        ## TEMPLATE ADAPTATION RULES:
+        - If Vector DB specifies different node types than template → USE Vector DB requirements
+        - If Vector DB routing conflicts with template connections → FOLLOW Vector DB routing
+        - If Vector DB requires additional nodes not in template → ADD them
+        - If Vector DB specifies different message patterns → IMPLEMENT Vector DB patterns
+        - Template serves as structural starting point only
+
+        ## VALIDATION REQUIREMENTS:
+        ✅ All Vector DB routing logic implemented
+        ✅ All Vector DB message patterns applied  
+        ✅ Node connections match Vector DB specifications
+        ✅ Flow structure supports Vector DB technical requirements
+
+        Generate complete MessageFlow XML implementing Vector DB specifications as PRIMARY authority:"""
+            # LLM generation
+            response = self.client.chat.completions.create(
+                model=self.groq_model,
+                messages=[
+                    {"role": "system", "content": "You are an expert IBM ACE developer. Generate production-ready MessageFlow XML implementing Vector DB extracted specifications exactly as provided."},
+                    {"role": "user", "content": enhanced_prompt}
+                ],
+                temperature=0.0,
+                max_tokens=8000
+            )
+
+            # Token tracking
+            if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
+                st.session_state.token_tracker.manual_track(
+                    agent="messageflow_generator",
+                    operation="vector_messageflow_generation",
+                    model=self.groq_model,
+                    input_tokens=response.usage.prompt_tokens,
+                    output_tokens=response.usage.completion_tokens,
+                    flow_name=getattr(self, 'flow_name', 'messageflow')
+                )
+            
+            xml_content = response.choices[0].message.content.strip()
+            
+            # Extract XML content - NO FALLBACKS, fail if invalid
+            xml_start = xml_content.find('<?xml')
+            xml_end = xml_content.find('</ecore:EPackage>')
+
+            if xml_start == -1:
+                xml_start = xml_content.find('<ecore:EPackage')
+                if xml_start == -1:
+                    raise MessageFlowGenerationError("LLM failed to generate valid XML structure")
+                xml_content = '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_content[xml_start:]
+                xml_end = xml_content.find('</ecore:EPackage>')
+            
+            if xml_end == -1:
+                raise MessageFlowGenerationError("LLM generated incomplete XML - missing closing tag")
                 
-                # Find all nodes - handle namespace
-                all_nodes = root.findall('.//{http://www.ibm.com/wbi/2005/eflow}nodes')
-                if not all_nodes:
-                    all_nodes = root.findall('.//nodes')
-                
-                # Find all connections
-                all_connections = root.findall('.//{http://www.ibm.com/wbi/2005/eflow}connections')
-                if not all_connections:
-                    all_connections = root.findall('.//connections')
-                
-                node_count = len(all_nodes)
-                connection_count = len(all_connections)
-                
-                print(f"  Generated MessageFlow: {node_count} nodes, {connection_count} connections")
-                
-                # Validate minimum requirements
-                if node_count < 11:
-                    raise MessageFlowGenerationError(f"Insufficient nodes: {node_count} (expected 11+ nodes including subflows)")
-                
-                if connection_count < 10:
-                    print(f"  Warning: Only {connection_count} connections found (expected 10+)")
-                
-                # Track token usage for consistency
-                if 'token_tracker' in st.session_state:
-                    st.session_state.token_tracker.manual_track(
-                        agent="messageflow_generator",
-                        operation="template_processing",
-                        model="template_parser",
-                        input_tokens=len(msgflow_template) // 4,
-                        output_tokens=len(processed_xml) // 4,
-                        flow_name=self.flow_name
-                    )
-                    
-            except ET.ParseError as e:
-                raise MessageFlowGenerationError(f"Generated invalid XML structure: {e}")
+            xml_content = xml_content[xml_start:xml_end + len('</ecore:EPackage>')]
             
             # Save MessageFlow file
             os.makedirs(output_dir, exist_ok=True)
@@ -406,15 +584,15 @@ class DSVMessageFlowGenerator:
             msgflow_file = os.path.join(output_dir, msgflow_filename)
             
             with open(msgflow_file, 'w', encoding='utf-8') as f:
-                f.write(processed_xml)
+                f.write(xml_content)
             
-            print(f"  MessageFlow saved: {msgflow_file}")
+            print(f"   ✅ Vector DB optimized MessageFlow generated: {msgflow_file}")
             return msgflow_file
             
         except MessageFlowGenerationError:
-            raise
+            raise  # Re-raise our specific errors
         except Exception as e:
-            raise MessageFlowGenerationError(f"MessageFlow generation failed: {str(e)}")
+            raise MessageFlowGenerationError(f"Vector DB MessageFlow generation failed: {str(e)}")
         
 
 

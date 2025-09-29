@@ -195,7 +195,7 @@
       <!-- MQInput → StartEvent -->
       <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_104" 
                   targetNode="FCMComposite_1_2" sourceNode="FCMComposite_1_7" 
-                  sourceTerminalName="OutTerminal.Output1" targetTerminalName="InTerminal.in"/>
+                  sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.in"/>
 
       <!-- StartEvent → MQInput (loop back for processing) -->
       <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_105" 

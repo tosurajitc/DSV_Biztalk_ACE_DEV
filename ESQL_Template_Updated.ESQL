@@ -3,7 +3,7 @@
 INPUT EVENT MESSAGE TEMPLATE - METADATA ONLY
 ================================================================================
 */
-
+BROKER SCHEMA MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE
 CREATE COMPUTE MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE__InputEventMessage
 	CREATE FUNCTION Main() RETURNS BOOLEAN
 	BEGIN
@@ -70,6 +70,7 @@ COMPUTE TEMPLATE - FULL BUSINESS LOGIC
 ================================================================================
 */
 
+BROKER SCHEMA MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE
 CREATE COMPUTE MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE__Compute
 	CREATE FUNCTION Main() RETURNS BOOLEAN
 	BEGIN
@@ -83,18 +84,8 @@ CREATE COMPUTE MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE__C
 		
 		-- ✅ BUSINESS DATA EXTRACTION: Extract business identifiers and data
 		SET dataInfo.mainIdentifier = InputRoot.XMLNSC.[<].*:_BUSINESS_ENTITY_.*:_BUSINESS_IDENTIFIER_;
-		SET dataInfo.customReference1 = InputRoot.XMLNSC.[<].*:_CUSTOM_REF_PATH_1_;
-		SET dataInfo.customReference2 = InputRoot.XMLNSC.[<].*:_CUSTOM_REF_PATH_2_;
-		SET dataInfo.customProperty1 = InputRoot.XMLNSC.[<].*:_CUSTOM_PROP_PATH_1_;
-		SET dataInfo.customProperty2 = InputRoot.XMLNSC.[<].*:_CUSTOM_PROP_PATH_2_;
 		
-		-- ✅ DATABASE OPERATIONS: Business enrichment and lookups
-		-- Database operations will be injected here based on Vector DB requirements
-		-- Example: Company lookup, enrichment procedures, validation checks
-		
-		-- ✅ BUSINESS TRANSFORMATIONS: Message format conversions
-		-- Message transformation logic will be injected here
-		-- Example: CDM to CW1 format conversion, field mappings
+		-- [[[INSERT_BUSINESS_LOGIC_HERE]]]
 		
 		-- ✅ STANDARD MESSAGE PROCESSING
 		SET OutputRoot = NULL;
@@ -125,7 +116,7 @@ END MODULE;
 PROCESSING TEMPLATE - VALIDATION AND ROUTING ONLY
 ================================================================================
 */
-
+BROKER SCHEMA MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE
 CREATE COMPUTE MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE__Processing
 	CREATE FUNCTION Main() RETURNS BOOLEAN
 	BEGIN
@@ -174,7 +165,7 @@ END MODULE;
 FAILURE/ERROR HANDLING TEMPLATE
 ================================================================================
 */
-
+BROKER SCHEMA MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE
 CREATE COMPUTE MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE__FailureEventMessage
 	CREATE FUNCTION Main() RETURNS BOOLEAN
 	BEGIN

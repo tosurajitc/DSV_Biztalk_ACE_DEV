@@ -355,16 +355,23 @@ NEVER use these forbidden data types:
         section_content = template_content[start_pos:end_pos]
         lines = section_content.split('\n')
         
-        # Find actual ESQL code (starts with CREATE COMPUTE MODULE)
+        # Find actual ESQL code (starts with BROKER SCHEMA MODULE)
         esql_start_line = None
         for i, line in enumerate(lines):
-            if line.strip().startswith('CREATE COMPUTE MODULE'):
+            if line.strip().startswith('BROKER SCHEMA MODULE'):
                 esql_start_line = i
                 break
-        
+
         if esql_start_line is None:
-            raise Exception(f"No 'CREATE COMPUTE MODULE' found in {template_type} template section")
-        
+            # Fallback to CREATE COMPUTE MODULE if BROKER SCHEMA not found
+            for i, line in enumerate(lines):
+                if line.strip().startswith('CREATE COMPUTE MODULE'):
+                    esql_start_line = i
+                    break
+
+        if esql_start_line is None:
+            raise Exception(f"No 'BROKER SCHEMA MODULE' or 'CREATE COMPUTE MODULE' found in {template_type} template section")
+
         selected_template = '\n'.join(lines[esql_start_line:]).strip()
         
         # Step 4: Extract naming components from naming_convention.json - FULLY DYNAMIC
@@ -392,7 +399,7 @@ NEVER use these forbidden data types:
         flow_type = flow_parts[-1]      # Extract from message_flow_name
         
         # Step 5: Replace template placeholders with dynamic values
-        placeholder = "_SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE__"
+        placeholder = "_SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE"
         dynamic_name = f"{system1}_{msg_type}_{flow_process}_{system2}_{flow_type}"
         
         # Replace main placeholder with dynamic naming
@@ -475,72 +482,92 @@ NEVER use these forbidden data types:
                     f"-- ✅ ROUTING LOGIC: Conditional routing based on message content{routing_block}"
                 )
         
-        # Step 7: Clean final ESQL code - remove remaining placeholders
-        esql_code = re.sub(r'_[A-Z_]+_', '', esql_code)  # Remove any remaining placeholders
-        
-        # Step 8: Validate final structure
-        if not esql_code.strip().startswith('CREATE COMPUTE MODULE'):
-            raise Exception(f"Generated ESQL does not start with 'CREATE COMPUTE MODULE'")
-        
-        if not esql_code.strip().endswith('END MODULE;'):
-            raise Exception(f"Generated ESQL does not end with 'END MODULE;'")
-        
-        return esql_code
+        # Step 7: Auto-fix BROKER SCHEMA if missing (APPLIES TO ALL TYPES)
+        esql_code = self._ensure_broker_schema(esql_code, module_name)
 
+        # Step 8: Validate final structure with BROKER SCHEMA requirement (APPLIES TO ALL TYPES)
+        lines = esql_code.strip().split('\n')
+
+        # Check Line 1: Must start with BROKER SCHEMA
+        if not lines[0].strip().startswith('BROKER SCHEMA'):
+            raise Exception(f"Generated ESQL must start with 'BROKER SCHEMA' on line 1")
+
+        # Check Line 2: Must have CREATE COMPUTE MODULE
+        if len(lines) < 2 or not lines[1].strip().startswith('CREATE COMPUTE MODULE'):
+            raise Exception(f"Generated ESQL must have 'CREATE COMPUTE MODULE' on line 2")
+
+        # Check ending
+        if not esql_code.strip().endswith('END MODULE;'):
+            raise Exception(f"Generated ESQL must end with 'END MODULE;'")
+
+        return esql_code
+    
 
 
     def _get_compute_module_prompt(self, module_req: Dict, module_name: str) -> str:
-        """Generate prompt instructing LLM to use template for Compute module with comprehensive business logic"""
+        """
+        Generate business logic code that will be DIRECTLY inserted into template
+        NEW STRATEGY: Generate the business code separately, clearly marked for insertion
+        """
         
-        # Extract COMPREHENSIVE business data (Compute gets everything)
         business_logic = module_req.get('business_logic', {})
         database_operations = module_req.get('database_operations', [])
         transformations = module_req.get('transformations', [])
         message_structure = module_req.get('message_structure', {})
         
-        # Enhanced business data for comprehensive processing
-        enhanced_business_logic = {
-            **business_logic,
-            'module_type': 'COMPUTE',
-            'comprehensive_processing': True,
-            'interface_name': message_structure.get('interface_name', 'DYNAMIC_INTERFACE'),
-            'target_application': message_structure.get('target_application', 'DYNAMIC_TARGET'),
-            'input_format': message_structure.get('input_format', 'XML'),
-            'has_business_transformations': len(transformations) > 0,
-            'xpath_mappings': message_structure.get('xpath_mappings', [])
-        }
+        # Build complete business logic as a single code block
+        business_code_block = ""
         
-        return f"""
+        # Add database operations
+        if database_operations:
+            business_code_block += "\n\t\t-- DATABASE ENRICHMENT OPERATIONS\n"
+            for idx, db_op in enumerate(database_operations[:6], 1):
+                procedure = db_op.get('procedure', f'sp_Operation{idx}')
+                description = db_op.get('description', 'Database lookup')
+                business_code_block += f"\t\t-- {description}\n"
+                business_code_block += f"\t\tDECLARE result{idx} CHARACTER;\n"
+                business_code_block += f"\t\tSET result{idx} = PASSTHRU(\n"
+                business_code_block += f"\t\t\t'CALL {procedure}(?, ?)',\n"
+                business_code_block += f"\t\t\tInputRoot.XMLNSC.*:Header.*:CompanyCode,\n"
+                business_code_block += f"\t\t\tInputRoot.XMLNSC.*:Header.*:CountryCode\n"
+                business_code_block += f"\t\t);\n"
+                business_code_block += f"\t\tSET OutputRoot.XMLNSC.*:Result{idx} = result{idx};\n\n"
+        
+        # Add transformations
+        if transformations:
+            business_code_block += "\n\t\t-- MESSAGE TRANSFORMATIONS\n"
+            for idx, transform in enumerate(transformations[:5], 1):
+                source = transform.get('source_field', f'SourceField{idx}')
+                target = transform.get('target_field', f'TargetField{idx}')
+                business_code_block += f"\t\t-- Transform: {source} -> {target}\n"
+                business_code_block += f"\t\tSET OutputRoot.XMLNSC.*:{target} = InputRoot.XMLNSC.*:{source};\n\n"
+        
+        # If no business logic, add passthrough
+        if not database_operations and not transformations:
+            business_code_block = "\n\t\t-- Direct passthrough - no business logic required\n\t\tSET OutputRoot = InputRoot;\n"
 
-        ### COMPUTE MODULE - COMPREHENSIVE BUSINESS LOGIC:
-        - **Template Type**: 'generic' 
-        - **Module Name**: {module_name} (NO .esql extension)
-        - **Purpose**: Comprehensive business transformation and processing
 
-        ### COMPREHENSIVE Business Data Extraction (ALL business logic for Compute):
-        {json.dumps(enhanced_business_logic, indent=2)}
+        print(f"\n🔍 DEBUG: _get_compute_module_prompt for {module_name}")
+        print(f"   📊 database_operations length: {len(database_operations)}")
+        print(f"   📊 transformations length: {len(transformations)}")
+        print(f"   📊 business_code_block length: {len(business_code_block)}")
+        print(f"   📝 business_code_block preview (first 200 chars):")
+        print(f"      {business_code_block[:200]}")    
+        
+        prompt = f"""
+            Find the marker line in the template:
+            -- [[[INSERT_BUSINESS_LOGIC_HERE]]]
 
-        ### Message Structure Context (Dynamic for 1000+ flows):
-        {json.dumps(message_structure, indent=2)}
+            Replace that ONE line with this exact code:
+            {business_code_block}
 
-        ### Database Operations (NO stored procedures in compute nodes):
-        {json.dumps(database_operations, indent=2)}
-
-        ### Transformation Requirements (ALL transformations):
-        {json.dumps(transformations, indent=2)}
-
-        ### COMPUTE MODULE RESPONSIBILITIES:
-        - Extract ALL business logic: {len(database_operations)} database operations, {len(transformations)} transformations
-        - Interface: {enhanced_business_logic.get('interface_name', 'DYNAMIC_INTERFACE')}
-        - Target: {enhanced_business_logic.get('target_application', 'DYNAMIC_TARGET')}
-        - Format: {enhanced_business_logic.get('input_format', 'XML')}
-        - XPath mappings: {len(enhanced_business_logic.get('xpath_mappings', []))}
-
-        ### ENHANCEMENT COMPLIANCE:
-        - Business requirement alignment through comprehensive data extraction
-        - Dynamic for 1000+ different flows  
-        - Preserve template structure while enhancing with business logic
-        """
+            RULES:
+            1. Only replace the marker line
+            2. Do not modify anything else
+            3. Return the complete template with marker replaced
+            """
+        
+        return prompt
 
 
     def _get_event_module_prompt(self, module_req: Dict, module_type: str) -> str:
@@ -1073,7 +1100,15 @@ NEVER use these forbidden data types:
             # Remove any markdown code blocks if present
             esql_content = re.sub(r'```esql\n?', '', esql_content)
             esql_content = re.sub(r'```\n?', '', esql_content)
-            
+            esql_content = self._clean_esql_content(esql_content)
+
+            # Extract module name from requirements
+            module_name = module_requirements.get('name', '')
+
+            # Auto-fix: Add BROKER SCHEMA if missing
+            esql_content = self._ensure_broker_schema(esql_content, module_name)
+
+
             return esql_content
             
         except Exception as e:
@@ -1624,24 +1659,15 @@ Return ONLY the ESQL code:"""
                         generation_response = self.groq_client.chat.completions.create(
                             model=self.groq_model,
                             messages=[
-                                {"role": "system", "content": "You are an expert ESQL template enhancer. Your task is to enhance ESQL templates while preserving their exact structure. FORBIDDEN: Never use CALL statements or direct procedure calls - they are prohibited. Use SET statements instead of CALL statements. Always preserve the template infrastructure exactly as provided."},
-                                {"role": "user", "content": f"""You MUST use this exact template as your starting point:
+                                {"role": "system", "content": "You are an ESQL code editor. Your only task is to find the marker '-- [[[INSERT_BUSINESS_LOGIC_HERE]]]' in the template and replace that single line with the code provided. Do not interpret, modify, or enhance the code. Just perform the replacement and return the result."},
+                                {"role": "user", "content": f"""Here is the complete ESQL template:
 
-                        {template_foundation}
+                                    {template_foundation}
 
-                        CRITICAL: The above template is your BASE. You must ENHANCE it, not replace it.
+                                    Task: {generation_prompt}
 
-                        Enhancement Instructions:
-                        {generation_prompt}
-
-                        RULES:
-                        1. Start with the exact template above
-                        2. Only modify the Main() function business logic section
-                        3. NEVER change the template structure, procedures, or ending
-                        4. The output MUST end with exactly: 'END MODULE;'
-                        5. Return the complete enhanced template
-
-                        OUTPUT: Return the complete enhanced template with your modifications."""}
+                                    CRITICAL: Return the ENTIRE template from CREATE COMPUTE MODULE to END MODULE; 
+                                    with the modifications applied. Do not omit any lines from the original template."""}
                             ],
                             temperature=0.1,
                             max_tokens=4000
@@ -1681,14 +1707,30 @@ Return ONLY the ESQL code:"""
                     esql_content = re.sub(r'```[\w]*\n?', '', esql_content)
                     esql_content = re.sub(r'\n?```\s*$', '', esql_content)
                     esql_content = self._clean_esql_content(esql_content)
+
+                    # Auto-fix: Add BROKER SCHEMA MODULE if missing
+                    esql_content = self._ensure_broker_schema(esql_content, module_name)
+
+                    # Validate ESQL format compliance with BROKER SCHEMA requirement
+                    lines = esql_content.strip().split('\n')
                     
-                    # Validate ESQL format compliance (strict validation maintained)
-                    if not esql_content.startswith('CREATE COMPUTE MODULE'):
-                        raise Exception(f"ESQL format violation: {module_name} must start with 'CREATE COMPUTE MODULE'")
+                    # Check Line 1: Must start with BROKER SCHEMA (with or without MODULE keyword)
+                    if not lines[0].strip().startswith('BROKER SCHEMA'):
+                        raise Exception(f"ESQL format violation: {module_name} must start with 'BROKER SCHEMA' on line 1")
                     
+                    # Check Line 2: Must have CREATE COMPUTE MODULE with module name
+                    if len(lines) < 2 or not lines[1].strip().startswith('CREATE COMPUTE MODULE'):
+                        raise Exception(f"ESQL format violation: {module_name} must have 'CREATE COMPUTE MODULE {module_name}' on line 2")
+                    
+                    # Verify module name appears in line 2
+                    if module_name not in lines[1]:
+                        raise Exception(f"ESQL format violation: Module name '{module_name}' not found in CREATE COMPUTE MODULE declaration on line 2")
+                    
+                    # Check ending
                     if not esql_content.rstrip().endswith('END MODULE;'):
                         raise Exception(f"ESQL format violation: {module_name} must end with 'END MODULE;'")
                     
+                    # Check for forbidden symbols
                     if '@' in esql_content:
                         raise Exception(f"ESQL format violation: {module_name} contains forbidden '@' symbols")
 
@@ -1949,6 +1991,36 @@ Return ONLY the ESQL code:"""
         cleaned_content = stripped_content.strip()
         
         return cleaned_content
+
+
+
+    def _ensure_broker_schema(self, esql_content: str, module_name: str) -> str:
+        """
+        Automatically add BROKER SCHEMA line if missing.
+        Extracts base flow name from module_name (e.g., CW1_IN_Document_SND_Compute -> CW1_IN_Document_SND)
+        """
+        lines = esql_content.strip().split('\n')
+        
+        # Extract base flow name from module_name
+        suffixes = ['_Compute', '_InputEventMessage', '_OutputEventMessage', 
+                    '_AfterEnrichment', '_AfterEventMsg', '_Failure']
+        
+        base_flow_name = module_name
+        for suffix in suffixes:
+            if module_name.endswith(suffix):
+                base_flow_name = module_name[:-len(suffix)]
+                break
+        
+        # Construct correct BROKER SCHEMA line
+        broker_line = f'BROKER SCHEMA {base_flow_name}'
+        
+        # Check if BROKER SCHEMA is present on line 1
+        if not lines[0].strip().startswith('BROKER SCHEMA'):
+            # BROKER SCHEMA is missing - prepend it
+            esql_content = broker_line + '\n' + esql_content
+        
+        return esql_content
+
 
 
 # Helper function for integration

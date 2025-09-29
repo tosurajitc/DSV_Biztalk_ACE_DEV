@@ -345,8 +345,9 @@ class XSLGenerator:
                     )
                 
                 xsl_content = response.choices[0].message.content.strip()
+                xsl_content = self._clean_markdown_blocks(xsl_content)  # ← CLEANUP: Remove ```xsl and ``` markers
                 self.llm_generation_calls += 1
-                
+
                 generated_xsl_files.append({
                     'filename': f"{transform_name}.xsl",
                     'content': xsl_content,
@@ -361,6 +362,24 @@ class XSLGenerator:
         
         print(f"  ✅ All XSL transformations generated: {len(generated_xsl_files)} files")
         return generated_xsl_files
+    
+    
+
+    def _clean_markdown_blocks(self, content: str) -> str:
+        """
+        Remove markdown code block markers from LLM-generated content
+        Handles: ```xsl, ```xml, or plain ``` markers
+        """
+        # Remove opening markers: ```xsl, ```xml, or ```
+        content = re.sub(r'^```(?:xsl|xml)?\s*\n?', '', content, flags=re.MULTILINE)
+        
+        # Remove closing markers: ```
+        content = re.sub(r'\n?```\s*$', '', content, flags=re.MULTILINE)
+        
+        # Remove any lingering ``` in the middle (just in case)
+        content = re.sub(r'\n```\n', '\n', content)
+        
+        return content.strip()
 
 
     
