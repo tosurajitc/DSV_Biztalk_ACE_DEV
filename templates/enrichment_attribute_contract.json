@@ -1,0 +1,90 @@
+{
+  "template_version": "1.0_universal",
+  "description": "Truly flow-independent XSL template for all 1000 flows",
+  
+  "esql_contract": {
+    "description": "ESQL Compute module MUST populate these attributes before XSL transformation",
+    "required_attributes": [
+      {
+        "attribute": "@CompanyCode",
+        "type": "string",
+        "populated_by": "ESQL Compute",
+        "description": "Company code (from enrichment or fallback logic)",
+        "mandatory": true
+      },
+      {
+        "attribute": "@eAdapterRecipientId",
+        "type": "string",
+        "populated_by": "ESQL Compute",
+        "description": "CargoWise recipient ID (environment-specific)",
+        "mandatory": true
+      },
+      {
+        "attribute": "@EE_EntityKey",
+        "type": "string",
+        "populated_by": "ESQL Compute",
+        "description": "Entity key (from SSN lookup, HouseBill lookup, or direct reference)",
+        "mandatory": true
+      },
+      {
+        "attribute": "@EE_IncludeCompany",
+        "type": "boolean",
+        "populated_by": "ESQL Compute",
+        "description": "Flag to include Company element in DataContext",
+        "mandatory": false,
+        "default": "false"
+      },
+      {
+        "attribute": "@EE_IsBooking",
+        "type": "boolean",
+        "populated_by": "ESQL Compute",
+        "description": "Flag indicating booking vs shipment",
+        "mandatory": false
+      },
+      {
+        "attribute": "@EE_AdditionalContext",
+        "type": "string",
+        "populated_by": "ESQL Compute",
+        "description": "Trigger for additional context sections (e.g., MasterBill)",
+        "mandatory": false
+      },
+      {
+        "attribute": "s0:Document/s0:DocumentType/@IsPublished",
+        "type": "boolean",
+        "populated_by": "ESQL Compute",
+        "description": "Document publish flag from CW1 lookup",
+        "mandatory": true
+      }
+    ]
+  },
+  
+  "universal_components": [
+    "CargoWise message envelope",
+    "Standard namespaces",
+    "Extension functions (GenerateGuid, GetCurrentDateTime)",
+    "Entity type translation template",
+    "Document type description template",
+    "Event metadata structure",
+    "Attached document structure"
+  ],
+  
+  "flow_specific_logic_location": "ESQL Compute Module",
+  
+  "responsibility_matrix": {
+    "ESQL_Compute": [
+      "Execute all database stored procedures",
+      "Apply flow-specific business logic",
+      "Determine entity key based on priority rules",
+      "Set enrichment attributes (@CompanyCode, @EE_EntityKey, etc.)",
+      "Handle environment-specific routing",
+      "Perform conditional enrichment"
+    ],
+    "XSL_Transform": [
+      "Read pre-populated attributes",
+      "Map CDM structure to CargoWise UniversalEvent",
+      "Apply standard entity/document type translations",
+      "Generate runtime metadata (GUID, timestamp)",
+      "Format output XML structure"
+    ]
+  }
+}

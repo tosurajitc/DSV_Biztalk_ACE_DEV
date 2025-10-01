@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime
 import streamlit as st
-
+from llm_json_parser import parse_llm_json, LLMJSONParser
 
 class SmartACEQualityReviewer:
     """
@@ -82,7 +82,7 @@ class SmartACEQualityReviewer:
             # Step 4: Write the consolidated files
             self._write_consolidated_enrichment_files(project_dir, before_config, after_config)
             
-            print(f"  📄 Created: beforeenrichment.json and afterenrichment.json")
+            print(f"  📄 Created: BeforeEnrichmentConf.json and AfterEnrichmentConf.json")
             return True
             
         except Exception as e:
@@ -218,21 +218,21 @@ class SmartACEQualityReviewer:
         return consolidated_config
 
     def _write_consolidated_enrichment_files(self, project_dir: Path, before_config: Dict, after_config: Dict):
-        """Write the final beforeenrichment.json and afterenrichment.json files"""
+        """Write the final BeforeEnrichmentConf.json and AfterEnrichmentConf.json files"""
         enrichment_dir = project_dir / "enrichment"
         
         try:
-            # Write beforeenrichment.json
-            before_file = enrichment_dir / "beforeenrichment.json"
+            # Write BeforeEnrichmentConf.json
+            before_file = enrichment_dir / "BeforeEnrichmentConf.json"
             with open(before_file, 'w', encoding='utf-8') as f:
                 json.dump(before_config, f, indent=2, ensure_ascii=False)
-            print(f"    📄 Created: beforeenrichment.json")
+            print(f"    📄 Created: BeforeEnrichmentConf.json")
             
-            # Write afterenrichment.json  
-            after_file = enrichment_dir / "afterenrichment.json"
+            # Write AfterEnrichmentConf.json  
+            after_file = enrichment_dir / "AfterEnrichmentConf.json"
             with open(after_file, 'w', encoding='utf-8') as f:
                 json.dump(after_config, f, indent=2, ensure_ascii=False)
-            print(f"    📄 Created: afterenrichment.json")
+            print(f"    📄 Created: AfterEnrichmentConf.json")
             
             # Summary
             before_count = len(before_config['EnrichConfigs']['MsgEnrich'])
@@ -266,6 +266,7 @@ class SmartACEQualityReviewer:
             
             # Step 4: Create final project structure with correct names
             final_project_path = self._create_ace_project_structure()
+            self.validate_and_fix_messageflow_components(Path(final_project_path))
             
             # Step 5: Generate comprehensive project files
             self._generate_complete_project_files(Path(final_project_path))
@@ -465,8 +466,9 @@ class SmartACEQualityReviewer:
             for component in self.discovered_components:
                 old_path = Path(component['original_path'])
                 
-                if component['extension'] == '.esql':
-                    new_name = component['full_name']  # Keep original ESQL filename
+                # ✅ Keep original filename for ESQL and XSL files
+                if component['extension'] in ['.esql', '.xsl']:
+                    new_name = component['full_name']  # Keep original filename - NO renaming
                 else:
                     new_name = self._generate_component_name(component, message_flow_base)
                 
@@ -530,17 +532,20 @@ class SmartACEQualityReviewer:
                         print(f"  ✅ {component['full_name']} → {destination}{new_name}")
                     except Exception as e:
                         print(f"  ❌ Failed to copy {component['full_name']}: {e}")
-                    
+                                    
+
                 elif component['extension'] == '.xsl':
-                    new_path = transforms_dir / new_name
+                    # ✅ Keep original XSL filename - no renaming
+                    original_filename = component['full_name']  # Use original name
+                    new_path = transforms_dir / original_filename  # Copy with original name
                     file_routing_summary['xsl_files'] += 1
                     destination = "transforms/"
                     
                     try:
-                        # Regular file copy for XSL files
+                        # Simple file copy - NO renaming, NO content changes
                         shutil.copy2(old_path, new_path)
                         components_copied += 1
-                        print(f"  ✅ {component['full_name']} → {destination}{new_name}")
+                        print(f"  ✅ {component['full_name']} → {destination}{original_filename}")
                     except Exception as e:
                         print(f"  ❌ Failed to copy {component['full_name']}: {e}")
                     
@@ -603,14 +608,7 @@ class SmartACEQualityReviewer:
             
         
         elif extension == '.xsl':
-            # Transform files: {MESSAGE_FLOW_BASE}_{PURPOSE}_Transform.xsl
-            if 'cdm' in original_name.lower() or 'universal' in original_name.lower():
-                return f"{message_flow_base}_CDMToUniversal_Transform.xsl"
-            elif 'enrichment' in original_name.lower() or 'lookup' in original_name.lower():
-                return f"{message_flow_base}_EnrichmentLookup_Transform.xsl"
-            else:
-                base_name = component['name'].replace('_Transform', '').replace('Transform', '')
-                return f"{message_flow_base}_{base_name}_Transform.xsl"
+            return original_name
         
         elif extension == '.xsd':
             # Schema files: {MESSAGE_FLOW_BASE}_{PURPOSE}Schema.xsd
@@ -1222,6 +1220,405 @@ deployment.target=integration_server
             f'{message_flow_base}.gif'
         )
         return updated_content
+
+
+
+
+    def validate_and_fix_messageflow_components(self, project_dir: Path) -> Dict:
+        """
+        Validate messageflow components and generate missing files.
+        """
+        import xml.etree.ElementTree as ET
+        from groq import Groq
+        import json
+        
+        print("\n🔍 Validating MessageFlow Components...")
+        print("=" * 70)
+        
+        groq_model = os.getenv('GROQ_MODEL')
+        if not groq_model:
+            print("  ❌ ERROR: GROQ_MODEL environment variable not set")
+            return {'total_found': 0, 'total_missing': 0, 'total_generated': 0, 'missing_files': []}
+        
+        groq_client = Groq(api_key=os.getenv('GROQ_API_KEY'))
+        results = {'total_found': 0, 'total_missing': 0, 'total_generated': 0, 'missing_files': []}
+        
+        # Inline method for WSDL generation only
+        def generate_wsdl_from_vector_db(vector_content: str, soap_context: dict, wsdl_name: str) -> str:
+            """
+            Generate WSDL by extracting structured data from Vector DB.
+            Only called when WSDL file is missing.
+            """
+            # Step 1: Extract structured data from Vector DB
+            extraction_prompt = f"""Extract WSDL specifications from these business requirements and service details.
+
+            BUSINESS REQUIREMENTS:
+            {vector_content}
+
+            SERVICE DETAILS:
+            - URL: {soap_context.get('service_url', 'http://tempuri.org')}
+            - Operation: {soap_context.get('operation', 'ProcessMessage')}
+            - Binding: {soap_context.get('binding', 'BasicHttpBinding')}
+            - Port Type: {soap_context.get('port_type', 'ServicePort')}
+
+            EXTRACTION RULES:
+            1. Extract actual values from business requirements - DO NOT use placeholders
+            2. For namespace: Use the service URL domain as namespace (e.g., http://eadapterqa.dsv.com/)
+            3. For service_name: Extract from URL path or use file basename
+            4. For operation_name: Use the actual operation from Service Details
+            5. For fields: Extract actual message structure from business requirements
+            6. Use standard XSD types: xsd:string, xsd:int, xsd:boolean, xsd:dateTime
+            7. If a field is not explicitly marked optional, set required=true
+
+            Return ONLY this JSON structure with ACTUAL extracted values:
+            {{
+            "namespace": "extracted namespace URI",
+            "service_name": "extracted service name",
+            "port_type": "extracted port type",
+            "operation_name": "extracted operation",
+            "request_fields": [
+                {{"name": "actual_field_name", "type": "xsd:type", "required": true}}
+            ],
+            "response_fields": [
+                {{"name": "actual_field_name", "type": "xsd:type"}}
+            ]
+            }}
+
+            DO NOT include markdown, explanations, or code syntax. Return ONLY the JSON object."""
+
+            try:
+                extract_response = groq_client.chat.completions.create(
+                    model=groq_model,
+                    messages=[
+                        {"role": "system", "content": "Extract structured WSDL data from requirements. Return only valid JSON."},
+                        {"role": "user", "content": extraction_prompt}
+                    ],
+                    temperature=0.1,
+                    max_tokens=2000
+                )
+                
+                raw_response = extract_response.choices[0].message.content.strip()
+                
+                # Use robust LLM JSON parser
+                parse_result = parse_llm_json(raw_response, debug=False)
+                
+                if parse_result.success:
+                    wsdl_data = parse_result.data
+                    print(f"       ✅ WSDL data parsed using {parse_result.method_used}")
+                else:
+                    print(f"       ⚠️ Data extraction failed: {parse_result.error_message}")
+                    print(f"       📄 Raw response preview: {raw_response[:200]}...")
+                    return None
+                
+            except Exception as e:
+                print(f"       ❌ WSDL generation error: {e}")
+                return None
+            
+            # Step 2: Build WSDL template with extracted data
+            wsdl_template = f"""<?xml version="1.0" encoding="UTF-8"?>
+    <wsdl:definitions 
+        xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" 
+        xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
+        xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" 
+        xmlns:tns="{wsdl_data.get('namespace', soap_context.get('service_url', 'http://tempuri.org'))}"
+        targetNamespace="{wsdl_data.get('namespace', soap_context.get('service_url', 'http://tempuri.org'))}">
+        
+        <wsdl:types>
+            <xsd:schema targetNamespace="{wsdl_data.get('namespace', soap_context.get('service_url', 'http://tempuri.org'))}">
+                
+                <xsd:element name="{wsdl_data.get('operation_name', 'Request')}">
+                    <xsd:complexType>
+                        <xsd:sequence>"""
+            
+            # Add request fields
+            for field in wsdl_data.get('request_fields', []):
+                min_occurs = ' minOccurs="0"' if not field.get('required', True) else ''
+                wsdl_template += f"""
+                            <xsd:element name="{field['name']}" type="{field['type']}"{min_occurs}/>"""
+            
+            # ✅ FIXED: Use f-string for response element section
+            wsdl_template += f"""
+                        </xsd:sequence>
+                    </xsd:complexType>
+                </xsd:element>
+                
+                <xsd:element name="{wsdl_data.get('operation_name', 'Response')}Response">
+                    <xsd:complexType>
+                        <xsd:sequence>"""
+            
+            # Add response fields
+            for field in wsdl_data.get('response_fields', []):
+                wsdl_template += f"""
+                            <xsd:element name="{field['name']}" type="{field['type']}" minOccurs="0"/>"""
+            
+            wsdl_template += f"""
+                        </xsd:sequence>
+                    </xsd:complexType>
+                </xsd:element>
+                
+            </xsd:schema>
+        </wsdl:types>
+        
+        <wsdl:message name="{wsdl_data.get('operation_name', 'Request')}Message">
+            <wsdl:part name="parameters" element="tns:{wsdl_data.get('operation_name', 'Request')}"/>
+        </wsdl:message>
+        
+        <wsdl:message name="{wsdl_data.get('operation_name', 'Response')}ResponseMessage">
+            <wsdl:part name="parameters" element="tns:{wsdl_data.get('operation_name', 'Response')}Response"/>
+        </wsdl:message>
+        
+        <wsdl:portType name="{wsdl_data.get('port_type', soap_context.get('port_type', 'ServicePort'))}">
+            <wsdl:operation name="{wsdl_data.get('operation_name', 'ProcessMessage')}">
+                <wsdl:input message="tns:{wsdl_data.get('operation_name', 'Request')}Message"/>
+                <wsdl:output message="tns:{wsdl_data.get('operation_name', 'Response')}ResponseMessage"/>
+            </wsdl:operation>
+        </wsdl:portType>
+        
+        <wsdl:binding name="{soap_context.get('binding', 'BasicHttpBinding')}" type="tns:{wsdl_data.get('port_type', soap_context.get('port_type', 'ServicePort'))}">
+            <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+            <wsdl:operation name="{wsdl_data.get('operation_name', 'ProcessMessage')}">
+                <soap:operation soapAction="{wsdl_data.get('operation_name', 'ProcessMessage')}"/>
+                <wsdl:input>
+                    <soap:body use="literal"/>
+                </wsdl:input>
+                <wsdl:output>
+                    <soap:body use="literal"/>
+                </wsdl:output>
+            </wsdl:operation>
+        </wsdl:binding>
+        
+        <wsdl:service name="{wsdl_data.get('service_name', 'Service')}">
+            <wsdl:port name="{soap_context.get('port', 'ServicePort')}" binding="tns:{soap_context.get('binding', 'BasicHttpBinding')}">
+                <soap:address location="{soap_context.get('service_url')}"/>
+            </wsdl:port>
+        </wsdl:service>
+        
+    </wsdl:definitions>"""
+            
+            return wsdl_template        
+        # ... (existing directory discovery code) ...
+        existing_subdirs = [d for d in project_dir.iterdir() if d.is_dir()]
+        
+        esql_subdir = None
+        for subdir in existing_subdirs:
+            if subdir.name not in ['schemas', 'transforms', 'enrichment', '.git']:
+                esql_subdir = subdir
+                break
+        
+        transforms_dir = project_dir / 'transforms'
+        
+        if not esql_subdir or not esql_subdir.exists():
+            print("  ❌ ERROR: ESQL subdirectory not found")
+            return results
+        
+        if not transforms_dir.exists():
+            print("  ❌ ERROR: transforms directory not found")
+            return results
+        
+        component_mapping = {}
+        json_path = Path('output') / 'biztalk_ace_component_mapping.json'
+        if json_path.exists():
+            with open(json_path, 'r', encoding='utf-8') as f:
+                component_mapping = json.load(f)
+        
+        try:
+            msgflow_files = list(project_dir.glob('**/*.msgflow'))
+            if not msgflow_files:
+                print("  ⚠️  No messageflow files found")
+                return results
+            
+            print(f"\n📋 Checking {len(msgflow_files)} messageflow file(s)\n")
+            
+            for msgflow_file in msgflow_files:
+                print(f"  📄 Processing: {msgflow_file.name}")
+                
+                with open(msgflow_file, 'r', encoding='utf-8') as f:
+                    msgflow_content = f.read()
+                
+                tree = ET.parse(msgflow_file)
+                root = tree.getroot()
+                
+                flow_name = msgflow_file.stem
+                flow_integration_details = {}
+                
+                for mapping in component_mapping.get('component_mappings', []):
+                    if flow_name.lower() in str(mapping).lower():
+                        flow_integration_details = mapping.get('ace_components', {}).get('integration_details', {})
+                        break
+                
+                # Build dynamic search query
+                search_keywords = []
+                for node in root.iter():
+                    if node.tag.endswith('nodes') or node.tag == 'nodes':
+                        service_url = node.get('webServiceURL', '')
+                        if service_url:
+                            domain_parts = service_url.replace('https://', '').replace('http://', '').split('/')
+                            if domain_parts:
+                                search_keywords.append(domain_parts[0].split('.')[0])
+                        operation = node.get('selectedOperation', '')
+                        if operation:
+                            search_keywords.append(operation)
+                
+                flow_tokens = flow_name.replace('_', ' ').split()
+                search_keywords.extend(flow_tokens[:3])
+                search_keywords.extend(['SOAP', 'service', 'integration', 'message'])
+                
+                dynamic_query = ' '.join(set(search_keywords))
+                
+                # Retrieve Vector DB content
+                vector_content = ""
+                # ✅ CORRECT CODE - USE THIS
+                try:
+                    if hasattr(st.session_state, 'vector_pipeline') and st.session_state.vector_pipeline:
+                        if hasattr(st.session_state.vector_pipeline, 'search_engine') and st.session_state.vector_pipeline.search_engine:
+                            vector_content = st.session_state.vector_pipeline.search_engine.get_agent_content(
+                                agent_name='migration_quality_reviewer',
+                                top_k=8
+                            )
+                            print(f"  ✅ Vector DB: {len(vector_content)} characters retrieved")
+                        else:
+                            print(f"  ⚠️ Vector DB search_engine not initialized")
+                            vector_content = ""
+                except Exception as e:
+                    print(f"  ❌ Vector DB failed: {e}")
+
+                
+                components_to_check = []
+                
+                # Extract components
+                for node in root.iter():
+                    if node.tag.endswith('nodes') or node.tag == 'nodes':
+                        compute_expr = node.get('computeExpression', '')
+                        if 'esql://routine/#' in compute_expr:
+                            module_name = compute_expr.split('#')[1].replace('.Main', '')
+                            components_to_check.append(('ESQL', f"{module_name}.esql", module_name))
+                        
+                        xsl_name = node.get('stylesheetName', '')
+                        if xsl_name:
+                            components_to_check.append(('XSL', xsl_name, None))
+                        
+                        wsdl_name = node.get('wsdlFileName', '')
+                        if wsdl_name:
+                            soap_context = {
+                                'service_url': node.get('webServiceURL', ''),
+                                'operation': node.get('selectedOperation', ''),
+                                'port_type': node.get('selectedPortType', ''),
+                                'binding': node.get('selectedBinding', ''),
+                                'port': node.get('selectedPort', ''),
+                            }
+                            components_to_check.append(('WSDL', wsdl_name, soap_context))
+                
+                # Validate each component
+                for comp_data in components_to_check:
+                    comp_type = comp_data[0]
+                    comp_name = comp_data[1]
+                    comp_context = comp_data[2]
+                    
+                    if comp_type == 'ESQL':
+                        file_path = esql_subdir / comp_name
+                    elif comp_type == 'XSL':
+                        file_path = transforms_dir / comp_name
+                    elif comp_type == 'WSDL':
+                        file_path = project_dir / comp_name
+                    
+                    print(f"    🔍 {comp_name}")
+                    
+                    if file_path.exists():
+                        results['total_found'] += 1
+                        print(f"       ✅ EXISTS")
+                    else:
+                        results['total_missing'] += 1
+                        results['missing_files'].append(comp_name)
+                        print(f"       ❌ MISSING")
+                        
+                        if not file_path.parent.exists():
+                            print(f"       ⚠️ Cannot generate - directory missing")
+                            continue
+                        
+                        if not vector_content:
+                            print(f"       ⚠️ SKIPPED - No Vector DB content")
+                            continue
+                        
+                        # CONDITIONAL: Use special WSDL method if it's a WSDL file
+                        if comp_type == 'WSDL':
+                            print(f"       🤖 Generating WSDL with business data mapping...")
+                            
+                            wsdl_content = generate_wsdl_from_vector_db(
+                                vector_content=vector_content,
+                                soap_context=comp_context,
+                                wsdl_name=comp_name
+                            )
+                            
+                            if wsdl_content:
+                                with open(file_path, 'w', encoding='utf-8') as f:
+                                    f.write(wsdl_content)
+                                results['total_generated'] += 1
+                                print(f"       ✅ Generated with business data")
+                            else:
+                                print(f"       ❌ Generation failed")
+                        
+                        # For ESQL/XSL: Simple LLM generation (no special template)
+                        else:
+                            print(f"       🤖 Generating {comp_type}...")
+                            
+                            if comp_type == 'ESQL':
+                                prompt = f"""Generate IBM ACE ESQL: {comp_name}
+    Flow: {flow_name}
+    Business Requirements: {vector_content}
+    Return ONLY ESQL code."""
+                            else:
+                                prompt = f"""Generate XSLT 1.0: {comp_name}
+    Flow: {flow_name}
+    Business Requirements: {vector_content}
+    Return ONLY XSLT code."""
+                            
+                            try:
+                                response = groq_client.chat.completions.create(
+                                    model=groq_model,
+                                    messages=[
+                                        {"role": "system", "content": "Generate code from requirements. No placeholders."},
+                                        {"role": "user", "content": prompt}
+                                    ],
+                                    temperature=0.3,
+                                    max_tokens=4000
+                                )
+                                
+                                generated = response.choices[0].message.content.strip()
+                                
+                                if '```' in generated:
+                                    parts = generated.split('```')
+                                    for part in parts:
+                                        if any(x in part.lower() for x in ['esql', 'xslt']):
+                                            generated = '\n'.join(part.split('\n')[1:])
+                                            break
+                                    else:
+                                        generated = parts[1] if len(parts) > 1 else generated
+                                
+                                with open(file_path, 'w', encoding='utf-8') as f:
+                                    f.write(generated)
+                                
+                                results['total_generated'] += 1
+                                print(f"       ✅ Generated")
+                                
+                            except Exception as e:
+                                print(f"       ❌ Failed: {e}")
+                
+                print()
+            
+            print("=" * 70)
+            print("📊 VALIDATION SUMMARY")
+            print("=" * 70)
+            print(f"  ✅ Found:      {results['total_found']}")
+            print(f"  ❌ Missing:    {results['total_missing']}")
+            print(f"  🤖 Generated:  {results['total_generated']}")
+            print("=" * 70)
+            
+            return results
+            
+        except Exception as e:
+            print(f"  ❌ Validation failed: {e}")
+            return results
+    
 
 
 

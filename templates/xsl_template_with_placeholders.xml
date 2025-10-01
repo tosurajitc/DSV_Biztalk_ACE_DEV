@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                xmlns:ext="xalan://epis.xslfunctions.XslExtensionFunctions"
+                xmlns:msxsl="urn:schemas-microsoft-com:xslt"
+                xmlns:var="http://schemas.microsoft.com/BizTalk/2003/var"
+                exclude-result-prefixes="msxsl var s0 ext" version="1.0"
+                xmlns:s0="http://esb.dsv.com/CDM/DocumentMessage_V2"
+                xmlns="http://www.cargowise.com/Schemas/Universal/2011/11">
+
+  <xsl:output omit-xml-declaration="yes" method="xml" version="1.0" indent="no"/>
+
+  <!-- Standard variables -->
+  <xsl:variable name="var_SourceApplicationCode">
+    <xsl:value-of select="/s0:DocumentMessage/s0:Header/s0:Source/s0:ApplicationCode"/>
+  </xsl:variable>
+
+  <xsl:variable name="var_SourceEnterpriseCode">
+    <xsl:value-of select="/s0:DocumentMessage/s0:Header/s0:Source/s0:EnterpriseCode"/>
+  </xsl:variable>
+
+  <xsl:variable name="var_IsBooking">
+    <xsl:value-of select="/s0:DocumentMessage/@EE_IsBooking"/>
+  </xsl:variable>
+
+  <xsl:template match="/">
+    <xsl:apply-templates select="/s0:DocumentMessage" />
+  </xsl:template>
+
+  <xsl:template match="/s0:DocumentMessage">
+    
+    <!-- PLACEHOLDER_1: COMPANY_CODE_VARIABLE -->
+    <!-- LLM generates: CompanyCode variable logic based on business requirements -->
+    {PLACEHOLDER_COMPANY_CODE_VARIABLE}
+    <!-- END PLACEHOLDER_1 -->
+
+    <!-- PLACEHOLDER_2: RECIPIENT_ID_VARIABLE -->
+    <!-- LLM generates: eAdapterRecipientId variable logic -->
+    {PLACEHOLDER_RECIPIENT_ID_VARIABLE}
+    <!-- END PLACEHOLDER_2 -->
+
+    <SendStreamRequest xmlns="http://CargoWise.com/eHub/2010/06">
+      <Payload>
+        <Message>
+          <xsl:attribute name="ApplicationCode">UDM</xsl:attribute>
+          <xsl:attribute name="ClientID">
+            <xsl:value-of select="$eAdapterRecipientId"/>
+          </xsl:attribute>
+          <xsl:attribute name="TrackingID">
+            <xsl:value-of select="ext:GenerateGuid()"/>
+          </xsl:attribute>
+          <xsl:attribute name="SchemaName">http://www.cargowise.com/Schemas/Universal/2011/11#UniversalInterchange</xsl:attribute>
+          <xsl:attribute name="SchemaType">Xml</xsl:attribute>
+          <xsl:attribute name="EmailSubject">subject</xsl:attribute>
+          <xsl:attribute name="FileName">filename</xsl:attribute>
+          
+          <UniversalInterchange version="1.1" xmlns="http://www.cargowise.com/Schemas/Universal/2011/11">
+            <Header>
+              <SenderID>ESB</SenderID>
+              <RecipientID>
+                <xsl:value-of select="$eAdapterRecipientId"/>
+              </RecipientID>
+            </Header>
+            
+            <Body>
+              <UniversalEvent version="1.1" xmlns="http://www.cargowise.com/Schemas/Universal/2011/11">
+                <Event>
+                  <DataContext>
+                    <EnterpriseID>DFD</EnterpriseID>
+                    <ServerID>DQA</ServerID>
+                    <DataProvider>
+                      <xsl:value-of select="concat($var_SourceApplicationCode,'-',$var_SourceEnterpriseCode)"/>
+                    </DataProvider>
+                    
+                    <!-- PLACEHOLDER_3: COMPANY_CONTEXT_CONDITION -->
+                    <!-- LLM generates: Conditional block for including Company element -->
+                    {PLACEHOLDER_COMPANY_CONTEXT}
+                    <!-- END PLACEHOLDER_3 -->
+                    
+                    <DataTargetCollection>
+                      <DataTarget>
+                        <Type>
+                          <xsl:apply-templates select="s0:Document/s0:EntityReference/s0:Type"/>
+                        </Type>
+                        
+                        <!-- PLACEHOLDER_4: ENTITY_KEY_LOGIC (CRITICAL) -->
+                        <!-- LLM generates: Priority-based key selection from enrichment attributes -->
+                        <Key>
+                          {PLACEHOLDER_ENTITY_KEY_LOGIC}
+                        </Key>
+                        <!-- END PLACEHOLDER_4 -->
+                        
+                      </DataTarget>
+                    </DataTargetCollection>
+                  </DataContext>
+                  
+                  <EventTime>
+                    <xsl:value-of select="ext:GetCurrentDateTime()"/>
+                  </EventTime>
+                  
+                  <EventType>
+                    <xsl:choose>
+                      <xsl:when test="normalize-space(s0:Document/s0:References/s0:Reference[@Type='EventType']) != ''">
+                        <xsl:value-of select="s0:Document/s0:References/s0:Reference[@Type='EventType']"/>
+                      </xsl:when>
+                      <xsl:otherwise>DDI</xsl:otherwise>
+                    </xsl:choose>
+                  </EventType>
+                  
+                  <EventReference>
+                    <xsl:choose>
+                      <xsl:when test="normalize-space(s0:Document/s0:References/s0:Reference[@Type='EventReference']) != ''">
+                        <xsl:value-of select="s0:Document/s0:References/s0:Reference[@Type='EventReference']"/>
+                      </xsl:when>
+                      <xsl:otherwise>
+                        <xsl:value-of select="s0:Document/s0:FileName"/>
+                      </xsl:otherwise>
+                    </xsl:choose>
+                  </EventReference>
+                  
+                  <IsEstimate>false</IsEstimate>
+                  
+                  <xsl:if test="s0:Document/s0:References/s0:Reference[@PassThrough = 'true']">
+                    <ContextCollection>
+                      <xsl:for-each select="s0:Document/s0:References/s0:Reference[@PassThrough = 'true']">
+                        <Context>
+                          <Type>
+                            <xsl:value-of select="@Type"/>
+                          </Type>
+                          <Value>
+                            <xsl:value-of select="./text()"/>
+                          </Value>
+                        </Context>
+                      </xsl:for-each>
+                    </ContextCollection>
+                  </xsl:if>
+                  
+                  <AttachedDocumentCollection>
+                    <AttachedDocument>
+                      <FileName>
+                        <xsl:value-of select="s0:Document/s0:FileName/text()"/>
+                      </FileName>
+                      <ImageData>
+                        <xsl:value-of select="normalize-space(s0:Document/s0:Binary/text())"/>
+                      </ImageData>
+                      <Type>
+                        <Code>
+                          <xsl:value-of select="s0:Document/s0:DocumentType/s0:Code/text()"/>
+                        </Code>
+                        <Description>
+                          <xsl:choose>
+                            <xsl:when test="s0:Document/s0:DocumentType/s0:Description/text()!=''">
+                              <xsl:value-of select="s0:Document/s0:DocumentType/s0:Description/text()"/>
+                            </xsl:when>
+                            <xsl:otherwise>
+                              <xsl:apply-templates select="s0:Document/s0:DocumentType/s0:Code"/>
+                            </xsl:otherwise>
+                          </xsl:choose>
+                        </Description>
+                      </Type>
+                      <IsPublished>
+                        <xsl:value-of select="s0:Document/s0:DocumentType/@IsPublished"/>
+                      </IsPublished>
+                      <xsl:if test="normalize-space(s0:Document/s0:BranchCode)!=''">
+                        <VisibleBranchCode>
+                          <xsl:value-of select="s0:Document/s0:BranchCode/text()"/>
+                        </VisibleBranchCode>
+                      </xsl:if>
+                      <xsl:if test="normalize-space(s0:Document/s0:CompanyCode)!=''">
+                        <VisibleCompanyCode>
+                          <xsl:value-of select="s0:Document/s0:CompanyCode/text()"/>
+                        </VisibleCompanyCode>
+                      </xsl:if>
+                      <xsl:if test="normalize-space(s0:Document/s0:DepartmentCode)!=''">
+                        <VisibleDepartmentCode>
+                          <xsl:value-of select="s0:Document/s0:DepartmentCode/text()"/>
+                        </VisibleDepartmentCode>
+                      </xsl:if>
+                    </AttachedDocument>
+                  </AttachedDocumentCollection>
+                  
+                  <!-- PLACEHOLDER_5: ADDITIONAL_CONTEXT -->
+                  <!-- LLM generates: Additional context blocks (e.g., MasterBill handling) -->
+                  {PLACEHOLDER_ADDITIONAL_CONTEXT}
+                  <!-- END PLACEHOLDER_5 -->
+                  
+                </Event>
+              </UniversalEvent>
+            </Body>
+          </UniversalInterchange>
+        </Message>
+      </Payload>
+    </SendStreamRequest>
+  </xsl:template>
+
+  <!-- Standard entity type mapping template -->
+  <xsl:template match="s0:Document/s0:EntityReference/s0:Type">
+    <xsl:choose>
+      <xsl:when test="./text()='INV'">
+        <xsl:text>AccountingInvoice</xsl:text>
+      </xsl:when>
+      <xsl:when test="./text()='CON'">
+        <xsl:text>ForwardingConsol</xsl:text>
+      </xsl:when>
+      <xsl:when test="./text()='SHP' and $var_IsBooking = 'true'">
+        <xsl:text>ForwardingBooking</xsl:text>
+      </xsl:when>
+      <xsl:when test="./text()='SHP'">
+        <xsl:text>ForwardingShipment</xsl:text>
+      </xsl:when>
+      <xsl:when test="./text()='QBK' and $var_IsBooking = 'false'">
+        <xsl:text>ForwardingShipment</xsl:text>
+      </xsl:when>
+      <xsl:when test="./text()='QBK'">
+        <xsl:text>ForwardingBooking</xsl:text>
+      </xsl:when>
+      <xsl:when test="./text()='ORD'">
+        <xsl:text>OrderManagerOrder</xsl:text>
+      </xsl:when>
+      <xsl:when test="./text()='BRK'">
+        <xsl:text>CustomsDeclaration</xsl:text>
+      </xsl:when>
+      <xsl:when test="./text()='WOU'">
+        <xsl:text>WarehouseOrder</xsl:text>
+      </xsl:when>
+      <xsl:when test="./text()='WIN'">
+        <xsl:text>WarehouseReceive</xsl:text>
+      </xsl:when>
+    </xsl:choose>
+  </xsl:template>
+
+  <!-- Standard document type mapping template -->
+  <xsl:template match="s0:Document/s0:DocumentType/s0:Code">
+    <xsl:choose>
+      <xsl:when test="./text()='CLR'">
+        <xsl:text>Import Customs Clearance Document</xsl:text>
+      </xsl:when>
+      <xsl:when test="./text()='CIV'">
+        <xsl:text>Commercial Invoice</xsl:text>
+      </xsl:when>
+      <xsl:when test="./text()='MFD'">
+        <xsl:text>Miscellaneous Freight Document</xsl:text>
+      </xsl:when>
+      <xsl:when test="./text()='CED'">
+        <xsl:text>Customs Export Document</xsl:text>
+      </xsl:when>
+      <xsl:when test="./text()='DGF'">
+        <xsl:text>Dangerous Goods Form</xsl:text>
+      </xsl:when>
+      <xsl:when test="./text()='OYD'">
+        <xsl:text>Other myDSV Goods Document</xsl:text>
+      </xsl:when>
+      <xsl:when test="./text()='PKL'">
+        <xsl:text>Packing List</xsl:text>
+      </xsl:when>
+      <xsl:when test="./text()='EXD'">
+        <xsl:text>Exporter Documents</xsl:text>
+      </xsl:when>
+      <xsl:when test="./text()='CUS'">
+        <xsl:text>Customs Certificate</xsl:text>
+      </xsl:when>
+      <xsl:when test="./text()='ICE'">
+        <xsl:text>Import Customs Entry</xsl:text>
+      </xsl:when>
+      <xsl:when test="./text()='CCD'">
+        <xsl:text>Customs Clearance Document</xsl:text>
+      </xsl:when>
+      <xsl:when test="./text()='FSN'">
+        <xsl:text>Import Airfreight Freight</xsl:text>
+      </xsl:when>
+    </xsl:choose>
+  </xsl:template>
+
+</xsl:stylesheet>

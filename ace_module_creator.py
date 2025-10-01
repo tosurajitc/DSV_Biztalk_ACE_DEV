@@ -496,6 +496,10 @@ class ACEModuleCreatorOrchestrator:
                 print("  🚀 Using Vector DB for XSL transformation-focused content...")
                 print("  🔍 Vector search focus: XSL mappings, field transformations, stylesheet patterns")
                 
+                # ✅ Extract flow name from msgflow path - NO new method needed
+                flow_name = os.path.splitext(os.path.basename(inputs.msgflow_path))[0]
+                print(f"  📝 Extracted flow name: {flow_name}")
+                
                 # Create agent function for XSL generation
                 def xsl_agent_function(focused_content):
                     """Agent function that receives Vector DB focused content for XSL processing"""
@@ -505,7 +509,8 @@ class ACEModuleCreatorOrchestrator:
                     return generator.generate_xsl_transformations(
                         vector_content=focused_content,  # ← Vector DB content instead of PDF
                         component_mapping_json_path=inputs.component_mapping_json_path,
-                        output_dir=inputs.output_dir
+                        output_dir=inputs.output_dir,
+                        flow_name=flow_name  # ✅ Pass extracted flow name
                     )
                 
                 print("  🤖 Running LLM-based XSL generation with Vector optimization...")

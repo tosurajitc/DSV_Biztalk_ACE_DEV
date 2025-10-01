@@ -16,8 +16,17 @@ from datetime import datetime
 from groq import Groq
 from dotenv import load_dotenv
 import streamlit as st
+import time
+import logging
+
 
 load_dotenv()
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 
 class SchemaGenerator:
     """
@@ -32,6 +41,14 @@ class SchemaGenerator:
             raise ValueError("GROQ_API_KEY must be provided or set in environment")
         
         self.llm = Groq(api_key=self.groq_api_key)
+        self.groq_model = os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')
+
+
+        self.groq_api_key = groq_api_key or os.getenv('GROQ_API_KEY')
+        if not self.groq_api_key:
+            raise ValueError("GROQ_API_KEY must be provided or set in environment")
+        
+        self.llm = Groq(api_key=self.groq_api_key)
         self.groq_model = os.getenv('GROQ_MODEL', 'llama-3.1-8b-instant')
         
         # Processing results tracking
@@ -41,6 +58,51 @@ class SchemaGenerator:
         self.llm_analysis_calls = 0
         self.llm_generation_calls = 0
     
+
+    def _call_llm_with_retry(self, prompt: str, max_retries: int = 5, timeout: int = 180) -> Optional[str]:
+        """
+        Call LLM with retry logic for timeouts.
+        Private method - for internal use only.
+        """
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"🤖 LLM attempt {attempt + 1}/{max_retries}...")
+                
+                response = self.llm.chat.completions.create(
+                    model=self.groq_model,
+                    messages=[
+                        {"role": "system", "content": "You are an expert IBM ACE developer."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    timeout=timeout,
+                    temperature=0.3
+                )
+                
+                result = response.choices[0].message.content
+                logger.info(f"✅ LLM call succeeded")
+                return result
+                
+            except TimeoutError as e:
+                if attempt == max_retries - 1:
+                    logger.error(f"❌ Failed after {max_retries} attempts")
+                    return None
+                
+                delay = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s, 8s, 16s
+                logger.warning(f"⏱️ Timeout. Retrying in {delay}s...")
+                time.sleep(delay)
+                
+            except Exception as e:
+                logger.error(f"❌ Error: {e}")
+                if attempt < max_retries - 1:
+                    delay = 2 ** attempt
+                    time.sleep(delay)
+                else:
+                    return None
+        
+        return None
+
+
+
     def generate_schemas(self, 
                     vector_content: str,  # New: Vector DB content instead of PDF path
                     component_mapping_json_path: str,
@@ -353,12 +415,15 @@ class SchemaGenerator:
                     
         except Exception as e:
             raise Exception(f"LLM schema analysis failed: {str(e)}")
+        
+
+
+        
     
     def _llm_generate_xsd_schemas(self, schema_requirements: Dict, output_dir: str) -> List[Dict]:
         """
         LLM generates actual XSD schemas based on requirements analysis
-        FIXED: Type validation to prevent 'str' object has no attribute 'get' error
-        NO hardcoded templates - pure LLM XSD generation
+        ✅ NOW WITH: Retry logic, rate limiting, and partial success handling
         """
         print("  ⚡ LLM generating ACE-compatible XSD schemas...")
         
@@ -367,29 +432,23 @@ class SchemaGenerator:
             raise Exception("No schema requirements found from LLM analysis")
         
         generated_schemas = []
+        failed_schemas = []
+        total = len(schemas)
         
-        for schema_req in schemas:
-            # FIX: Type validation to prevent 'str' object has no attribute 'get' error
+        for idx, schema_req in enumerate(schemas, 1):
+            # Type validation
             if not isinstance(schema_req, dict):
                 print(f"    ⚠️ Warning: Schema requirement is not a dict (type: {type(schema_req)}), skipping")
+                failed_schemas.append({'name': 'Unknown', 'reason': 'Invalid type'})
                 continue
             
             schema_name = schema_req.get('name', 'UnknownSchema')
-            print(f"    🔨 Generating {schema_name}.xsd...")
+            print(f"\n    {'='*50}")
+            print(f"    🔨 [{idx}/{total}] Generating {schema_name}.xsd...")
+            print(f"    {'='*50}")
             
-            system_prompt = """You are an expert XSD schema designer specializing in IBM ACE (App Connect Enterprise) schemas.
-
-    Generate production-ready XSD schemas that are:
-    - Fully compliant with W3C XSD standards
-    - Optimized for IBM ACE message processing
-    - Include proper namespaces and declarations
-    - Include comprehensive validation rules
-    - Follow enterprise schema design patterns
-    - Include detailed annotations and documentation
-
-    Return ONLY the complete XSD content, no explanations or markdown."""
-
-            user_prompt = f"""Generate a complete XSD schema based on these requirements:
+            # Create prompt
+            prompt = f"""Generate a complete XSD schema based on these requirements:
 
     ## SCHEMA SPECIFICATION:
     **Name:** {schema_name}
@@ -408,35 +467,36 @@ class SchemaGenerator:
     ## ACE CONSIDERATIONS:
     {json.dumps(schema_req.get('ace_considerations', {}), indent=2)}
 
-    Generate the complete XSD schema content that satisfies all these requirements."""
+    Generate ONLY the complete XSD schema content. No explanations or markdown.
 
-            try:
-                response = self.llm.chat.completions.create(
-                    model=self.groq_model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    temperature=0.2,
-                    max_tokens=2500
-                )
-                
-                if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
-                    st.session_state.token_tracker.manual_track(
-                        agent="schema_generator",
-                        operation="schema_generation",
-                        model=self.groq_model,
-                        input_tokens=response.usage.prompt_tokens,
-                        output_tokens=response.usage.completion_tokens,
-                        flow_name=getattr(self, 'current_schema_name', 'schema_gen')
-                    )
-                
-                xsd_content = response.choices[0].message.content.strip()
-                self.llm_generation_calls += 1
-                
-                # Clean up any markdown formatting if present
+    Example structure:
+    <?xml version="1.0" encoding="UTF-8"?>
+    <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+            targetNamespace="urn:schemas:ace:{schema_name.lower()}"
+            elementFormDefault="qualified">
+    <!-- Schema elements here -->
+    </xs:schema>"""
+
+            # ✅ USE RETRY LOGIC
+            xsd_content = self._call_llm_with_retry(
+                prompt=prompt,
+                max_retries=5,
+                timeout=180
+            )
+            
+            if xsd_content:
+                # Clean up markdown formatting
                 xsd_content = re.sub(r'^```xml\s*\n?', '', xsd_content)
                 xsd_content = re.sub(r'\n?```\s*$', '', xsd_content)
+                xsd_content = xsd_content.strip()
+                
+                # Track token usage if available
+                if 'token_tracker' in st.session_state:
+                    try:
+                        # Note: We can't track tokens from retry method, but that's ok
+                        pass
+                    except:
+                        pass
                 
                 generated_schemas.append({
                     'name': schema_name,
@@ -445,13 +505,41 @@ class SchemaGenerator:
                     'requirements': schema_req
                 })
                 
-                print(f"    ✅ Generated {schema_name}.xsd ({len(xsd_content)} characters)")
-                
-            except Exception as e:
-                raise Exception(f"Failed to generate XSD for {schema_name}: {str(e)}")
+                self.llm_generation_calls += 1
+                print(f"    ✅ [{idx}/{total}] {schema_name}.xsd generated ({len(xsd_content)} chars)")
+            else:
+                # ✅ DON'T RAISE EXCEPTION - CONTINUE
+                failed_schemas.append({
+                    'name': schema_name,
+                    'reason': 'LLM call failed after retries'
+                })
+                print(f"    ❌ [{idx}/{total}] {schema_name}.xsd generation failed")
+            
+            # ✅ RATE LIMITING - 3 second delay between schemas
+            if idx < total:
+                print(f"    ⏳ Cooling down 3s before next schema...")
+                time.sleep(3)
         
-        print(f"  🎉 All schemas generated: {len(generated_schemas)} XSD files")
+        # Final summary
+        print(f"\n  {'='*50}")
+        print(f"  📊 XSD Generation Summary:")
+        print(f"  ✅ Successful: {len(generated_schemas)}/{total}")
+        print(f"  ❌ Failed: {len(failed_schemas)}/{total}")
+        print(f"  {'='*50}")
+        
+        if failed_schemas:
+            print(f"\n  ⚠️ Failed schemas:")
+            for failed in failed_schemas:
+                print(f"    - {failed['name']}: {failed['reason']}")
+        
+        if not generated_schemas:
+            raise Exception("All schema generation attempts failed")
+        
+        print(f"\n  🎉 Successfully generated {len(generated_schemas)} schemas")
         return generated_schemas
+    
+
+
     
     def _write_schema_files(self, generated_schemas: List[Dict], schemas_dir: str) -> List[str]:
         """Write generated XSD schemas to files"""

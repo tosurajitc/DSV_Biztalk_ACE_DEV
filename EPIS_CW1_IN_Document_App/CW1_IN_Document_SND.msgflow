@@ -11,8 +11,8 @@
     xmlns:epis_compression_lib_GZipCompressAndB64EncodeElement.subflow="epis/compression/lib/GZipCompressAndB64EncodeElement.subflow" 
     xmlns:epis_enrichment_lib_EPIS_MessageEnrichment.subflow="epis/enrichment/lib/EPIS_MessageEnrichment.subflow" 
     xmlns:utility="http://www.ibm.com/wbi/2005/eflow_utility" 
-    nsURI="{FLOW_NAME}.msgflow" 
-    nsPrefix="{FLOW_NAME}.msgflow">
+    nsURI="CW1_IN_Document_SND.msgflow" 
+    nsPrefix="CW1_IN_Document_SND.msgflow">
 
   <eClassifiers xmi:type="eflow:FCMComposite" name="FCMComposite_1" nodeLayoutStyle="RECTANGLE">
     <eSuperTypes href="http://www.ibm.com/wbi/2005/eflow#//FCMBlock"/>
@@ -21,7 +21,7 @@
     <!-- TEMPLATE PROPERTIES -->
     <!-- ================================================== -->
     
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.INPUT_QUEUE" name="INPUT_QUEUE" lowerBound="1" defaultValueLiteral="{INPUT_QUEUE_NAME}">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.INPUT_QUEUE" name="INPUT_QUEUE" lowerBound="1" defaultValueLiteral="CW1_IN_Document_SND.INPUT.QL">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -33,7 +33,7 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
     </eStructuralFeatures>
     
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.STYLESHEET_NAME" name="STYLESHEET_NAME" defaultValueLiteral="{FLOW_NAME}.xsl">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.STYLESHEET_NAME" name="STYLESHEET_NAME" defaultValueLiteral="CW1_IN_Document_SND.xsl">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -45,7 +45,7 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
     </eStructuralFeatures>
     
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.BEFORE_INPUT_DIR" name="BEFORE_INPUT_DIR" defaultValueLiteral="{APP_NAME}\{FLOW_NAME}\enrichment">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.BEFORE_INPUT_DIR" name="BEFORE_INPUT_DIR" defaultValueLiteral="EPIS_CW1_IN_Document_SND_App\CW1_IN_Document_SND\enrichment">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -53,11 +53,11 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
 
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.SOAP_SERVICE_URL" name="SOAP_SERVICE_URL" defaultValueLiteral="{SOAP_SERVICE_URL}">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.SOAP_SERVICE_URL" name="SOAP_SERVICE_URL" defaultValueLiteral="https://eadapterqa.dsv.com/eAdapterStreamedService.svc">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
 
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.WSDL_FILE_NAME" name="WSDL_FILE_NAME" defaultValueLiteral="{WSDL_FILE_NAME}">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.WSDL_FILE_NAME" name="WSDL_FILE_NAME" defaultValueLiteral="eAdapterStreamedService.wsdl">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
 
@@ -66,9 +66,9 @@
     </eStructuralFeatures>
 
     <!-- Branding and Graphics -->
-    <translation xmi:type="utility:TranslatableString" key="{FLOW_NAME}" bundleName="{FLOW_NAME}" pluginId="{APP_NAME}_Developer"/>
-    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/{APP_NAME}_Developer/icons/full/obj16/{FLOW_NAME}.gif"/>
-    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/{APP_NAME}_Developer/icons/full/obj30/{FLOW_NAME}.gif"/>
+    <translation xmi:type="utility:TranslatableString" key="CW1_IN_Document_SND" bundleName="CW1_IN_Document_SND" pluginId="EPIS_CW1_IN_Document_SND_App_Developer"/>
+    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_CW1_IN_Document_SND_App_Developer/icons/full/obj16/CW1_IN_Document_SND.gif"/>
+    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_CW1_IN_Document_SND_App_Developer/icons/full/obj30/CW1_IN_Document_SND.gif"/>
     
     <composition>
       <!-- ================================================== -->
@@ -83,7 +83,7 @@
       <!-- 2. BEFORE ENRICHMENT SUBFLOW - Initial enrichment processing (BEFORE transformation) -->
       <nodes xmi:type="epis_enrichment_lib_EPIS_MessageEnrichment.subflow:FCMComposite_1" xmi:id="FCMComposite_1_4" 
              location="30,299" 
-             inputDirectory="{APP_NAME}\{FLOW_NAME}\enrichment" 
+             inputDirectory="EPIS_CW1_IN_Document_SND_App\CW1_IN_Document_SND\enrichment" 
              filenamePattern="BeforeEnrichmentConf.json">
         <translation xmi:type="utility:ConstantString" string="BeforeEnrichment"/>
       </nodes>
@@ -91,7 +91,7 @@
       <!-- 3. XSL TRANSFORM NODE - CDM to Universal Event transformation -->
       <nodes xmi:type="ComIbmXslMqsi.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_5" 
              location="596,45" 
-             stylesheetName="{FLOW_NAME}.xsl" 
+             stylesheetName="CW1_IN_Document_SND.xsl" 
              messageDomainProperty="XMLNSC">
         <translation xmi:type="utility:ConstantString" string="XSLTransform"/>
       </nodes>
@@ -115,13 +115,13 @@
       <!-- 6. SOAP REQUEST NODE - eAdapter service call -->
       <nodes xmi:type="ComIbmSOAPRequest.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_10" 
              location="1400,100" 
-             wsdlFileName="{WSDL_FILE_NAME}" 
+             wsdlFileName="eAdapterStreamedService.wsdl" 
              selectedPortType="eAdapterStreamedService" 
              selectedBinding="BasicHttpBinding_eAdapterStreamedService" 
              selectedOperation="SendStream" 
              selectedPort="BasicHttpBinding_eAdapterStreamedService" 
              useHTTPTransport="true" 
-             webServiceURL="{SOAP_SERVICE_URL}" 
+             webServiceURL="https://eadapterqa.dsv.com/eAdapterStreamedService.svc" 
              sslProtocol="TLS">
         <translation xmi:type="utility:ConstantString" string="SOAPRequest"/>
       </nodes>
@@ -134,21 +134,21 @@
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_2" 
              location="-221,338" 
              rotation="RIGHT_TO_LEFT" 
-             computeExpression="esql://routine/#{FLOW_NAME}_InputEventMessage.Main">
+             computeExpression="esql://routine/#CW1_IN_Document_SND_InputEventMessage.Main">
         <translation xmi:type="utility:ConstantString" string="InputEventMessage"/>
       </nodes>
 
       <!-- 2. MAIN COMPUTE - Business logic processing (includes SOAP prep when needed) -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_1" 
              location="376,68" 
-             computeExpression="esql://routine/#{FLOW_NAME}_Compute.Main">
+             computeExpression="esql://routine/#CW1_IN_Document_SND_Compute.Main">
         <translation xmi:type="utility:ConstantString" string="Compute"/>
       </nodes>
 
       <!-- 3. AFTER ENRICHMENT - Post-transformation enrichment processing -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_12" 
              location="796,45" 
-             computeExpression="esql://routine/#{FLOW_NAME}_AfterEnrichment.Main">
+             computeExpression="esql://routine/#CW1_IN_Document_SND_AfterEnrichment.Main">
         <translation xmi:type="utility:ConstantString" string="AfterEnrichment"/>
       </nodes>
 
@@ -156,21 +156,21 @@
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_13" 
              location="1000,300" 
              rotation="RIGHT_TO_LEFT" 
-             computeExpression="esql://routine/#{FLOW_NAME}_OutputEventMessage.Main">
+             computeExpression="esql://routine/#CW1_IN_Document_SND_OutputEventMessage.Main">
         <translation xmi:type="utility:ConstantString" string="OutputEventMessage"/>
       </nodes>
 
       <!-- 5. AFTER EVENT MESSAGE - Final event processing (METADATA ONLY) -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_15" 
              location="1600,100" 
-             computeExpression="esql://routine/#{FLOW_NAME}_AfterEventMsg.Main">
+             computeExpression="esql://routine/#CW1_IN_Document_SND_AfterEventMsg.Main">
         <translation xmi:type="utility:ConstantString" string="AfterEventMessage"/>
       </nodes>
 
       <!-- 6. FAILURE HANDLER - Error processing -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_11" 
              location="1600,300" 
-             computeExpression="esql://routine/#{FLOW_NAME}_Failure.Main">
+             computeExpression="esql://routine/#CW1_IN_Document_SND_Failure.Main">
         <translation xmi:type="utility:ConstantString" string="FailureHandler"/>
       </nodes>
 

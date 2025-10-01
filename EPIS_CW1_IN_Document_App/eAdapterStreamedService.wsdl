@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+    <wsdl:definitions 
+        xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" 
+        xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
+        xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" 
+        xmlns:tns="http://eadapterqa.dsv.com/"
+        targetNamespace="http://eadapterqa.dsv.com/">
+        
+        <wsdl:types>
+            <xsd:schema targetNamespace="http://eadapterqa.dsv.com/">
+                
+                <xsd:element name="SendStream">
+                    <xsd:complexType>
+                        <xsd:sequence>
+                            <xsd:element name="DocumentMessage" type="xsd:string"/>
+                            <xsd:element name="EntityReferenceType" type="xsd:string"/>
+                            <xsd:element name="SSN" type="xsd:string"/>
+                            <xsd:element name="HouseBill" type="xsd:string"/>
+                            <xsd:element name="CompanyCode" type="xsd:string"/>
+                            <xsd:element name="CountryCode" type="xsd:string"/>
+                            <xsd:element name="DocumentType" type="xsd:string"/>
+                            <xsd:element name="Reference" type="xsd:string"/>
+                            <xsd:element name="ReferenceType" type="xsd:string"/>
+                        </xsd:sequence>
+                    </xsd:complexType>
+                </xsd:element>
+                
+                <xsd:element name="SendStreamResponse">
+                    <xsd:complexType>
+                        <xsd:sequence>
+                            <xsd:element name="EE_ShipmentId_by_SSN" type="xsd:string" minOccurs="0"/>
+                            <xsd:element name="EE_IsBooking" type="xsd:boolean" minOccurs="0"/>
+                            <xsd:element name="EE_ShipmentId_by_HouseBill" type="xsd:string" minOccurs="0"/>
+                            <xsd:element name="IsPublished" type="xsd:boolean" minOccurs="0"/>
+                            <xsd:element name="CW1BrokerageId" type="xsd:string" minOccurs="0"/>
+                            <xsd:element name="eAdapterRecipientID" type="xsd:string" minOccurs="0"/>
+                        </xsd:sequence>
+                    </xsd:complexType>
+                </xsd:element>
+                
+            </xsd:schema>
+        </wsdl:types>
+        
+        <wsdl:message name="SendStreamMessage">
+            <wsdl:part name="parameters" element="tns:SendStream"/>
+        </wsdl:message>
+        
+        <wsdl:message name="SendStreamResponseMessage">
+            <wsdl:part name="parameters" element="tns:SendStreamResponse"/>
+        </wsdl:message>
+        
+        <wsdl:portType name="eAdapterStreamedService">
+            <wsdl:operation name="SendStream">
+                <wsdl:input message="tns:SendStreamMessage"/>
+                <wsdl:output message="tns:SendStreamResponseMessage"/>
+            </wsdl:operation>
+        </wsdl:portType>
+        
+        <wsdl:binding name="BasicHttpBinding_eAdapterStreamedService" type="tns:eAdapterStreamedService">
+            <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+            <wsdl:operation name="SendStream">
+                <soap:operation soapAction="SendStream"/>
+                <wsdl:input>
+                    <soap:body use="literal"/>
+                </wsdl:input>
+                <wsdl:output>
+                    <soap:body use="literal"/>
+                </wsdl:output>
+            </wsdl:operation>
+        </wsdl:binding>
+        
+        <wsdl:service name="eAdapterStreamedService">
+            <wsdl:port name="BasicHttpBinding_eAdapterStreamedService" binding="tns:BasicHttpBinding_eAdapterStreamedService">
+                <soap:address location="https://eadapterqa.dsv.com/eAdapterStreamedService.svc"/>
+            </wsdl:port>
+        </wsdl:service>
+        
+    </wsdl:definitions>

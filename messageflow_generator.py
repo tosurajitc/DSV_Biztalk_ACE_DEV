@@ -207,7 +207,7 @@ class DSVMessageFlowGenerator:
         return enhanced_components
     
     
-        
+            
     def _process_template_placeholders(self, template_content: str, component_data: Dict, flow_details: Dict) -> str:
         """Process template by preserving structure and replacing placeholders only"""
         
@@ -219,7 +219,6 @@ class DSVMessageFlowGenerator:
             '{FLOW_NAME}': flow_details['flow_name'],
             '{APP_NAME}': flow_details['app_name'],
             '{INPUT_QUEUE_NAME}': component_data.get('input_queue', f"{flow_details['flow_name']}.INPUT.QL"),
-            '{XSL_STYLESHEET_NAME}': component_data.get('stylesheet', 'DefaultTransform.xsl'),
             '{SOAP_SERVICE_URL}': component_data.get('soap_url', 'https://eadapterqa.dsv.com/eAdapterStreamedService.svc'),
             '{WSDL_FILE_NAME}': component_data.get('wsdl_file', 'eAdapterStreamedService.wsdl'),
             '{LOCAL_ENRICHMENT_PATH}': f"{flow_details['app_name']}\\{flow_details['flow_name']}\\enrichment"
