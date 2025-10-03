@@ -13,14 +13,16 @@
                     <xsd:complexType>
                         <xsd:sequence>
                             <xsd:element name="DocumentMessage" type="xsd:string"/>
-                            <xsd:element name="EntityReferenceType" type="xsd:string"/>
-                            <xsd:element name="SSN" type="xsd:string"/>
-                            <xsd:element name="HouseBill" type="xsd:string"/>
+                            <xsd:element name="Header" type="xsd:string"/>
+                            <xsd:element name="Target" type="xsd:string"/>
                             <xsd:element name="CompanyCode" type="xsd:string"/>
                             <xsd:element name="CountryCode" type="xsd:string"/>
-                            <xsd:element name="DocumentType" type="xsd:string"/>
+                            <xsd:element name="EntityReferenceType" type="xsd:string"/>
                             <xsd:element name="Reference" type="xsd:string"/>
-                            <xsd:element name="ReferenceType" type="xsd:string"/>
+                            <xsd:element name="SSN" type="xsd:string"/>
+                            <xsd:element name="HouseBill" type="xsd:string"/>
+                            <xsd:element name="DocumentType" type="xsd:string"/>
+                            <xsd:element name="Code" type="xsd:string"/>
                         </xsd:sequence>
                     </xsd:complexType>
                 </xsd:element>
@@ -28,12 +30,7 @@
                 <xsd:element name="SendStreamResponse">
                     <xsd:complexType>
                         <xsd:sequence>
-                            <xsd:element name="EE_ShipmentId_by_SSN" type="xsd:string" minOccurs="0"/>
-                            <xsd:element name="EE_IsBooking" type="xsd:boolean" minOccurs="0"/>
-                            <xsd:element name="EE_ShipmentId_by_HouseBill" type="xsd:string" minOccurs="0"/>
-                            <xsd:element name="IsPublished" type="xsd:boolean" minOccurs="0"/>
-                            <xsd:element name="CW1BrokerageId" type="xsd:string" minOccurs="0"/>
-                            <xsd:element name="eAdapterRecipientID" type="xsd:string" minOccurs="0"/>
+                            <xsd:element name="result" type="xsd:boolean" minOccurs="0"/>
                         </xsd:sequence>
                     </xsd:complexType>
                 </xsd:element>

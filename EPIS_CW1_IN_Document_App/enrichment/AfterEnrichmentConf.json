@@ -1,25 +1,47 @@
 {
-  "timestamp": "2025-10-01T20:16:46.875777",
-  "analysis_phase": "after_enrichment_consolidation",
-  "project_info": {
-    "name": "EPIS_CW1_IN_Document_App",
-    "message_flow": "CW1_IN_Document_SND",
-    "connected_system": "CargoWise One - APP-051 (CW1)"
-  },
-  "consolidation_metadata": {
-    "source_files": [
-      "proc_EDocument_GetIsPublishedFlag.json",
-      "proc_Shipment_GetIdByHouseBill.json",
-      "sp_GetMainCompanyInCountry.json",
-      "sp_Shipment_GetIdBySSN.json"
-    ],
-    "total_configs_merged": 4,
-    "merged_timestamp": "2025-10-01T20:16:46.875777"
-  },
   "EnrichConfigs": {
     "MsgEnrich": [
       {
         "DBAlias": "DSV.ESB.Integration",
+        "Table": "",
+        "Mandatory": false,
+        "Active": true,
+        "DisableCaching": false,
+        "SQLCommand": "proc_CustomsDeclaration_GetIdByReference @Reference='{0}',@ReferenceType='{1}'",
+        "Scope_prefix": "",
+        "Scope_xmlns": "",
+        "Scope": "//DBparameters",
+        "Source": [
+          {
+            "FieldName": "Reference",
+            "xPathValue": "//DBparameters/Reference",
+            "FieldValue": "",
+            "Optional": true,
+            "Source": "Message"
+          },
+          {
+            "FieldName": "ReferenceType",
+            "xPathValue": "//DBparameters/ReferenceType",
+            "FieldValue": "",
+            "Optional": true,
+            "Source": "Message"
+          }
+        ],
+        "Dest": [
+          {
+            "FieldName": "//DBparameters/CW1BrokerageId",
+            "xPathValue": "",
+            "Optional": true,
+            "DefaultValue": ""
+          }
+        ]
+      },
+      {
+        "DBAlias": "DSV.ESB.Integration",
+        "Table": "",
+        "Mandatory": false,
+        "Active": true,
+        "DisableCaching": false,
         "SQLCommand": "proc_EDocument_GetIsPublishedFlag @Code='{0}'",
         "Scope_prefix": "",
         "Scope_xmlns": "",
@@ -28,8 +50,9 @@
           {
             "FieldName": "Code",
             "xPathValue": "//DBparameters/Code",
-            "Source": "Message",
-            "Optional": true
+            "FieldValue": "",
+            "Optional": true,
+            "Source": "Message"
           }
         ],
         "Dest": [
@@ -39,11 +62,14 @@
             "Optional": true,
             "DefaultValue": ""
           }
-        ],
-        "_source_file": "proc_EDocument_GetIsPublishedFlag.json"
+        ]
       },
       {
         "DBAlias": "DSV.ESB.Integration",
+        "Table": "",
+        "Mandatory": false,
+        "Active": true,
+        "DisableCaching": false,
         "SQLCommand": "proc_Shipment_GetIdByHouseBill @HouseBill='{0}'",
         "Scope_prefix": "",
         "Scope_xmlns": "",
@@ -52,8 +78,9 @@
           {
             "FieldName": "HouseBill",
             "xPathValue": "//DBparameters/HouseBill",
-            "Source": "Message",
-            "Optional": true
+            "FieldValue": "",
+            "Optional": true,
+            "Source": "Message"
           }
         ],
         "Dest": [
@@ -63,27 +90,25 @@
             "Optional": true,
             "DefaultValue": ""
           }
-        ],
-        "_source_file": "proc_Shipment_GetIdByHouseBill.json"
+        ]
       },
       {
         "DBAlias": "MH.ESB.EDIEnterprise",
-        "SQLCommand": "sp_GetMainCompanyInCountry @CompanyCode='{0}',@CountryCode='{1}'",
+        "Table": "",
+        "Mandatory": false,
+        "Active": true,
+        "DisableCaching": false,
+        "SQLCommand": "sp_GetMainCompanyInCountry @CountryCode='{0}'",
         "Scope_prefix": "",
         "Scope_xmlns": "",
         "Scope": "//DBparameters",
         "Source": [
           {
-            "FieldName": "CompanyCode",
-            "xPathValue": "//DBparameters/CompanyCode",
-            "Source": "Message",
-            "Optional": true
-          },
-          {
             "FieldName": "CountryCode",
             "xPathValue": "//DBparameters/CountryCode",
-            "Source": "Message",
-            "Optional": true
+            "FieldValue": "",
+            "Optional": true,
+            "Source": "Message"
           }
         ],
         "Dest": [
@@ -93,11 +118,14 @@
             "Optional": true,
             "DefaultValue": ""
           }
-        ],
-        "_source_file": "sp_GetMainCompanyInCountry.json"
+        ]
       },
       {
         "DBAlias": "DSV.ESB.Integration",
+        "Table": "",
+        "Mandatory": false,
+        "Active": true,
+        "DisableCaching": false,
         "SQLCommand": "sp_Shipment_GetIdBySSN @SSN='{0}',@SID='{1}',@STP='{2}'",
         "Scope_prefix": "",
         "Scope_xmlns": "",
@@ -106,20 +134,23 @@
           {
             "FieldName": "SSN",
             "xPathValue": "//DBparameters/SSN",
-            "Source": "Message",
-            "Optional": true
+            "FieldValue": "",
+            "Optional": true,
+            "Source": "Message"
           },
           {
             "FieldName": "SID",
             "xPathValue": "//DBparameters/SID",
-            "Source": "Message",
-            "Optional": true
+            "FieldValue": "",
+            "Optional": true,
+            "Source": "Message"
           },
           {
             "FieldName": "STP",
             "xPathValue": "//DBparameters/STP",
-            "Source": "Message",
-            "Optional": true
+            "FieldValue": "",
+            "Optional": true,
+            "Source": "Message"
           }
         ],
         "Dest": [
@@ -128,15 +159,8 @@
             "xPathValue": "",
             "Optional": true,
             "DefaultValue": ""
-          },
-          {
-            "FieldName": "//DBparameters/EE_IsBooking",
-            "xPathValue": "",
-            "Optional": true,
-            "DefaultValue": ""
           }
-        ],
-        "_source_file": "sp_Shipment_GetIdBySSN.json"
+        ]
       }
     ]
   }

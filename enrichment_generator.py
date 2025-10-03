@@ -808,19 +808,25 @@ Extract all enrichment patterns, lookup requirements, and data flow specificatio
         "EnrichConfigs": {{
             "MsgEnrich": [{{
             "DBAlias": "database-alias-from-analysis",
+            "Table": "",
+            "Mandatory": false,
+            "Active": true,
+            "DisableCaching": false,
             "SQLCommand": "stored_procedure_name @param1='{{0}}',@param2='{{1}}'",
             "Scope_prefix": "",
             "Scope_xmlns": "",
             "Scope": "//DBparameters",
             "Source": [
                 {{"FieldName": "param1", 
-                "xPathValue": "//DBparameters/param1", 
-                "Source": "Message", 
-                "Optional": true}},
+                "xPathValue": "//DBparameters/param1",
+                "FieldValue": "",
+                "Optional": true,
+                "Source": "Message"}},
                 {{"FieldName": "param2", 
-                "xPathValue": "//DBparameters/param2", 
-                "Source": "Message", 
-                "Optional": true}}
+                "xPathValue": "//DBparameters/param2",
+                "FieldValue": "",
+                "Optional": true,
+                "Source": "Message"}}
             ],
             "Dest": [
                 {{"FieldName": "//DBparameters/ResultField", 
@@ -831,6 +837,14 @@ Extract all enrichment patterns, lookup requirements, and data flow specificatio
             }}]
         }}
         }}
+
+        CRITICAL STRUCTURE RULES:
+        - "Table": Always empty string ""
+        - "Mandatory": Always false
+        - "Active": Always true
+        - "DisableCaching": Always false
+        - In Source array: Each entry must have "FieldValue": "" (empty string)
+        - All field names, database aliases, XPaths must be extracted from the analysis - NO hardcoded values
 
         Return JSON with operation names as keys (e.g., "sp_GetMainCompanyInCountry") and their transco configurations as values."""
         

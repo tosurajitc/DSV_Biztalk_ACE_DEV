@@ -1,17 +1,132 @@
 {
-  "timestamp": "2025-10-01T20:16:46.875777",
-  "analysis_phase": "before_enrichment_consolidation",
-  "project_info": {
-    "name": "EPIS_CW1_IN_Document_App",
-    "message_flow": "CW1_IN_Document_SND",
-    "connected_system": "CargoWise One - APP-051 (CW1)"
-  },
-  "enrichment_status": {
-    "total_enrichment_files": 0,
-    "consolidation_required": true,
-    "individual_files_count": 0
-  },
   "EnrichConfigs": {
-    "MsgEnrich": []
+    "MsgEnrich": [
+      {
+        "DBAlias": "DSV.ESB.Integration",
+        "Table": "",
+        "Mandatory": false,
+        "Active": true,
+        "DisableCaching": false,
+        "SQLCommand": "proc_CustomsDeclaration_GetIdByReference @Reference='{0}',@ReferenceType='{1}'",
+        "Scope_prefix": "",
+        "Scope_xmlns": "",
+        "Scope": "//DBparameters",
+        "Source": [
+          {
+            "FieldName": "Reference",
+            "xPathValue": "//DBparameters/Reference",
+            "FieldValue": "",
+            "Optional": true,
+            "Source": "Message"
+          },
+          {
+            "FieldName": "ReferenceType",
+            "xPathValue": "//DBparameters/ReferenceType",
+            "FieldValue": "",
+            "Optional": true,
+            "Source": "Message"
+          }
+        ],
+        "Dest": []
+      },
+      {
+        "DBAlias": "DSV.ESB.Integration",
+        "Table": "",
+        "Mandatory": false,
+        "Active": true,
+        "DisableCaching": false,
+        "SQLCommand": "proc_EDocument_GetIsPublishedFlag @Code='{0}'",
+        "Scope_prefix": "",
+        "Scope_xmlns": "",
+        "Scope": "//DBparameters",
+        "Source": [
+          {
+            "FieldName": "Code",
+            "xPathValue": "//DBparameters/Code",
+            "FieldValue": "",
+            "Optional": true,
+            "Source": "Message"
+          }
+        ],
+        "Dest": []
+      },
+      {
+        "DBAlias": "DSV.ESB.Integration",
+        "Table": "",
+        "Mandatory": false,
+        "Active": true,
+        "DisableCaching": false,
+        "SQLCommand": "proc_Shipment_GetIdByHouseBill @HouseBill='{0}'",
+        "Scope_prefix": "",
+        "Scope_xmlns": "",
+        "Scope": "//DBparameters",
+        "Source": [
+          {
+            "FieldName": "HouseBill",
+            "xPathValue": "//DBparameters/HouseBill",
+            "FieldValue": "",
+            "Optional": true,
+            "Source": "Message"
+          }
+        ],
+        "Dest": []
+      },
+      {
+        "DBAlias": "MH.ESB.EDIEnterprise",
+        "Table": "",
+        "Mandatory": false,
+        "Active": true,
+        "DisableCaching": false,
+        "SQLCommand": "sp_GetMainCompanyInCountry @CountryCode='{0}'",
+        "Scope_prefix": "",
+        "Scope_xmlns": "",
+        "Scope": "//DBparameters",
+        "Source": [
+          {
+            "FieldName": "CountryCode",
+            "xPathValue": "//DBparameters/CountryCode",
+            "FieldValue": "",
+            "Optional": true,
+            "Source": "Message"
+          }
+        ],
+        "Dest": []
+      },
+      {
+        "DBAlias": "DSV.ESB.Integration",
+        "Table": "",
+        "Mandatory": false,
+        "Active": true,
+        "DisableCaching": false,
+        "SQLCommand": "sp_Shipment_GetIdBySSN @SSN='{0}',@SID='{1}',@STP='{2}'",
+        "Scope_prefix": "",
+        "Scope_xmlns": "",
+        "Scope": "//DBparameters",
+        "Source": [
+          {
+            "FieldName": "SSN",
+            "xPathValue": "//DBparameters/SSN",
+            "FieldValue": "",
+            "Optional": true,
+            "Source": "Message"
+          },
+          {
+            "FieldName": "SID",
+            "xPathValue": "//DBparameters/SID",
+            "FieldValue": "",
+            "Optional": true,
+            "Source": "Message"
+          },
+          {
+            "FieldName": "STP",
+            "xPathValue": "//DBparameters/STP",
+            "FieldValue": "",
+            "Optional": true,
+            "Source": "Message"
+          }
+        ],
+        "Dest": []
+      }
+    ]
   }
 }

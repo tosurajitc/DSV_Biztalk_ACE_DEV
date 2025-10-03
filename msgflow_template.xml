@@ -33,7 +33,11 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
     </eStructuralFeatures>
     
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.STYLESHEET_NAME" name="STYLESHEET_NAME" defaultValueLiteral="{FLOW_NAME}.xsl">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.stylesheetName" name="stylesheetName" defaultValueLiteral="{FLOW_NAME}.xsl">
+      <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eStructuralFeatures>
+    
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.stylesheetName.internal_npcompiler" name="stylesheetName.internal_npcompiler">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -303,12 +307,15 @@
               <propertyName xmi:type="utility:TranslatableString" key="Property.BEFORE_FILE_NAME" bundleName="ComIbmFileRead" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
               <propertyDescriptor groupName="Group.BEFORE_ENRICHMENT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileNodesBrowseDirPropertyEditor" configurable="true" describedAttribute="Property.BEFORE_INPUT_DIR">
                 <propertyName xmi:type="utility:TranslatableString" key="Property.BEFORE_INPUT_DIR" bundleName="ComIbmFileRead" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
-                <propertyDescriptor groupName="Group.XSL" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileReadNodeFilePropertyEditor" configurable="true" describedAttribute="Property.STYLESHEET_NAME">
-                  <propertyName xmi:type="utility:TranslatableString" key="Property.STYLESHEET_NAME" bundleName="ComIbmXslMqsi" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
-                  <propertyDescriptor groupName="Group.SOAP" configurable="true" describedAttribute="Property.SOAP_SERVICE_URL">
-                    <propertyName xmi:type="utility:TranslatableString" key="Property.SOAP_SERVICE_URL" bundleName="ComIbmSOAPRequest" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
-                    <propertyDescriptor groupName="Group.SOAP" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileReadNodeFilePropertyEditor" configurable="true" describedAttribute="Property.WSDL_FILE_NAME">
-                      <propertyName xmi:type="utility:TranslatableString" key="Property.WSDL_FILE_NAME" bundleName="ComIbmSOAPRequest" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
+                <propertyDescriptor groupName="Group.XSL" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.XSLNamePropertyEditor" compiler="com.ibm.etools.mft.ibmnodes.compilers.XSLTNamePropertyCompiler" configurable="true" describedAttribute="Property.stylesheetName">
+                  <propertyName xmi:type="utility:TranslatableString" key="Property.stylesheetName" bundleName="ComIbmXslMqsi" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
+                  <propertyDescriptor groupName="Group.InternalRuntimeGroup" readOnly="true" hidden="true" userDefined="true" describedAttribute="Property.stylesheetName.internal_npcompiler">
+                    <propertyName xmi:type="utility:TranslatableString" key="Property.stylesheetName.internal_npcompiler" bundleName="{FLOW_NAME}" pluginId="{APP_NAME}_Developer"/>
+                    <propertyDescriptor groupName="Group.SOAP" configurable="true" describedAttribute="Property.SOAP_SERVICE_URL">
+                      <propertyName xmi:type="utility:TranslatableString" key="Property.SOAP_SERVICE_URL" bundleName="ComIbmSOAPRequest" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
+                      <propertyDescriptor groupName="Group.SOAP" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileReadNodeFilePropertyEditor" configurable="true" describedAttribute="Property.WSDL_FILE_NAME">
+                        <propertyName xmi:type="utility:TranslatableString" key="Property.WSDL_FILE_NAME" bundleName="ComIbmSOAPRequest" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
+                      </propertyDescriptor>
                     </propertyDescriptor>
                   </propertyDescriptor>
                 </propertyDescriptor>
@@ -342,7 +349,7 @@
       <overriddenAttribute href="epis/enrichment/lib/EPIS_MessageEnrichment.subflow#Property.inputDirectory"/>
     </attributeLinks>
 
-    <attributeLinks promotedAttribute="Property.STYLESHEET_NAME" overriddenNodes="FCMComposite_1_5">
+    <attributeLinks promotedAttribute="Property.stylesheetName" overriddenNodes="FCMComposite_1_5">
       <overriddenAttribute href="ComIbmXslMqsi.msgnode#Property.stylesheetName"/>
     </attributeLinks>
 

@@ -33,7 +33,11 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
     </eStructuralFeatures>
     
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.STYLESHEET_NAME" name="STYLESHEET_NAME" defaultValueLiteral="CW1_IN_Document_SND.xsl">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.stylesheetName" name="stylesheetName" defaultValueLiteral="CW1_IN_Document_SND.xsl">
+      <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eStructuralFeatures>
+    
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.stylesheetName.internal_npcompiler" name="stylesheetName.internal_npcompiler">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -45,7 +49,7 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
     </eStructuralFeatures>
     
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.BEFORE_INPUT_DIR" name="BEFORE_INPUT_DIR" defaultValueLiteral="EPIS_CW1_IN_Document_SND_App\CW1_IN_Document_SND\enrichment">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.BEFORE_INPUT_DIR" name="BEFORE_INPUT_DIR" defaultValueLiteral="EPIS_CW1_IN_Document_App\CW1_IN_Document_SND\enrichment">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -66,9 +70,9 @@
     </eStructuralFeatures>
 
     <!-- Branding and Graphics -->
-    <translation xmi:type="utility:TranslatableString" key="CW1_IN_Document_SND" bundleName="CW1_IN_Document_SND" pluginId="EPIS_CW1_IN_Document_SND_App_Developer"/>
-    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_CW1_IN_Document_SND_App_Developer/icons/full/obj16/CW1_IN_Document_SND.gif"/>
-    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_CW1_IN_Document_SND_App_Developer/icons/full/obj30/CW1_IN_Document_SND.gif"/>
+    <translation xmi:type="utility:TranslatableString" key="CW1_IN_Document_SND" bundleName="CW1_IN_Document_SND" pluginId="EPIS_CW1_IN_Document_App_Developer"/>
+    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_CW1_IN_Document_App_Developer/icons/full/obj16/CW1_IN_Document_SND.gif"/>
+    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_CW1_IN_Document_App_Developer/icons/full/obj30/CW1_IN_Document_SND.gif"/>
     
     <composition>
       <!-- ================================================== -->
@@ -83,7 +87,7 @@
       <!-- 2. BEFORE ENRICHMENT SUBFLOW - Initial enrichment processing (BEFORE transformation) -->
       <nodes xmi:type="epis_enrichment_lib_EPIS_MessageEnrichment.subflow:FCMComposite_1" xmi:id="FCMComposite_1_4" 
              location="30,299" 
-             inputDirectory="EPIS_CW1_IN_Document_SND_App\CW1_IN_Document_SND\enrichment" 
+             inputDirectory="EPIS_CW1_IN_Document_App\CW1_IN_Document_SND\enrichment" 
              filenamePattern="BeforeEnrichmentConf.json">
         <translation xmi:type="utility:ConstantString" string="BeforeEnrichment"/>
       </nodes>
@@ -303,12 +307,15 @@
               <propertyName xmi:type="utility:TranslatableString" key="Property.BEFORE_FILE_NAME" bundleName="ComIbmFileRead" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
               <propertyDescriptor groupName="Group.BEFORE_ENRICHMENT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileNodesBrowseDirPropertyEditor" configurable="true" describedAttribute="Property.BEFORE_INPUT_DIR">
                 <propertyName xmi:type="utility:TranslatableString" key="Property.BEFORE_INPUT_DIR" bundleName="ComIbmFileRead" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
-                <propertyDescriptor groupName="Group.XSL" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileReadNodeFilePropertyEditor" configurable="true" describedAttribute="Property.STYLESHEET_NAME">
-                  <propertyName xmi:type="utility:TranslatableString" key="Property.STYLESHEET_NAME" bundleName="ComIbmXslMqsi" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
-                  <propertyDescriptor groupName="Group.SOAP" configurable="true" describedAttribute="Property.SOAP_SERVICE_URL">
-                    <propertyName xmi:type="utility:TranslatableString" key="Property.SOAP_SERVICE_URL" bundleName="ComIbmSOAPRequest" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
-                    <propertyDescriptor groupName="Group.SOAP" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileReadNodeFilePropertyEditor" configurable="true" describedAttribute="Property.WSDL_FILE_NAME">
-                      <propertyName xmi:type="utility:TranslatableString" key="Property.WSDL_FILE_NAME" bundleName="ComIbmSOAPRequest" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
+                <propertyDescriptor groupName="Group.XSL" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.XSLNamePropertyEditor" compiler="com.ibm.etools.mft.ibmnodes.compilers.XSLTNamePropertyCompiler" configurable="true" describedAttribute="Property.stylesheetName">
+                  <propertyName xmi:type="utility:TranslatableString" key="Property.stylesheetName" bundleName="ComIbmXslMqsi" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
+                  <propertyDescriptor groupName="Group.InternalRuntimeGroup" readOnly="true" hidden="true" userDefined="true" describedAttribute="Property.stylesheetName.internal_npcompiler">
+                    <propertyName xmi:type="utility:TranslatableString" key="Property.stylesheetName.internal_npcompiler" bundleName="CW1_IN_Document_SND" pluginId="EPIS_CW1_IN_Document_App_Developer"/>
+                    <propertyDescriptor groupName="Group.SOAP" configurable="true" describedAttribute="Property.SOAP_SERVICE_URL">
+                      <propertyName xmi:type="utility:TranslatableString" key="Property.SOAP_SERVICE_URL" bundleName="ComIbmSOAPRequest" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
+                      <propertyDescriptor groupName="Group.SOAP" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileReadNodeFilePropertyEditor" configurable="true" describedAttribute="Property.WSDL_FILE_NAME">
+                        <propertyName xmi:type="utility:TranslatableString" key="Property.WSDL_FILE_NAME" bundleName="ComIbmSOAPRequest" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
+                      </propertyDescriptor>
                     </propertyDescriptor>
                   </propertyDescriptor>
                 </propertyDescriptor>
@@ -342,7 +349,7 @@
       <overriddenAttribute href="epis/enrichment/lib/EPIS_MessageEnrichment.subflow#Property.inputDirectory"/>
     </attributeLinks>
 
-    <attributeLinks promotedAttribute="Property.STYLESHEET_NAME" overriddenNodes="FCMComposite_1_5">
+    <attributeLinks promotedAttribute="Property.stylesheetName" overriddenNodes="FCMComposite_1_5">
       <overriddenAttribute href="ComIbmXslMqsi.msgnode#Property.stylesheetName"/>
     </attributeLinks>
 

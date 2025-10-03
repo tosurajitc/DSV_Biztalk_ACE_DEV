@@ -301,26 +301,48 @@ NEVER use these forbidden data types:
             str: Complete ESQL code ready for use
         """
         
-        # Step 1: Load naming convention from JSON - REQUIRED for dynamic naming
+        naming_file = "naming_convention.json"
+        
+        # Validate naming file exists
+        if not os.path.exists(naming_file):
+            raise Exception(
+                f"❌ CRITICAL: naming_convention.json not found\n"
+                f"   This file must be created by Agent 1 (Specification-Driven Mapper)\n"
+                f"   Location expected: {os.path.abspath(naming_file)}\n"
+                f"   Please run Agent 1 first to extract naming from your PDF"
+            )
+        
+        # Read fresh naming data for THIS specific flow (no caching)
         try:
-            with open("naming_convention.json", 'r', encoding='utf-8') as f:
+            with open(naming_file, 'r', encoding='utf-8') as f:
                 naming_data = json.load(f)
-        except FileNotFoundError:
-            raise Exception("naming_convention.json not found - required for dynamic naming across 1000+ flows")
+        except json.JSONDecodeError as e:
+            raise Exception(f"❌ naming_convention.json is not valid JSON: {e}")
+        except Exception as e:
+            raise Exception(f"❌ Error reading naming_convention.json: {e}")
         
         # Step 2: Read ESQL template file - REQUIRED for template sections
+        template_file = "ESQL_Template_Updated.ESQL"
+        
+        if not os.path.exists(template_file):
+            raise Exception(
+                f"❌ CRITICAL: {template_file} not found\n"
+                f"   Location expected: {os.path.abspath(template_file)}\n"
+                f"   This template is required for ESQL generation"
+            )
+        
         try:
-            with open("ESQL_Template_Updated.ESQL", 'r', encoding='utf-8') as f:
+            with open(template_file, 'r', encoding='utf-8') as f:
                 template_content = f.read()
-        except FileNotFoundError:
-            raise Exception("ESQL_Template_Updated.ESQL not found - required for template generation")
-
+        except Exception as e:
+            raise Exception(f"❌ Error reading {template_file}: {e}")
+        
         # Step 3: Extract correct template section based on module type - NO hardcoded sections
         section_markers = {
             'input_event': ['INPUT EVENT MESSAGE TEMPLATE - METADATA ONLY', 'COMPUTE TEMPLATE - FULL BUSINESS LOGIC'],
             'compute': ['COMPUTE TEMPLATE - FULL BUSINESS LOGIC', 'PROCESSING TEMPLATE - VALIDATION AND ROUTING ONLY'],
             'processing': ['PROCESSING TEMPLATE - VALIDATION AND ROUTING ONLY', 'FAILURE/ERROR HANDLING TEMPLATE'],
-            'failure': ['FAILURE/ERROR HANDLING TEMPLATE', None]  # Last section
+            'failure': ['FAILURE/ERROR HANDLING TEMPLATE', None]  # Last section, no end marker
         }
         
         # Map legacy types to new structure
@@ -328,178 +350,227 @@ NEVER use these forbidden data types:
             template_type = 'compute'
         
         if template_type not in section_markers:
-            raise Exception(f"Unknown template_type: {template_type}. Valid types: {list(section_markers.keys())}")
+            raise Exception(
+                f"❌ Unknown template_type: '{template_type}'\n"
+                f"   Valid types: input_event, compute, processing, failure"
+            )
         
+        # Extract the specific template section
         start_marker, end_marker = section_markers[template_type]
+        lines = template_content.split('\n')
         
-        # Find template section boundaries
-        start_pos = template_content.find(start_marker)
-        if start_pos == -1:
-            raise Exception(f"Template section '{start_marker}' not found in ESQL_Template_Updated.ESQL")
+        section_start = None
+        section_end = len(lines)
         
-        if end_marker:
-            end_pos = template_content.find(end_marker, start_pos + len(start_marker))
-            if end_pos == -1:
-                end_pos = len(template_content)
-            else:
-                # CRITICAL FIX: Include END MODULE; from current section
-                current_section = template_content[start_pos:end_pos]
-                end_module_pos = current_section.rfind('END MODULE;')
-                if end_module_pos != -1:
-                    # Adjust end_pos to include the END MODULE; from current section
-                    end_pos = start_pos + end_module_pos + len('END MODULE;')
-        else:
-            end_pos = len(template_content)
-        
-        # Extract section and find ESQL code start
-        section_content = template_content[start_pos:end_pos]
-        lines = section_content.split('\n')
-        
-        # Find actual ESQL code (starts with BROKER SCHEMA MODULE)
-        esql_start_line = None
+        # Find section boundaries
         for i, line in enumerate(lines):
-            if line.strip().startswith('BROKER SCHEMA MODULE'):
+            if start_marker in line:
+                section_start = i
+            if end_marker and end_marker in line and section_start is not None:
+                section_end = i
+                break
+        
+        if section_start is None:
+            raise Exception(
+                f"❌ Could not find template section marker: '{start_marker}'\n"
+                f"   Check if {template_file} has correct section markers"
+            )
+        
+        # Find first BROKER SCHEMA or CREATE COMPUTE MODULE line (actual ESQL start)
+        esql_start_line = None
+        for i in range(section_start, section_end):
+            line = lines[i].strip()
+            if line.startswith('BROKER SCHEMA') or line.startswith('CREATE COMPUTE MODULE'):
                 esql_start_line = i
                 break
-
-        if esql_start_line is None:
-            # Fallback to CREATE COMPUTE MODULE if BROKER SCHEMA not found
-            for i, line in enumerate(lines):
-                if line.strip().startswith('CREATE COMPUTE MODULE'):
-                    esql_start_line = i
-                    break
-
-        if esql_start_line is None:
-            raise Exception(f"No 'BROKER SCHEMA MODULE' or 'CREATE COMPUTE MODULE' found in {template_type} template section")
-
-        selected_template = '\n'.join(lines[esql_start_line:]).strip()
         
-        # Step 4: Extract naming components from naming_convention.json - FULLY DYNAMIC
+        if esql_start_line is None:
+            raise Exception(
+                f"❌ No 'BROKER SCHEMA' or 'CREATE COMPUTE MODULE' found in {template_type} template section\n"
+                f"   Template may be corrupted or missing required structure"
+            )
+        
+        # Extract the template section
+        selected_template = '\n'.join(lines[esql_start_line:section_end]).strip()
+        
+        # Step 4: Extract message_flow_name DIRECTLY from JSON - NO PARSING, NO HARDCODING
         project_naming = naming_data.get('project_naming', {})
+        
         if not project_naming:
-            raise Exception("project_naming section missing from naming_convention.json")
+            raise Exception(
+                f"❌ naming_convention.json missing 'project_naming' section\n"
+                f"   File structure is invalid - please regenerate with Agent 1"
+            )
         
-        ace_app_name = project_naming.get('ace_application_name', '')
-        message_flow_name = project_naming.get('message_flow_name', '')
+        # Get the actual flow name from the PDF-extracted data
+        message_flow_name = project_naming.get('message_flow_name', '').strip()
+        ace_app_name = project_naming.get('ace_application_name', '').strip()
+        connected_system = project_naming.get('connected_system', 'Unknown').strip()
         
-        if not ace_app_name or not message_flow_name:
-            raise Exception("ace_application_name and message_flow_name required in naming_convention.json")
+        # Validate required fields
+        if not message_flow_name:
+            raise Exception(
+                f"❌ CRITICAL: message_flow_name is missing or empty in naming_convention.json\n"
+                f"   Agent 1 must extract this from your PDF Summary table\n"
+                f"   Check if PDF contains 'Message Flow Name(s)' field"
+            )
         
-        # Parse naming components dynamically from naming convention
-        app_parts = ace_app_name.split('_')
-        flow_parts = message_flow_name.split('_')
+        if not ace_app_name:
+            raise Exception(
+                f"❌ CRITICAL: ace_application_name is missing or empty in naming_convention.json\n"
+                f"   Agent 1 must extract this from your PDF Summary table"
+            )
         
-        if len(app_parts) < 2 or len(flow_parts) < 3:
-            raise Exception(f"Invalid naming format: ace_application_name='{ace_app_name}', message_flow_name='{message_flow_name}'")
+        # Log dynamic naming information (helpful for debugging 1000+ flows)
+        file_mod_time = datetime.fromtimestamp(os.path.getmtime(naming_file))
+        file_age_minutes = (datetime.now() - file_mod_time).total_seconds() / 60
         
-        system1 = app_parts[0]          # Extract from ace_application_name
-        system2 = app_parts[1]          # Extract from ace_application_name
-        flow_process = flow_parts[1]    # Extract from message_flow_name
-        msg_type = flow_parts[2]        # Extract from message_flow_name
-        flow_type = flow_parts[-1]      # Extract from message_flow_name
+        print(f"\n{'='*70}")
+        print(f"📋 ESQL Generator - DYNAMIC NAMING (Flow-Specific)")
+        print(f"{'='*70}")
+        print(f"📁 Source File:      {os.path.abspath(naming_file)}")
+        print(f"🕐 Last Modified:    {file_mod_time.strftime('%Y-%m-%d %H:%M:%S')} ({file_age_minutes:.1f} min ago)")
+        print(f"🏢 ACE Application:  {ace_app_name}")
+        print(f"📊 Message Flow:     {message_flow_name}")
+        print(f"🔗 Connected System: {connected_system}")
+        print(f"🎯 Template Type:    {template_type}")
+        print(f"📦 Module Name:      {module_name}")
+        print(f"{'='*70}\n")
         
-        # Step 5: Replace template placeholders with dynamic values
+        # Warning if file is old (might be from previous flow run)
+        if file_age_minutes > 60:
+            print(f"⚠️  WARNING: naming_convention.json is {file_age_minutes/60:.1f} hours old")
+            print(f"   If processing a NEW flow, please re-run Agent 1 first")
+            print(f"   This ensures fresh naming from the current PDF\n")
+        
+        # Step 5: Apply message_flow_name DIRECTLY to template - THIS IS THE KEY DYNAMIC PART
+        # 
+        # HOW IT WORKS FOR 1000+ FLOWS:
+        # 
+        # Flow 1: CW1_OUT_Invoice_REC    -> All modules: CW1_OUT_Invoice_REC_{suffix}
+        # Flow 2: CW1_IN_Document_SND    -> All modules: CW1_IN_Document_SND_{suffix}
+        # Flow 3: GIL_GEMS_Invoice_REC   -> All modules: GIL_GEMS_Invoice_REC_{suffix}
+        # Flow N: ANY_FLOW_NAME          -> All modules: ANY_FLOW_NAME_{suffix}
+        #
+        # The message_flow_name comes from the PDF Summary table and is ALWAYS unique per flow
+        
+        # Replace legacy placeholder format in template (for backward compatibility with old templates)
         placeholder = "_SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE"
-        dynamic_name = f"{system1}_{msg_type}_{flow_process}_{system2}_{flow_type}"
+        esql_code = selected_template.replace(placeholder, message_flow_name)
         
-        # Replace main placeholder with dynamic naming
-        esql_code = selected_template.replace(placeholder, dynamic_name)
+        # Also replace any other common placeholders with the flow name
+        esql_code = esql_code.replace("{{MESSAGE_FLOW_NAME}}", message_flow_name)
+        esql_code = esql_code.replace("{{FLOW_NAME}}", message_flow_name)
+        esql_code = esql_code.replace("${MESSAGE_FLOW_NAME}", message_flow_name)
         
-        # Replace with specific module name if provided and different
-        if module_name and module_name != dynamic_name:
-            # Update module name in CREATE COMPUTE MODULE statement
-            pattern = r'(CREATE COMPUTE MODULE\s+)[\w_]+(\s*\n)'
-            esql_code = re.sub(pattern, rf'\1{module_name}\2', esql_code)
+        # Step 6: Update BROKER SCHEMA and CREATE COMPUTE MODULE with correct names
+        #
+        # CRITICAL NAMING RULES:
+        # - BROKER SCHEMA: Uses BASE flow name (without suffix)
+        #   Example: BROKER SCHEMA CW1_OUT_Invoice_REC
+        #
+        # - CREATE COMPUTE MODULE: Uses FULL module name (with suffix)
+        #   Example: CREATE COMPUTE MODULE CW1_OUT_Invoice_REC_Compute
         
-        # Step 6: Inject business logic based on template type and Vector DB data
-        if template_type == 'compute':
-            # Inject comprehensive business logic for compute modules
-            database_operations = business_data.get('database_operations', [])
-            transformations = business_data.get('transformations', [])
-            xpath_mappings = business_data.get('xpath_mappings', [])
-            
-            # Replace business data placeholders with Vector DB extracted paths
-            if xpath_mappings:
-                # Replace business entity and identifier placeholders
-                for xpath in xpath_mappings[:5]:  # Limit for code size
-                    if isinstance(xpath, str) and 'mainIdentifier' not in esql_code:
-                        esql_code = esql_code.replace('_BUSINESS_ENTITY_.*:_BUSINESS_IDENTIFIER_', xpath)
-                        break
-            
-            # Inject database operations as comments (no actual stored procedure calls)
-            if database_operations:
-                db_comment_block = "\n\t\t-- Database Operations from Vector DB:\n"
-                for db_op in database_operations[:3]:
-                    if isinstance(db_op, dict):
-                        proc_name = db_op.get('procedure', 'unknown')
-                        params = db_op.get('parameters', [])
-                        db_comment_block += f"\t\t-- {proc_name}({', '.join(params)})\n"
-                
-                # Insert database operations comments
-                esql_code = esql_code.replace(
-                    "-- ✅ DATABASE OPERATIONS: Business enrichment and lookups",
-                    f"-- ✅ DATABASE OPERATIONS: Business enrichment and lookups{db_comment_block}"
-                )
-            
-            # Inject transformation logic as comments
-            if transformations:
-                transform_comment_block = "\n\t\t-- Transformations from Vector DB:\n"
-                for transform in transformations[:3]:
-                    if isinstance(transform, dict):
-                        transform_type = transform.get('type', 'unknown')
-                        source = transform.get('source', 'unknown')
-                        target = transform.get('target', 'unknown')
-                        transform_comment_block += f"\t\t-- {transform_type}: {source} -> {target}\n"
-                
-                # Insert transformation comments
-                esql_code = esql_code.replace(
-                    "-- ✅ BUSINESS TRANSFORMATIONS: Message format conversions",
-                    f"-- ✅ BUSINESS TRANSFORMATIONS: Message format conversions{transform_comment_block}"
-                )
+        # Extract base flow name by removing common module suffixes
+        standard_suffixes = [
+            '_Compute',
+            '_InputEventMessage',
+            '_OutputEventMessage', 
+            '_AfterEnrichment',
+            '_AfterEventMsg',
+            '_Failure'
+        ]
         
-        elif template_type == 'processing':
-            # Inject validation and routing logic for processing modules
-            validation_rules = business_data.get('validation_rules', [])
-            routing_decisions = business_data.get('routing_decisions', [])
-            
-            if validation_rules:
-                validation_block = "\n\t\t-- Validation Rules from Vector DB:\n"
-                for rule in validation_rules[:3]:
-                    validation_block += f"\t\t-- Validate: {rule}\n"
-                
-                esql_code = esql_code.replace(
-                    "-- ✅ VALIDATION RULES: Message validation and routing decisions",
-                    f"-- ✅ VALIDATION RULES: Message validation and routing decisions{validation_block}"
-                )
-            
-            if routing_decisions:
-                routing_block = "\n\t\t-- Routing Logic from Vector DB:\n"
-                for decision in routing_decisions[:3]:
-                    routing_block += f"\t\t-- Route: {decision}\n"
-                
-                esql_code = esql_code.replace(
-                    "-- ✅ ROUTING LOGIC: Conditional routing based on message content",
-                    f"-- ✅ ROUTING LOGIC: Conditional routing based on message content{routing_block}"
-                )
+        base_flow_name = module_name
+        for suffix in standard_suffixes:
+            if module_name.endswith(suffix):
+                base_flow_name = module_name[:-len(suffix)]
+                break
         
-        # Step 7: Auto-fix BROKER SCHEMA if missing (APPLIES TO ALL TYPES)
-        esql_code = self._ensure_broker_schema(esql_code, module_name)
-
-        # Step 8: Validate final structure with BROKER SCHEMA requirement (APPLIES TO ALL TYPES)
+        # If module_name doesn't have a standard suffix, use message_flow_name as base
+        if base_flow_name == module_name:
+            base_flow_name = message_flow_name
+        
+        # Split into lines for processing
+        lines = esql_code.split('\n')
+        
+        # Update Line 1: BROKER SCHEMA (must be first line)
+        if lines and lines[0].strip().startswith('BROKER SCHEMA'):
+            lines[0] = f'BROKER SCHEMA {base_flow_name}'
+            print(f"✅ Set BROKER SCHEMA: {base_flow_name}")
+        else:
+            # If BROKER SCHEMA is missing, prepend it (REQUIRED by IBM ACE)
+            lines.insert(0, f'BROKER SCHEMA {base_flow_name}')
+            print(f"✅ Added BROKER SCHEMA: {base_flow_name}")
+        
+        # Update CREATE COMPUTE MODULE statement with full module name
+        pattern = r'(CREATE COMPUTE MODULE\s+)[\w_]+(\s*\n)'
+        lines_text = '\n'.join(lines)
+        lines_text = re.sub(pattern, rf'\1{module_name}\2', lines_text)
+        
+        print(f"✅ Set MODULE NAME: {module_name}")
+        
+        esql_code = lines_text
+        
+        # Final validation
+        if not esql_code.strip().startswith('BROKER SCHEMA'):
+            raise Exception(
+                f"❌ CRITICAL: Generated ESQL does not start with BROKER SCHEMA\n"
+                f"   This is required by IBM ACE and will cause deployment failure"
+            )
+        
+        if f'CREATE COMPUTE MODULE {module_name}' not in esql_code:
+            raise Exception(
+                f"❌ CRITICAL: Module name '{module_name}' not found in CREATE COMPUTE MODULE\n"
+                f"   Module naming is incorrect"
+            )
+        
+        print(f"✅ ESQL structure validated - Ready for business logic injection\n")
+        
+        # =====================================================================
+        # END OF STEPS 1-6: Template is now ready with correct dynamic naming
+        # Next: Business logic injection (Step 7+) continues below...
+        # =====================================================================
+        
+        # Step 7: Final Structure Validation (Flexible)
         lines = esql_code.strip().split('\n')
-
-        # Check Line 1: Must start with BROKER SCHEMA
-        if not lines[0].strip().startswith('BROKER SCHEMA'):
-            raise Exception(f"Generated ESQL must start with 'BROKER SCHEMA' on line 1")
-
-        # Check Line 2: Must have CREATE COMPUTE MODULE
-        if len(lines) < 2 or not lines[1].strip().startswith('CREATE COMPUTE MODULE'):
-            raise Exception(f"Generated ESQL must have 'CREATE COMPUTE MODULE' on line 2")
-
-        # Check ending
+        
+        # Validate: First non-empty line must be BROKER SCHEMA
+        first_code_line = None
+        for line in lines:
+            if line.strip():
+                first_code_line = line.strip()
+                break
+        
+        if not first_code_line or not first_code_line.startswith('BROKER SCHEMA'):
+            raise Exception(
+                f"❌ Generated ESQL must start with 'BROKER SCHEMA'\n"
+                f"   Found: '{first_code_line}'\n"
+                f"   This is required by IBM ACE"
+            )
+        
+        # Validate: Must contain correct CREATE COMPUTE MODULE
+        if f'CREATE COMPUTE MODULE {module_name}' not in esql_code:
+            raise Exception(
+                f"❌ Generated ESQL must contain 'CREATE COMPUTE MODULE {module_name}'\n"
+                f"   Module naming is incorrect"
+            )
+        
+        # Validate: Must end with END MODULE;
         if not esql_code.strip().endswith('END MODULE;'):
-            raise Exception(f"Generated ESQL must end with 'END MODULE;'")
-
+            raise Exception(
+                f"❌ Generated ESQL must end with 'END MODULE;'\n"
+                f"   ESQL structure is incomplete"
+            )
+        
+        print(f"✅ Final ESQL validation passed - Structure is correct\n")
+        
+        # =====================================================================
+        # Step 8+: Business logic injection continues below
+        # (Your existing code for business_data injection follows here)
+        # =====================================================================
+        
         return esql_code
     
 

@@ -1,55 +1,72 @@
-BROKER SCHEMA CW1_IN_Document_SND
 CREATE COMPUTE MODULE CW1_IN_Document_SND_Compute
-	CREATE FUNCTION Main() RETURNS BOOLEAN
-	BEGIN
-		
-		-- BUSINESS LOGIC: Full message transformation and processing
-		DECLARE episInfo 		REFERENCE TO 	Environment.variables.EventData.episInfo;
-		DECLARE sourceInfo 		REFERENCE TO 	Environment.variables.EventData.sourceInfo;
-		DECLARE targetInfo 		REFERENCE TO 	Environment.variables.EventData.targetInfo;
-		DECLARE integrationInfo REFERENCE TO 	Environment.variables.EventData.integrationInfo;
-		DECLARE dataInfo 		REFERENCE TO 	Environment.variables.EventData.dataInfo;
-		
-		-- BUSINESS DATA EXTRACTION: Extract business identifiers and data
-		SET dataInfo.mainIdentifier = InputRoot.XMLNSC.[<].*:_BUSINESS_ENTITY_.*:_BUSINESS_IDENTIFIER_;
-		
-        {
-  "comprehensive_processing": true,
-  "database_enrichment": true,
-  "stored_procedures_required": true,
-  "message_transformation": true,
-  "module_type": "DEFAULT",
-  "has_database_operations": true,
-  "has_transformations": true,
-  "primary_business_module": true,
-  "purpose": "basic_processing",
-  "basic_processing_type": true,
-  "interface_name": "DYNAMIC_INTERFACE",
-  "lightweight_operations": true,
-  "standard_message_processing": true
-}
+CREATE FUNCTION Main() RETURNS BOOLEAN
+BEGIN
+    -- Database lookup to get CompanyCode
+    DECLARE CompanyCode CHAR;
+    DECLARE CountryCode CHAR;
+    DECLARE EntityReferenceType CHAR;
+    DECLARE SSN CHAR;
+    DECLARE SID CHAR;
+    DECLARE STP CHAR;
+    DECLARE HouseBill CHAR;
+    DECLARE Code CHAR;
+    DECLARE Reference CHAR;
+    DECLARE ReferenceType CHAR;
 
-		
-		-- STANDARD MESSAGE PROCESSING
-		SET OutputRoot = NULL;
-		SET OutputRoot = InputRoot;
-		
-		RETURN TRUE;
-	END;
+    SET CompanyCode = INPUTROOT.XMLNSC.ns0:DocumentMessage.ns0:Header.ns0:Target.ns0:CompanyCode;
+    SET CountryCode = INPUTROOT.XMLNSC.ns0:DocumentMessage.ns0:Header.ns0:Target.ns0:CountryCode;
+    SET EntityReferenceType = INPUTROOT.XMLNSC.s0:DocumentMessage.s0:Document.s0:EntityReference.s0:Type;
+    SET SSN = INPUTROOT.XMLNSC.s0:DocumentMessage.s0:Document.s0:EntityReference.s0:Reference[@Type='SSN'];
+    SET SID = INPUTROOT.XMLNSC.s0:DocumentMessage.s0:Header.s0:Source.s0:ApplicationCode;
+    SET STP = INPUTROOT.XMLNSC.s0:Header.s0:Source.s0:EnterpriseCode;
+    SET HouseBill = INPUTROOT.XMLNSC.s0:Document.s0:EntityReference.s0:Reference[@Type='HouseBill'];
+    SET Code = INPUTROOT.XMLNSC.s0:DocumentMessage.s0:Document.s0:DocumentType.s0:Code;
+    SET Reference = INPUTROOT.XMLNSC.s0:DocumentMessage.s0:Document.s0:EntityReference.s0:Reference[@Type='SSN'];
+    SET ReferenceType = INPUTROOT.XMLNSC.s0:DocumentMessage.s0:Document.s0:EntityReference.s0:Reference[@Type];
 
-	-- STANDARD IBM ACE INFRASTRUCTURE
-	CREATE PROCEDURE CopyMessageHeaders() BEGIN
-		DECLARE I INTEGER 1;
-		DECLARE J INTEGER;
-		SET J = CARDINALITY(InputRoot.*[]);
-		WHILE I < J DO
-			SET OutputRoot.*[I] = InputRoot.*[I];
-			SET I = I + 1;
-		END WHILE;
-	END;
+    IF CompanyCode != '' THEN
+        SELECT CompanyCode INTO CompanyCode
+        FROM MH.ESB.EDIEnterprise
+    ELSE
+        EXEC sp_GetMainCompanyInCountry(CountryCode) INTO CompanyCode
+    END IF;
 
-	CREATE PROCEDURE CopyEntireMessage() BEGIN
-		SET OutputRoot = InputRoot;
-	END;
+    -- Database lookup matching CW1 shipment based on customer reference
+    DECLARE EE_ShipmentId_by_SSN INTEGER;
+    DECLARE EE_IsBooking INTEGER;
+    IF EntityReferenceType IN ('SHP', 'QBK') AND SSN != '' THEN
+        EXEC sp_Shipment_GetIdBySSN(SSN, SID, STP) INTO EE_ShipmentId_by_SSN, EE_IsBooking
+    ELSE
+        SET EE_ShipmentId_by_SSN = NULL;
+        SET EE_IsBooking = NULL
+    END IF;
 
-END MODULE;
+    -- Database lookup matching CW1 shipment based on housebill
+    DECLARE EE_ShipmentId_by_HouseBill INTEGER;
+    IF EntityReferenceType IN ('SHP', 'QBK') AND HouseBill != '' THEN
+        EXEC proc_Shipment_GetIdByHouseBill(HouseBill) INTO EE_ShipmentId_by_HouseBill
+    ELSE
+        SET EE_ShipmentId_by_HouseBill = NULL
+    END IF;
+
+    -- Database lookup CW1 IsPublished flag based on provided document type
+    DECLARE IsPublished INTEGER;
+    EXEC proc_EDocument_GetIsPublishedFlag(Code) INTO IsPublished;
+
+    -- Database lookup CW1 CW1BrokerageId field
+    DECLARE CW1BrokerageId INTEGER;
+    EXEC proc_CustomsDeclaration_GetIdByReference(Reference, ReferenceType) INTO CW1BrokerageId;
+
+    -- Target recipient id is being enriched based on target country/company code
+    DECLARE eAdapterRecipientID INTEGER;
+    EXEC sp_Get_EAdapterRecepientId(CountryCode, CompanyCode) INTO eAdapterRecipientID;
+
+    -- XSL transformation
+    DECLARE UniversalEvent XML;
+    SET UniversalEvent = XMLNSC.XSLTransform('CDM_DocumentMessage_To_EE_UniversalEvent.xsl', INPUTROOT);
+
+    -- Set output message
+    SET OUTPUTROOT = UniversalEvent;
+
+    RETURN TRUE;
+END;

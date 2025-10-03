@@ -74,7 +74,7 @@ class SmartACEQualityReviewer:
                 return False
             
             # Step 2: Create before enrichment config (basic/empty state)
-            before_config = self._create_before_enrichment_config()
+            before_config = self._create_before_enrichment_config(individual_configs)
             
             # Step 3: Create after enrichment config (consolidated all configs)
             after_config = self._create_after_enrichment_config(individual_configs)
@@ -124,52 +124,55 @@ class SmartACEQualityReviewer:
         
         print(f"    📊 Successfully loaded {len(individual_configs)} enrichment configurations")
         return individual_configs
+    
 
-    def _create_before_enrichment_config(self) -> Dict:
-        """Create beforeenrichment.json - basic project state without enrichment"""
-        project_naming = self.naming_convention.get('project_naming', {})
+
+    def _create_before_enrichment_config(self, individual_configs: List[Dict]) -> Dict:
+        """
+        Create beforeenrichment.json - same configs as after but with empty Dest arrays
+        Shows the state BEFORE database enrichment is applied
+        """
+        import copy
         
         before_config = {
-            "timestamp": datetime.now().isoformat(),
-            "analysis_phase": "before_enrichment_consolidation",
-            "project_info": {
-                "name": project_naming.get('ace_application_name', 'Unknown_Project'),
-                "message_flow": project_naming.get('message_flow_name', 'Unknown_Flow'),
-                "connected_system": project_naming.get('connected_system', 'Unknown_System')
-            },
-            "enrichment_status": {
-                "total_enrichment_files": 0,
-                "consolidation_required": True,
-                "individual_files_count": 0
-            },
             "EnrichConfigs": {
-                "MsgEnrich": []  # Empty - represents state before enrichment
+                "MsgEnrich": []
             }
         }
         
-        print(f"    📋 Created before enrichment config (empty state)")
+        # Copy all configs but clear Dest arrays to show "before enrichment" state
+        for config_item in individual_configs:
+            config_data = config_item.get('config', {})
+            
+            # Check if config has EnrichConfigs structure
+            if 'EnrichConfigs' in config_data and 'MsgEnrich' in config_data['EnrichConfigs']:
+                for enrich_entry in config_data['EnrichConfigs']['MsgEnrich']:
+                    # Deep copy to avoid modifying original
+                    before_entry = copy.deepcopy(enrich_entry)
+                    
+                    # Clear Dest array to show "not yet enriched" state
+                    if 'Dest' in before_entry:
+                        before_entry['Dest'] = []
+                    
+                    # Remove internal tracking fields
+                    if '_source_file' in before_entry:
+                        del before_entry['_source_file']
+                    
+                    before_config['EnrichConfigs']['MsgEnrich'].append(before_entry)
+        
+        print(f"    Created before enrichment config with {len(before_config['EnrichConfigs']['MsgEnrich'])} entries (Dest arrays empty)")
         return before_config
 
+
+
     def _create_after_enrichment_config(self, individual_configs: List[Dict]) -> Dict:
-        """Consolidate all individual configs into single afterenrichment.json structure"""
-        print(f"    🔗 Consolidating {len(individual_configs)} configs into unified structure...")
+        """
+        Consolidate all individual configs into single afterenrichment.json
+        Shows the state AFTER database enrichment is applied (with Dest populated)
+        """
+        import copy
         
-        project_naming = self.naming_convention.get('project_naming', {})
-        
-        # Start with the base structure
         consolidated_config = {
-            "timestamp": datetime.now().isoformat(),
-            "analysis_phase": "after_enrichment_consolidation",
-            "project_info": {
-                "name": project_naming.get('ace_application_name', 'Unknown_Project'),
-                "message_flow": project_naming.get('message_flow_name', 'Unknown_Flow'),
-                "connected_system": project_naming.get('connected_system', 'Unknown_System')
-            },
-            "consolidation_metadata": {
-                "source_files": [config['source_file'] for config in individual_configs],
-                "total_configs_merged": len(individual_configs),
-                "merged_timestamp": datetime.now().isoformat()
-            },
             "EnrichConfigs": {
                 "MsgEnrich": []
             }
@@ -177,45 +180,24 @@ class SmartACEQualityReviewer:
         
         # Extract and consolidate all MsgEnrich configurations
         for config_item in individual_configs:
-            config_content = config_item['config']
-            source_file = config_item['source_file']
+            config_data = config_item.get('config', {})
             
-            try:
-                # Different possible structures in the individual files
-                msg_enrich_configs = []
-                
-                if 'EnrichConfigs' in config_content and 'MsgEnrich' in config_content['EnrichConfigs']:
-                    # Structure matches the expected format
-                    msg_enrich_configs = config_content['EnrichConfigs']['MsgEnrich']
-                elif 'MsgEnrich' in config_content:
-                    # Direct MsgEnrich array
-                    msg_enrich_configs = config_content['MsgEnrich']
-                elif isinstance(config_content, dict) and 'DBAlias' in config_content:
-                    # Single enrichment config object
-                    msg_enrich_configs = [config_content]
-                else:
-                    # Try to extract any config that looks like enrichment
-                    print(f"      ⚠️ Unknown structure in {source_file}, attempting to extract...")
-                    continue
-                
-                # Add each config to the consolidated structure
-                for enrich_config in msg_enrich_configs:
-                    if isinstance(enrich_config, dict) and 'DBAlias' in enrich_config:
-                        # Add source metadata
-                        enrich_config['_source_file'] = source_file
-                        consolidated_config['EnrichConfigs']['MsgEnrich'].append(enrich_config)
-                        print(f"      ✅ Added config from {source_file} (DBAlias: {enrich_config.get('DBAlias', 'Unknown')})")
-                    else:
-                        print(f"      ⚠️ Invalid enrichment config format in {source_file}")
-                        
-            except Exception as e:
-                print(f"      ❌ Error processing config from {source_file}: {e}")
-                self.validation_errors.append(f"Config processing error: {source_file}")
+            # Check if config has EnrichConfigs structure
+            if 'EnrichConfigs' in config_data and 'MsgEnrich' in config_data['EnrichConfigs']:
+                for enrich_entry in config_data['EnrichConfigs']['MsgEnrich']:
+                    # Deep copy to preserve Dest arrays (showing enriched state)
+                    after_entry = copy.deepcopy(enrich_entry)
+                    
+                    # Remove internal tracking fields
+                    if '_source_file' in after_entry:
+                        del after_entry['_source_file']
+                    
+                    consolidated_config['EnrichConfigs']['MsgEnrich'].append(after_entry)
         
-        total_configs = len(consolidated_config['EnrichConfigs']['MsgEnrich'])
-        print(f"    📦 Consolidated {total_configs} enrichment configurations")
-        
+        print(f"    Consolidated {len(consolidated_config['EnrichConfigs']['MsgEnrich'])} configs (Dest arrays populated)")
         return consolidated_config
+    
+
 
     def _write_consolidated_enrichment_files(self, project_dir: Path, before_config: Dict, after_config: Dict):
         """Write the final BeforeEnrichmentConf.json and AfterEnrichmentConf.json files"""
