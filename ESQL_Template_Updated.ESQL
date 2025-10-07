@@ -1,6 +1,6 @@
 /*
 ================================================================================
-INPUT EVENT MESSAGE TEMPLATE - METADATA ONLY
+INPUT AND OUTPUT EVENT MESSAGE TEMPLATE - METADATA ONLY
 ================================================================================
 */
 BROKER SCHEMA MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE

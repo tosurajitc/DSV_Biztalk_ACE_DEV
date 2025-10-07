@@ -138,21 +138,21 @@
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_2" 
              location="-221,338" 
              rotation="RIGHT_TO_LEFT" 
-             computeExpression="esql://routine/#{FLOW_NAME}_InputEventMessage.Main">
+             computeExpression="esql://routine/{FLOW_NAME}#{FLOW_NAME}_InputEventMessage.Main">
         <translation xmi:type="utility:ConstantString" string="InputEventMessage"/>
       </nodes>
 
       <!-- 2. MAIN COMPUTE - Business logic processing (includes SOAP prep when needed) -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_1" 
              location="376,68" 
-             computeExpression="esql://routine/#{FLOW_NAME}_Compute.Main">
+             computeExpression="esql://routine/{FLOW_NAME}#{FLOW_NAME}_Compute.Main">
         <translation xmi:type="utility:ConstantString" string="Compute"/>
       </nodes>
 
       <!-- 3. AFTER ENRICHMENT - Post-transformation enrichment processing -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_12" 
              location="796,45" 
-             computeExpression="esql://routine/#{FLOW_NAME}_AfterEnrichment.Main">
+             computeExpression="esql://routine/{FLOW_NAME}#{FLOW_NAME}_AfterEnrichment.Main">
         <translation xmi:type="utility:ConstantString" string="AfterEnrichment"/>
       </nodes>
 
@@ -160,21 +160,21 @@
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_13" 
              location="1000,300" 
              rotation="RIGHT_TO_LEFT" 
-             computeExpression="esql://routine/#{FLOW_NAME}_OutputEventMessage.Main">
+             computeExpression="esql://routine/{FLOW_NAME}#{FLOW_NAME}_OutputEventMessage.Main">
         <translation xmi:type="utility:ConstantString" string="OutputEventMessage"/>
       </nodes>
 
       <!-- 5. AFTER EVENT MESSAGE - Final event processing (METADATA ONLY) -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_15" 
              location="1600,100" 
-             computeExpression="esql://routine/#{FLOW_NAME}_AfterEventMsg.Main">
+             computeExpression="esql://routine/{FLOW_NAME}#{FLOW_NAME}_AfterEventMsg.Main">
         <translation xmi:type="utility:ConstantString" string="AfterEventMessage"/>
       </nodes>
 
       <!-- 6. FAILURE HANDLER - Error processing -->
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_11" 
              location="1600,300" 
-             computeExpression="esql://routine/#{FLOW_NAME}_Failure.Main">
+             computeExpression="esql://routine/{FLOW_NAME}#{FLOW_NAME}_Failure.Main">
         <translation xmi:type="utility:ConstantString" string="FailureHandler"/>
       </nodes>
 
