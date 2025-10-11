@@ -1138,7 +1138,7 @@ def render_program_2_ui():
     st.info("  **Vector DB Integration**: MessageFlow patterns, routing logic, and integration specs automatically extracted from Vector Knowledge Base")
     
     # Check for required files
-    json_file_path = os.path.join(os.getcwd(), "output", "biztalk_ace_component_mapping.json")
+    json_file_path = os.path.join(os.getcwd(), "output", "business_requirements.json")
     template_file_path = os.path.join(os.getcwd(), "msgflow_template.xml")
     
     col1, col2 = st.columns(2)
