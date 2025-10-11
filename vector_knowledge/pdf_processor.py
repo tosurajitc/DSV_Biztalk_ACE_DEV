@@ -20,10 +20,7 @@ import re
 from datetime import datetime
 from typing import List, Dict, Tuple
 import easyocr
-# ================================================================================================
-# NEW IMPORTS - ADDED FOR DIAGRAM PROCESSING
-# ================================================================================================
-# Image processing and computer vision
+
 import fitz  # PyMuPDF - for PDF image extraction
 import cv2
 import numpy as np
@@ -75,7 +72,7 @@ class PDFProcessor:
             'text_chunks_created': 0
         }
         self._last_chunks = []  # Store last processed chunks for statistics
-    
+        
     # ================================================================================================
     # EXISTING METHODS (PRESERVE EXACTLY AS-IS)
     # ================================================================================================
@@ -91,6 +88,8 @@ class PDFProcessor:
             return Groq(api_key=api_key)
         except Exception:
             return None
+        
+        
     
     def extract_text_from_pdf(self, pdf_path: str) -> str:
         """
@@ -154,40 +153,57 @@ class PDFProcessor:
     # ================================================================================================
     
     def _split_by_sections(self, text: str) -> List[Tuple[str, str]]:
-        """Split by document sections - EXISTING METHOD (preserve)"""
-        # Common section patterns in technical docs
-        section_patterns = [
-            r'(?i)^(Process Diagram|Functional Description|Technical Description|Requirements?|Implementation|Architecture|Component|System)',
-            r'(?i)^(Mapping Logic|Data Flow|Message Flow|Schema|Transformation)',
-            r'(?i)^(\d+\.|\•|\-)\s+',  # Numbered or bulleted lists
-            r'\n\n+'  # Paragraph breaks
-        ]
-        
-        sections = []
-        current_section = "Introduction"
-        current_content = ""
-        
-        lines = text.split('\n')
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
+            """
+            ENHANCED: Split by document sections with MessageFlow table detection
+            """
+            # Common section patterns in technical docs
+            section_patterns = [
+                r'(?i)^(Process Diagram|Functional Description|Technical Description|Requirements?|Implementation|Architecture|Component|System)',
+                r'(?i)^(Mapping Logic|Data Flow|Message Flow|Schema|Transformation)',
+                r'(?i)^(\d+\.|\•|\-)\s+',  # Numbered or bulleted lists
+                r'\n\n+',  # Paragraph breaks
+                # NEW: Detect Summary/MessageFlow tables
+                r'(?i)(Summary|Message\s+Flow\s+Name\(s?\)|ACE\s+Application\(s?\)|ACE\s+Message\s+Flows?)'
+            ]
+            
+            sections = []
+            current_section = "Introduction"
+            current_content = ""
+            table_count = 0
+            
+            lines = text.split('\n')
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
                 
-            # Check if this is a new section
-            is_new_section = any(re.match(pattern, line) for pattern in section_patterns[:2])
+                # Check if this is a new section (existing logic)
+                is_new_section = any(re.match(pattern, line) for pattern in section_patterns[:2])
+                
+                # NEW: Check if this is a MessageFlow table header
+                is_messageflow_table = re.search(section_patterns[4], line)
+                
+                if is_messageflow_table and current_content:
+                    # Save previous section
+                    sections.append((current_section, current_content))
+                    # Start new table section
+                    table_count += 1
+                    current_section = f"MessageFlow_Table_{table_count}"
+                    current_content = line + "\n"
+                elif is_new_section and current_content:
+                    sections.append((current_section, current_content))
+                    current_section = line[:50]  # Use first 50 chars as section name
+                    current_content = line + "\n"
+                else:
+                    current_content += line + "\n"
             
-            if is_new_section and current_content:
+            # Add final section
+            if current_content:
                 sections.append((current_section, current_content))
-                current_section = line[:50]  # Use first 50 chars as section name
-                current_content = line + "\n"
-            else:
-                current_content += line + "\n"
-        
-        # Add final section
-        if current_content:
-            sections.append((current_section, current_content))
             
-        return sections
+            return sections
+
+
     
     def _split_text_with_overlap(self, text: str, chunk_size: int, overlap: int) -> List[str]:
         """Split text with overlapping windows - EXISTING METHOD (preserve)"""
@@ -202,62 +218,128 @@ class PDFProcessor:
                 
         return chunks
     
+
+    
     def _extract_metadata(self, chunk: str, section: str) -> Dict:
-        """Extract metadata for better search relevance - EXISTING METHOD (preserve)"""
-        chunk_lower = chunk.lower()
-        
-        # Get agent scores
-        agent_scores = self._calculate_agent_scores(chunk_lower)
-        
-        # Build metadata with flattened agent scores
-        metadata = {
-            'section': section,
-            'contains_technical': any(word in chunk_lower for word in ['esql', 'xsl', 'schema', 'mapping', 'transformation']),
-            'contains_business': any(word in chunk_lower for word in ['requirement', 'business', 'process', 'rule']),
-            'contains_architecture': any(word in chunk_lower for word in ['component', 'system', 'flow', 'integration']),
-            'contains_data': any(word in chunk_lower for word in ['data', 'message', 'format', 'structure']),
-            'length': len(chunk)
-        }
-        
-        # Flatten agent relevance scores into separate scalar fields
-        for agent_name, score in agent_scores.items():
-            metadata[f'agent_relevance_{agent_name}'] = float(score)  # Ensure it's a float scalar
-        
-        return metadata
-    
-    def _calculate_agent_scores(self, chunk_lower: str) -> Dict[str, float]:
-        """Pre-calculate relevance scores for each agent - EXISTING METHOD (preserve)"""
-        agent_keywords = {
-            'component_mapper': ['biztalk', 'orchestration', 'port', 'pipeline', 'mapping', 'transform'],
-            'messageflow_generator': ['flow', 'message', 'routing', 'endpoint', 'integration', 'connection'],
-            'ace_module_creator': ['esql', 'xsl', 'transformation', 'module', 'logic', 'enrichment'],
-            'schema_generator': ['schema', 'xsd', 'structure', 'element', 'validation', 'type'],
-            'quality_reviewer': ['requirement', 'validation', 'criteria', 'quality', 'compliance'],
-            'esql_generator': ['esql', 'transformation', 'logic', 'business', 'database', 'compute', 'procedure', 'lookup'],
-            'postman_collection_generator': [
-                'integration', 'interface', 'connector', 'adapter', 'bridge',
-                'flow', 'message', 'document', 'event', 'transaction',
-                'endpoint', 'service', 'api', 'queue', 'topic', 'channel',
-                'http', 'soap', 'rest', 'mq', 'jms', 'tcp', 'ssl',
-                'transformation', 'mapping', 'enrichment', 'validation',
-                'lookup', 'database', 'stored', 'procedure', 'query',
-                'test', 'scenario', 'sample', 'verification', 'validation',
-                'error', 'exception', 'handling', 'monitoring'
-            ],
-            'project_generator': [
-                'project', 'architecture', 'build', 'configuration', 'dependency', 'library',
-                'ace', 'toolkit', 'eclipse', 'nature', 'builder', 'runtime', 'deployment',
-                'shared', 'component', 'relationship', 'management', 'structure', 'template'
-            ]
-        }
-        
-        scores = {}
-        for agent, keywords in agent_keywords.items():
-            score = sum(chunk_lower.count(keyword) for keyword in keywords)
-            scores[agent] = score / max(len(chunk_lower.split()), 1)  # Normalize by length
+            """
+            ENHANCED: Extract metadata with Transco, XSL, and MessageFlow detection
             
-        return scores
+            This method now includes:
+            - Original metadata flags
+            - NEW: Transco detection with XML file validation
+            - NEW: XSL file detection and extraction
+            - NEW: MessageFlow table detection
+            - NEW: Multiple flow indicators
+            """
+            chunk_lower = chunk.lower()
+            
+            # Get agent scores
+            agent_scores = self._calculate_agent_scores(chunk_lower)
+            
+            # EXISTING metadata (preserved)
+            metadata = {
+                'section': section,
+                'contains_technical': any(word in chunk_lower for word in ['esql', 'xsl', 'schema', 'mapping', 'transformation']),
+                'contains_business': any(word in chunk_lower for word in ['requirement', 'business', 'process', 'rule']),
+                'contains_architecture': any(word in chunk_lower for word in ['component', 'system', 'flow', 'integration']),
+                'contains_data': any(word in chunk_lower for word in ['data', 'message', 'format', 'structure']),
+                'length': len(chunk)
+            }
+            
+            # NEW: Transco/Enrichment detection
+            metadata['contains_transco'] = self._detect_transco_presence(chunk)
+            metadata['transco_files'] = self._extract_transco_files(chunk)
+            metadata['transco_file_count'] = len(metadata['transco_files'])
+            
+            # NEW: Database lookup indicators (implies enrichment)
+            metadata['contains_database_lookup'] = any(word in chunk_lower for word in [
+                'database lookup', 'stored procedure', 'sp_', 'proc_', 'db lookup'
+            ])
+            
+            # NEW: Enrichment configuration indicators
+            metadata['contains_enrichment_config'] = any(word in chunk_lower for word in [
+                'enrichmentconf.json', 'enrichment configuration', 'enrichment file',
+                'beforeenrichment', 'afterenrichment'
+            ])
+            
+            # NEW: XSL detection with file extraction
+            metadata['contains_xsl'] = '.xsl' in chunk_lower or 'xslt' in chunk_lower
+            metadata['xsl_files'] = self._extract_xsl_filenames(chunk)
+            metadata['xsl_count'] = len(metadata['xsl_files'])
+            
+            # NEW: MessageFlow table detection
+            metadata['is_messageflow_table'] = self._detect_messageflow_table(chunk)
+            
+            # NEW: Multiple flow indicator
+            flow_mention_count = self._count_flow_mentions(chunk)
+            metadata['flow_mention_count'] = flow_mention_count
+            metadata['multiple_flows_indicator'] = flow_mention_count > 1
+            
+            # Flatten agent relevance scores into separate scalar fields (EXISTING - preserved)
+            for agent_name, score in agent_scores.items():
+                metadata[f'agent_relevance_{agent_name}'] = float(score)
+            
+            return metadata
     
+
+        
+    def _calculate_agent_scores(self, chunk_lower: str) -> Dict[str, float]:
+            """
+            ENHANCED: Pre-calculate relevance scores for each agent with template optimization keywords
+            """
+            agent_keywords = {
+                'component_mapper': [
+                    'biztalk', 'orchestration', 'port', 'pipeline', 'mapping', 'transform',
+                    # NEW: Template optimization keywords
+                    'xsl', 'xslt', 'transco', 'enrichment', 'stylesheet',
+                    'transcofile.xml', 'enrichmentconf'
+                ],
+                'messageflow_generator': [
+                    'flow', 'message', 'routing', 'endpoint', 'integration', 'connection',
+                    # NEW: Multi-flow detection keywords
+                    'message flow name', 'ace application', 'summary', 'connected system',
+                    'transco', 'enrichment'
+                ],
+                'ace_module_creator': [
+                    'esql', 'xsl', 'transformation', 'module', 'logic', 'enrichment'
+                ],
+                'schema_generator': [
+                    'schema', 'xsd', 'structure', 'element', 'validation', 'type'
+                ],
+                'quality_reviewer': [
+                    'requirement', 'validation', 'criteria', 'quality', 'compliance'
+                ],
+                'esql_generator': [
+                    'esql', 'transformation', 'logic', 'business', 'database', 'compute', 'procedure', 'lookup',
+                    # NEW: Enrichment and transco keywords
+                    'enrichment', 'transco', 'database lookup', 'stored procedure'
+                ],
+                'postman_collection_generator': [
+                    'integration', 'interface', 'connector', 'adapter', 'bridge',
+                    'flow', 'message', 'document', 'event', 'transaction',
+                    'endpoint', 'service', 'api', 'queue', 'topic', 'channel',
+                    'http', 'soap', 'rest', 'mq', 'jms', 'tcp', 'ssl',
+                    'transformation', 'mapping', 'enrichment', 'validation',
+                    'lookup', 'database', 'stored', 'procedure', 'query',
+                    'test', 'scenario', 'sample', 'verification', 'validation',
+                    'error', 'exception', 'handling', 'monitoring'
+                ],
+                'project_generator': [
+                    'project', 'architecture', 'build', 'configuration', 'dependency', 'library',
+                    'ace', 'toolkit', 'eclipse', 'nature', 'builder', 'runtime', 'deployment',
+                    'shared', 'component', 'relationship', 'management', 'structure', 'template'
+                ]
+            }
+            
+            scores = {}
+            for agent, keywords in agent_keywords.items():
+                score = sum(chunk_lower.count(keyword) for keyword in keywords)
+                scores[agent] = score / max(len(chunk_lower.split()), 1)  # Normalize by length
+                
+            return scores
+
+
+        
     def _serialize_all_chunks_metadata(self, chunks: List[Dict]) -> List[Dict]:
         """
         EXISTING METHOD - Smart, efficient serialization of complex metadata to ChromaDB-compatible primitives.
@@ -663,6 +745,181 @@ Return detailed JSON with ALL identified elements. Be extremely thorough - captu
         
         return text.strip()
     
+
+
+    # ================================================================================================
+    # NEW METHODS - TRANSCO AND XSL DETECTION FOR TEMPLATE OPTIMIZATION
+    # ================================================================================================
+    
+    def _detect_transco_presence(self, chunk: str) -> bool:
+        """
+        Detect if Transco/enrichment is present in chunk
+        
+        Transco is PRESENT if:
+        1. "transco" keyword found AND
+        2. At least one .xml file is listed under transco section
+        
+        Transco is ABSENT if:
+        1. "transco" keyword completely missing OR
+        2. Explicitly stated as "not present" OR
+        3. "transco" mentioned but NO .xml file
+        
+        Args:
+            chunk: Text chunk to analyze
+            
+        Returns:
+            True if transco is present, False otherwise
+        """
+        chunk_lower = chunk.lower()
+        
+        # Check 1: Is "transco" mentioned at all?
+        has_transco_keyword = 'transco' in chunk_lower
+        
+        if not has_transco_keyword:
+            return False  # No transco keyword = no transco
+        
+        # Check 2: Explicit negative statements?
+        negative_patterns = [
+            r'transco.*not\s+present',
+            r'transco.*not\s+available',
+            r'no\s+transco',
+            r'transco.*not\s+used',
+            r'transco.*disabled',
+            r'transco.*not\s+applicable'
+        ]
+        
+        for pattern in negative_patterns:
+            if re.search(pattern, chunk_lower, re.IGNORECASE):
+                return False  # Explicitly stated as not present
+        
+        # Check 3: Is there an .xml file listed under transco?
+        # Look for patterns like:
+        # - transco0
+        #   • transco0File.xml
+        # - transco
+        #   • enrichmentFile.xml
+        # - transco: someFile.xml
+        
+        transco_xml_patterns = [
+            r'transco\w*\s*[:\n]?\s*[\•\-\*]?\s*\w+\.xml',  # transco followed by .xml file
+            r'transco\w*File\.xml',  # transcoFile.xml, transco0File.xml, etc.
+            r'enrichment\w*\.xml',  # enrichment.xml, enrichmentConf.xml
+            r'BeforeEnrichment.*\.xml',
+            r'AfterEnrichment.*\.xml'
+        ]
+        
+        for pattern in transco_xml_patterns:
+            if re.search(pattern, chunk, re.IGNORECASE):
+                return True  # Found transco XML file
+        
+        # If "transco" mentioned but no XML file found
+        return False
+    
+
+
+    
+    def _extract_transco_files(self, chunk: str) -> List[str]:
+        """Extract transco XML file names"""
+        
+        transco_files = []
+        lines = chunk.split('\n')
+        
+        for i, line in enumerate(lines):
+            if 'transco' in line.lower():
+                # Look at next line for XML file
+                if i + 1 < len(lines):
+                    next_line = lines[i + 1]
+                    if '.xml' in next_line.lower():
+                        # Extract full filename
+                        xml_match = re.search(r'([a-zA-Z]\w+\.xml)', next_line, re.IGNORECASE)
+                        if xml_match:
+                            transco_files.append(xml_match.group(1))
+        
+        return list(set(transco_files))
+
+
+    
+    def _extract_xsl_filenames(self, chunk: str) -> List[str]:
+        """
+        Extract XSL file names from chunk content
+        
+        Args:
+            chunk: Text chunk to analyze
+            
+        Returns:
+            List of XSL filenames found
+        """
+        # Pattern to match .xsl or .xslt files
+        # Examples: BR_PaymentSlips_To_CDM_DocumentMessage.xsl
+        #           Transform_Mapping.xslt
+        
+        xsl_pattern = r'\b([A-Za-z0-9_]+\.xslt?)\b'
+        xsl_files = re.findall(xsl_pattern, chunk, re.IGNORECASE)
+        
+        return list(set(xsl_files))  # Remove duplicates
+    
+    def _detect_messageflow_table(self, chunk: str) -> bool:
+        """
+        Detect if chunk contains an ACE Message Flow table
+        
+        Args:
+            chunk: Text chunk to analyze
+            
+        Returns:
+            True if chunk appears to be a message flow table
+        """
+        chunk_lower = chunk.lower()
+        
+        # Key indicators of a message flow table
+        table_indicators = [
+            'message flow name',
+            'ace application name',
+            'ace application',
+            'connected system',
+            'ace server',
+            'ace message flow'
+        ]
+        
+        # Count how many indicators are present
+        indicator_count = sum(1 for indicator in table_indicators if indicator in chunk_lower)
+        
+        # If 2 or more indicators present, likely a message flow table
+        return indicator_count >= 2
+    
+
+
+    
+    def _count_flow_mentions(self, chunk: str) -> int:
+        """Count message flows in chunk"""
+        
+        lines = chunk.split('\n')
+        flow_names = []
+        
+        for line in lines:
+            # Skip empty lines
+            if not line.strip():
+                continue
+                
+            # Skip header
+            if 'ACE Message Flow Name' in line:
+                continue
+            
+            # Check if this is a data line (has pipes)
+            if '|' not in line:
+                continue
+            
+            # Get first column (flow name)
+            first_column = line.split('|')[0].strip()
+            
+            # Check if it's a flow name (contains REC, SND, HUB)
+            flow_suffixes = ['REC', 'SND', 'HUB']
+            if any(suffix in first_column for suffix in flow_suffixes):
+                flow_names.append(first_column)
+        
+        return len(set(flow_names))
+    
+
+
     def _enhance_diagram_analysis(self, base_analysis: Dict, ocr_text: str, page_context: str) -> Dict:
         """NEW: Enhance diagram analysis with pattern-based extraction"""
         
@@ -1005,6 +1262,29 @@ Return detailed JSON with ALL identified elements. Be extremely thorough - captu
         except Exception as e:
             raise PDFProcessingError(f"LLM intelligent chunking failed: {str(e)}")
 
+
+
+    def test_detection_methods(self, sample_text: str) -> Dict:
+        """
+        Test method to verify detection methods work correctly
+        
+        Args:
+            sample_text: Sample text to test
+            
+        Returns:
+            Dict with detection results
+        """
+        results = {
+            'transco_detected': self._detect_transco_presence(sample_text),
+            'transco_files': self._extract_transco_files(sample_text),
+            'xsl_detected': '.xsl' in sample_text.lower() or 'xslt' in sample_text.lower(),
+            'xsl_files': self._extract_xsl_filenames(sample_text),
+            'is_messageflow_table': self._detect_messageflow_table(sample_text),
+            'flow_mention_count': self._count_flow_mentions(sample_text)
+        }
+        
+        return results
+    
 
 # ================================================================================================
 # EXISTING EXCEPTION CLASS (PRESERVE)

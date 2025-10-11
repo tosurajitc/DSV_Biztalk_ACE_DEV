@@ -70,10 +70,7 @@ class SemanticSearchEngine:
                 'error', 'exception', 'handling', 'monitoring', 'logging',
                 'testing', 'coverage', 'criteria', 'requirement', 'specification'
             ],
-
         }
-
-
 
     def ensure_collection_exists(self):
         """Ensure collection is properly initialized"""
@@ -82,27 +79,42 @@ class SemanticSearchEngine:
                 # Re-create collection if missing
                 if hasattr(self, 'vector_store') and self.vector_store:
                     self.collection = self.vector_store.collection
+                    
+                    # Check if collection is still None after assignment
+                    if self.collection is None:
+                        print("🔧 Force creating collection in SemanticSearchEngine")
+                        # Create a new vector store if needed
+                        from .vector_store import ChromaVectorStore
+                        if not hasattr(self, 'vector_store') or self.vector_store is None:
+                            self.vector_store = ChromaVectorStore()
+                        
+                        # Create a new collection with an empty knowledge base if needed
+                        if hasattr(self.vector_store, 'create_collection'):
+                            self.vector_store.create_collection()
+                        
+                        # Get the new collection
+                        self.collection = self.vector_store.collection
                 else:
-                    # Force collection creation
-                    print("🔧 Force creating collection in SemanticSearchEngine")
-                    # Import and create ChromaVectorStore if needed
+                    # Initialize vector store if missing
                     from .vector_store import ChromaVectorStore
                     self.vector_store = ChromaVectorStore()
-                    if hasattr(self.vector_store, 'collection'):
-                        self.collection = self.vector_store.collection
+                    self.collection = self.vector_store.collection
             
             return self.collection is not None
+        
         except Exception as e:
             print(f"Collection creation failed: {e}")
             return False
-
-
-
     
     def get_agent_content(self, agent_name: str, top_k: int = 5) -> str:
         """
         ENHANCED: Get focused content for specific agent with diagram data integration
         """
+        # Check collection exists first
+        if not self.ensure_collection_exists():
+            return f"No content available - collection not initialized"
+            
+        # Check if agent name is valid
         if agent_name not in self.agent_queries:
             raise ValueError(f"Unknown agent: {agent_name}")
         
@@ -126,7 +138,6 @@ class SemanticSearchEngine:
             content = result['content']
             metadata = result['metadata']
             
-
             has_technical_diagrams = metadata.get('has_technical_diagrams', False) or metadata.get('has_diagrams', False)
             
             section_info = {
@@ -171,6 +182,17 @@ class SemanticSearchEngine:
     
     def get_search_summary(self, agent_name: str) -> Dict:
         """Get summary of search results for monitoring"""
+        # Check collection exists first
+        if not self.ensure_collection_exists():
+            return {
+                'agent': agent_name,
+                'queries_used': 0,
+                'chunks_found': 0,
+                'avg_relevance': 0,
+                'content_size_chars': 0,
+                'sections_covered': []
+            }
+            
         queries = self.agent_queries[agent_name]
         results = self.vector_store.search_for_agent_with_diagrams(agent_name, queries, 3)
         

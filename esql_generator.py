@@ -1,7 +1,4 @@
 """
-
-==========================================
-
 Generates IBM ACE ESQL modules from:
 1. Vector DB business requirements (business context)
 2. MessageFlow XML (source of truth for module names)

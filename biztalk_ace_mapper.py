@@ -89,7 +89,84 @@ class BizTalkACEMapper:
         
         print(f"🔍 Parsed {len(components)} BizTalk components")
         return components
-    
+
+    def analyze_pdf_content(self, vector_db_results):
+        """Detect XSL and Transco mentions from PDF content"""
+        has_xsl = False
+        has_transco = False
+        
+        # Search for keywords in vector DB results
+        for result in vector_db_results:
+            content = result['content'].lower()
+            if 'xsl' in content or 'transformation' in content:
+                has_xsl = True
+            if 'transco' in content or 'enrichment' in content:
+                has_transco = True
+        
+        return has_xsl, has_transco
+
+    def optimize_msgflow_template(self, has_xsl, has_transco, template_path="templates/standard_msgflow_template.xml", output_path="msgflow_template.xml"):
+        """
+        Generate optimized msgflow_template.xml based on PDF content analysis
+        
+        Args:
+            has_xsl (bool): Whether XSL transformation is mentioned in PDF
+            has_transco (bool): Whether Transco/Enrichment is mentioned in PDF
+            output_path (str): Path to save optimized template
+        
+        Returns:
+            str: Path to generated template
+        """
+        
+        # Load standard template
+        template_path = "templates/standard_msgflow_template.xml"
+        tree = ET.parse(template_path)
+        root = tree.getroot()
+        
+        nodes_to_remove = []
+        connections_to_remove = []
+        
+        # Remove Transco-related nodes
+        if not has_transco:
+            print("⚠️  No Transco mentioned - Removing BeforeEnrichment & AfterEnrichment")
+            for node in root.findall(".//subFlow"):
+                if node.get('name') in ['BeforeEnrichment', 'AfterEnrichment']:
+                    nodes_to_remove.append(node)
+                    node_name = node.get('name')
+                    # Remove connections to/from these subflows
+                    for conn in root.findall(".//connections"):
+                        if conn.get('source') == node_name or conn.get('target') == node_name:
+                            connections_to_remove.append(conn)
+        
+        # Remove XSL Transform node
+        if not has_xsl:
+            print("⚠️  No XSL mentioned - Removing XSLTransform node")
+            for node in root.findall(".//node[@type='XSLTransform']"):
+                nodes_to_remove.append(node)
+                node_name = node.get('name')
+                for conn in root.findall(".//connections"):
+                    if conn.get('source') == node_name or conn.get('target') == node_name:
+                        connections_to_remove.append(conn)
+        
+        # Apply removals
+        for node in nodes_to_remove:
+            root.remove(node)
+        
+        for conn in connections_to_remove:
+            root.remove(conn)
+        
+        # Adjust connections for simplified flow
+        if not has_xsl and not has_transco:
+            print("✅ Simplified flow: MQInput → Compute → MQOutput → SOAPRequest")
+            # Update connection logic here if needed
+        
+        # Save optimized template
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        tree.write(output_path, encoding='utf-8', xml_declaration=True)
+        
+        print(f"✅ Optimized template saved: {output_path}")
+        return output_path
+
     def _parse_single_component(self, file_path: Path) -> Optional[Dict]:
         """Parse individual BizTalk component file"""
         extension = file_path.suffix.lower()
@@ -238,12 +315,9 @@ END MODULE;
         print(f"🔍 ESQL validation: {'✅ Valid' if validation['valid'] else '❌ Invalid'}")
         return validation
     
-
-    
     # ========================================
     # LLM-BASED FUNCTIONS (100% LLM-Based)
     # ========================================
-    
     
     def extract_business_requirements(self, pdf_content: str) -> Dict:
         """LLM: Extract detailed business requirements in optimized iterations"""
@@ -356,11 +430,8 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
             
             return all_requirements
             
-
         except Exception as e:
             raise Exception(f"Business requirements extraction failed: {e}")
-        
-    
 
     def generate_excel_output(self, mappings: List[Dict], output_path: str) -> str:
         """Generate comprehensive Excel file with multiple sheets for detailed component mapping"""
@@ -560,8 +631,6 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
         except Exception as e:
             print(f"⚠️ Excel formatting failed (but file still usable): {e}")
 
-
-
     def generate_intelligent_mappings(self, biztalk_components: List[Dict], business_requirements: Dict) -> List[Dict]:
         """Generate intelligent BizTalk to ACE component mappings based on business specifications"""
         
@@ -682,8 +751,6 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
             
         except Exception as e:
             raise Exception(f"Component mapping generation failed: {str(e)}")
-        
-
 
     def save_mapping_outputs(self, mappings: List[Dict], output_dir: str) -> Dict[str, str]:
         """Save both JSON and Excel outputs for component mappings"""
@@ -728,21 +795,28 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
             raise Exception(f"Failed to save mapping outputs: {str(e)}")
 
 
-    def process_mapping(self, biztalk_files: Union[str, List[str]], pdf_file: str, output_dir: str) -> Dict:
-        """Main processing function with Vector DB integration - Vector Only, No Fallbacks"""
+
+    def process_mapping(self, biztalk_files: Union[str, List[str], None], pdf_file: str, output_dir: str) -> Dict:
+        """Main processing function with Vector DB integration - Supports PDF-only mode"""
         
         try:
             print("🎯 Starting Specification-Driven Component Mapping")
             print("=" * 60)
             
-            # Phase 1: BizTalk Component Analysis (Rule-Based)
+            # Phase 1: BizTalk Component Analysis (Rule-Based) - OPTIONAL
             print("🔍 Phase 1: Analyzing BizTalk components...")
-            self.biztalk_components = self.parse_biztalk_components(biztalk_files)
             
-            if not self.biztalk_components:
-                raise Exception("No BizTalk components found - check input files/folder")
-            
-            print(f"✅ Found {len(self.biztalk_components)} BizTalk components")
+            if biztalk_files:
+                self.biztalk_components = self.parse_biztalk_components(biztalk_files)
+                
+                if not self.biztalk_components:
+                    print("⚠️  No BizTalk components found in provided path")
+                    self.biztalk_components = []
+                else:
+                    print(f"✅ Found {len(self.biztalk_components)} BizTalk components")
+            else:
+                print("⏭️  No BizTalk path provided - PDF-only mode enabled")
+                self.biztalk_components = []
             
             # Phase 2: Business Requirements Extraction - VECTOR DB ONLY
             print("🚀 Phase 2: Processing Vector DB focused content...")
@@ -759,62 +833,130 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
             
             print(f"✅ Vector business requirements processed successfully")
             
-            # Phase 3: Component-Level Mapping (LLM)
-            print("🧠 Phase 3: Generating component mappings with Vector-focused content...")
+            # NEW PHASE: Generate MessageFlow Template based on business requirements
+            print("⚙️ Phase 2.5: Generating MessageFlow template...")
             
-            self.mappings = self.generate_intelligent_mappings(
-                self.biztalk_components,
-                self.business_requirements  
-            )
+            # Detect XSL and Transco requirements from business requirements
+            has_xsl = any("xsl" in str(item).lower() for items in self.business_requirements.values() for item in items)
+            has_transco = any("transco" in str(item).lower() or "enrichment" in str(item).lower() 
+                            for items in self.business_requirements.values() for item in items)
             
-            if not self.mappings:
-                raise Exception("No valid component mappings generated")
+            print(f"   - XSL Transform needed: {'✅ Yes' if has_xsl else '❌ No'}")
+            print(f"   - Transco/Enrichment needed: {'✅ Yes' if has_transco else '❌ No'}")
             
-            print(f"✅ Generated {len(self.mappings)} component mappings")
+            # Generate MessageFlow template
+            msgflow_path = None
+            try:
+                # Look for the standard template in the root folder first
+                standard_template_path = "templates/standard_msgflow_template.xml"
+                
+                if os.path.exists(standard_template_path):
+                    # Save the output to the root folder
+                    msgflow_path = self.optimize_msgflow_template(
+                        has_xsl, 
+                        has_transco, 
+                        template_path=standard_template_path,
+                        output_path="msgflow_template.xml"  # Save in root folder
+                    )
+                    print(f"✅ MessageFlow template generated: {msgflow_path}")
+                else:
+                    print(f"⚠️ Standard MessageFlow template not found at {standard_template_path}")
+                    print("⚠️ Skipping MessageFlow template generation")
+            except Exception as e:
+                print(f"⚠️ MessageFlow template generation failed: {str(e)}")
+            
+            # Phase 3: Component-Level Mapping (LLM) - CONDITIONAL
+            print("🧠 Phase 3: Generating component mappings...")
+            
+            # ✅ FIX: Only generate mappings if BizTalk components exist
+            if self.biztalk_components:
+                self.mappings = self.generate_intelligent_mappings(
+                    self.biztalk_components,
+                    self.business_requirements  
+                )
+                
+                if not self.mappings:
+                    print("⚠️  No valid component mappings generated")
+                    self.mappings = []
+                else:
+                    print(f"✅ Generated {len(self.mappings)} component mappings")
+            else:
+                print("⏭️  Skipping component mappings (No BizTalk components to map)")
+                self.mappings = []
             
             # Phase 4: ESQL Template Customization (Optional Enhancement)
             print("📝 Phase 4: Customizing ESQL template...")
             
-            # Load base template
+            customized_path = None
+            # ✅ FIX: Check if template_path exists and is valid
             template_path = "ESQL_Template_Updated.esql"
-            if os.path.exists(template_path):
-                with open(template_path, 'r', encoding='utf-8') as f:
-                    self.esql_template = f.read()
-                
-                # Customize template using mappings
-                # Customize template using mappings
-                customized_template = self.customize_esql_template(self.esql_template, self.biztalk_components, self.business_requirements)
-                
-                # Save customized template
-                customized_path = os.path.join(output_dir, "ESQL_Template_Updated.esql")
-                os.makedirs(output_dir, exist_ok=True)
-                with open(customized_path, 'w', encoding='utf-8') as f:
-                    f.write(customized_template)
-                print(f"📝 Customized ESQL template saved: {customized_path}")
+            
+            if template_path and os.path.exists(template_path):
+                try:
+                    with open(template_path, 'r', encoding='utf-8') as f:
+                        self.esql_template = f.read()
+                    
+                    # Customize template using mappings (works even without BizTalk components)
+                    customized_template = self.customize_esql_template(
+                        self.esql_template, 
+                        self.biztalk_components, 
+                        self.business_requirements
+                    )
+                    
+                    # Save customized template
+                    customized_path = os.path.join(output_dir, "ESQL_Template_Updated.esql")
+                    os.makedirs(output_dir, exist_ok=True)
+                    with open(customized_path, 'w', encoding='utf-8') as f:
+                        f.write(customized_template)
+                    print(f"📝 Customized ESQL template saved: {customized_path}")
+                except Exception as e:
+                    print(f"⚠️ ESQL template customization failed: {e}")
+                    customized_path = None
             else:
                 print("⚠️ Base ESQL template not found, skipping customization")
-                customized_path = None
             
-            # Phase 5: Generate Output Files
+            # Phase 5: Generate Output Files - CONDITIONAL
             print("💾 Phase 5: Generating output files...")
             
-            output_files = self.save_mapping_outputs(self.mappings, output_dir)
+            # Initialize output_files dictionary
+            output_files = {"json_file": None, "excel_file": None}
+            
+            # Only generate mapping outputs if we have mappings
+            if self.mappings:
+                output_files = self.save_mapping_outputs(self.mappings, output_dir)
+                print(f"✅ Mapping outputs saved")
+            else:
+                print("⏭️  No component mappings to save (PDF-only mode)")
+                # Still save business requirements for downstream use
+                requirements_path = os.path.join(output_dir, "business_requirements.json")
+                os.makedirs(output_dir, exist_ok=True)
+                with open(requirements_path, 'w', encoding='utf-8') as f:
+                    json.dump(self.business_requirements, f, indent=2, ensure_ascii=False)
+                print(f"📄 Business requirements saved: {requirements_path}")
+                output_files["json_file"] = requirements_path
             
             # Return comprehensive results
             result = {
                 "components_processed": len(self.biztalk_components),
                 "mappings_generated": len(self.mappings),
-                "business_requirements_found": True,  # Always true for Vector DB
-                "json_file": output_files["json_file"],
-                "excel_file": output_files["excel_file"],
+                "business_requirements_found": True,
+                "json_file": output_files.get("json_file"),
+                "excel_file": output_files.get("excel_file"),
                 "template_file": customized_path,
-                "esql_template_valid": customized_path is not None,
-                "vector_processing": True,  # Flag to indicate vector processing used
-                "vector_content_length": len(pdf_file)
+                "vector_processing": True,
+                "vector_content_length": len(pdf_file),
+                "mode": "pdf_only" if not self.biztalk_components else "full_mapping"
             }
             
+            # Add MessageFlow template path to results if it was created
+            if msgflow_path:
+                result["msgflow_template"] = msgflow_path
+            
             print("🎯 Specification-driven mapping completed successfully!")
-            print(f"📊 Vector DB reduced content by ~85% for optimal processing")
+            if not self.biztalk_components:
+                print("📋 PDF-only mode: Business requirements extracted, ready for Agent 2")
+            else:
+                print(f"📊 Full mapping mode: {len(self.mappings)} components mapped")
             
             return result
             
@@ -827,6 +969,9 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
             else:
                 print(f"💥 Error in process_mapping: {error_message}")
                 raise Exception(f"Component Mapping Failed: {error_message}")
+        
+
+
     
     def customize_esql_template(self, template: str, biztalk_components: List[Dict], business_requirements: Dict) -> str:
         """
@@ -900,7 +1045,7 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
                 max_tokens=5000    # ✅ INCREASED TOKEN LIMIT
             )
 
-                    # NEW: Add token tracking (ADD THESE LINES)
+            # NEW: Add token tracking
             if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
                 st.session_state.token_tracker.manual_track(
                     agent="biztalk_mapper",
@@ -910,7 +1055,6 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
                     output_tokens=response.usage.completion_tokens,
                     flow_name=getattr(self, 'current_flow_name', 'biztalk_flow')
                 )
-
             
             # Get the LLM response
             customized_template = response.choices[0].message.content.strip()
@@ -1039,25 +1183,78 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
             print(f"❌ ESQL customization failed: {e}")
             print("🔄 Falling back to original template")
             return template  # Always return something usable
-    
 
 
 # Main execution for standalone testing
 if __name__ == "__main__":
-    # Example usage
+    import argparse
+    from pathlib import Path
+    
+    parser = argparse.ArgumentParser(description='ACE MessageFlow Template Optimizer (Agent 1)')
+    parser.add_argument('--pdf-path', required=True, help='Path to PDF file')
+    parser.add_argument('--biztalk-path', required=False, help='Path to BizTalk folder (optional)')
+    parser.add_argument('--output-dir', default='output', help='Output directory')
+    
+    args = parser.parse_args()
+    
+    print("=" * 60)
+    print("🚀 Agent 1: MessageFlow Template Optimizer")
+    print("=" * 60)
+    
+    # Create mapper instance
     mapper = BizTalkACEMapper()
     
-    # Test with sample files
-    biztalk_files = [
-        r"C:\sample\project.btproj",
-        r"C:\sample\orchestration.odx",
-        r"C:\sample\transform.btm"
-    ]
+    # Step 1: Query Vector DB for PDF content
+    print("\n📊 Step 1: Analyzing PDF content from Vector DB...")
+    # TODO: Implement query_vector_db() or integrate with existing PDF processor
+    vector_db_results = []  # Placeholder - replace with actual vector DB query
     
-    pdf_file = r"C:\sample\business_requirements.pdf"
+    # Step 2: Detect XSL and Transco presence
+    print("\n🔍 Step 2: Detecting XSL and Transco requirements...")
+    has_xsl, has_transco = mapper.analyze_pdf_content(vector_db_results)
     
-    try:
-        result = mapper.process_mapping(biztalk_files, pdf_file, "./output")
-        print(f"🎯 Success: {result}")
-    except Exception as e:
-        print(f"💥 Error: {e}")
+    print(f"   - XSL Transform needed: {'✅ Yes' if has_xsl else '❌ No'}")
+    print(f"   - Transco/Enrichment needed: {'✅ Yes' if has_transco else '❌ No'}")
+    
+    # Step 3: Generate optimized msgflow template
+    print("\n⚙️  Step 3: Generating optimized msgflow_template.xml...")
+    template_path = mapper.optimize_msgflow_template(has_xsl, has_transco)
+    
+    # Step 4: (Optional) Process BizTalk components if path provided
+    if args.biztalk_path:
+        print("\n📦 Step 4: Processing BizTalk components...")
+        
+        # Get all BizTalk files from directory
+        biztalk_files = list(Path(args.biztalk_path).rglob("*.btproj"))
+        biztalk_files += list(Path(args.biztalk_path).rglob("*.odx"))
+        biztalk_files += list(Path(args.biztalk_path).rglob("*.btm"))
+        
+        if biztalk_files:
+            try:
+                result = mapper.process_mapping(biztalk_files, args.pdf_path, args.output_dir)
+                print(f"✅ BizTalk processing: {result}")
+            except Exception as e:
+                print(f"⚠️  BizTalk processing warning: {e}")
+        else:
+            print("⚠️  No BizTalk files found in provided path")
+    else:
+        print("\n⏭️  Step 4: Skipped (No BizTalk path provided - PDF-only mode)")
+    
+    # Step 5: Save metadata for Agent 2
+    metadata = {
+        'has_xsl': has_xsl,
+        'has_transco': has_transco,
+        'template_path': template_path,
+        'pdf_path': args.pdf_path
+    }
+    
+    Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+    metadata_path = f"{args.output_dir}/template_metadata.json"
+    with open(metadata_path, 'w') as f:
+        json.dump(metadata, f, indent=2)
+    
+    print(f"\n✅ Template optimization complete!")
+    print(f"   - Template: {template_path}")
+    print(f"   - Metadata: {metadata_path}")
+    print("\n🎯 Ready for Agent 2 (fetch_naming.py + pdf_processor.py)")
+    print("=" * 60)

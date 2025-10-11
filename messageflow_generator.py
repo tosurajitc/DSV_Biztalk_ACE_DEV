@@ -43,9 +43,16 @@ class DSVMessageFlowGenerator:
         
         try:
             # Step 1: Load component mapping JSON from output folder
-            print("📋 Loading component mapping from JSON...")
-            component_data = self._load_component_mapping_json()
-            print(f"   ✅ Loaded {len(component_data.get('component_mappings', []))} component mappings")
+            print("📋 Loading business requirements...")
+            business_reqs = self._load_business_requirements()
+            print(f"   ✅ Business requirements loaded")
+
+            print("📋 Detecting naming convention files...")
+            naming_conventions = self._detect_and_load_naming_conventions()
+            print(f"   ✅ Found {len(naming_conventions)} MessageFlow(s) to generate")
+            for idx, naming in enumerate(naming_conventions, 1):
+                flow_name = naming['project_naming']['message_flow_name']
+                print(f"      • Flow {idx}: {flow_name}")
             
             # Step 2: Load MessageFlow template from root folder
             print("📄 Loading MessageFlow template...")
@@ -108,38 +115,58 @@ class DSVMessageFlowGenerator:
             print(f"❌ {error_msg}")
             raise MessageFlowGenerationError(error_msg)
     
-    def _load_component_mapping_json(self) -> Dict:
-        """Load component mapping from JSON file in output folder"""
-        json_file_path = self.root_path / "output" / "biztalk_ace_component_mapping.json"
+
+
+    def _load_business_requirements(self) -> Dict:
+        """Load business_requirements.json from output folder"""
+        business_req_path = self.root_path / "output" / "business_requirements.json"
         
         try:
-            if not json_file_path.exists():
-                raise FileNotFoundError(f"Component mapping JSON not found: {json_file_path}")
+            if not business_req_path.exists():
+                raise FileNotFoundError(f"business_requirements.json not found: {business_req_path}")
             
-            with open(json_file_path, 'r', encoding='utf-8') as f:
-                json_data = json.load(f)
+            with open(business_req_path, 'r', encoding='utf-8') as f:
+                business_data = json.load(f)
             
-            # Validate JSON structure
-            if 'component_mappings' not in json_data:
-                raise ValueError("Invalid JSON structure: missing 'component_mappings' key")
-            
-            if not isinstance(json_data['component_mappings'], list):
-                raise ValueError("Invalid JSON structure: 'component_mappings' must be a list")
-            
-            if len(json_data['component_mappings']) == 0:
-                raise ValueError("Component mappings list is empty")
-            
-            print(f"   📁 JSON file: {json_file_path}")
-            print(f"   📊 Components: {len(json_data['component_mappings'])}")
-            print(f"   🔧 Generator: {json_data.get('metadata', {}).get('generator', 'Unknown')}")
-            print(f"   📅 Generated: {json_data.get('metadata', {}).get('generated_at', 'Unknown')}")
-            
-            return json_data
+            print(f"   📁 File: {business_req_path}")
+            return business_data
             
         except json.JSONDecodeError as e:
-            raise MessageFlowGenerationError(f"Invalid JSON format in component mapping file: {e}")
+            raise MessageFlowGenerationError(f"Invalid JSON in business_requirements.json: {e}")
         except Exception as e:
-            raise MessageFlowGenerationError(f"Failed to load component mapping JSON: {e}")
+            raise MessageFlowGenerationError(f"Failed to load business requirements: {e}")
+
+
+
+
+    def _detect_and_load_naming_conventions(self) -> List[Dict]:
+        """Detect and load naming_convention files (single or multiple)"""
+        naming_files = []
+        
+        # Check for single file
+        single_file = self.root_path / "naming_convention.json"
+        if single_file.exists():
+            with open(single_file, 'r') as f:
+                naming_files.append(json.load(f))
+            return naming_files
+        
+        # Check for numbered files
+        idx = 1
+        while True:
+            numbered_file = self.root_path / f"naming_convention_{idx}.json"
+            if numbered_file.exists():
+                with open(numbered_file, 'r') as f:
+                    naming_files.append(json.load(f))
+                idx += 1
+            else:
+                break
+        
+        if not naming_files:
+            raise FileNotFoundError("No naming_convention.json file(s) found")
+        
+        return naming_files
+
+
     
     def _load_msgflow_template(self) -> str:
         """Load MessageFlow template from root folder"""
@@ -169,42 +196,7 @@ class DSVMessageFlowGenerator:
             
         except Exception as e:
             raise MessageFlowGenerationError(f"Failed to load MessageFlow template: {e}")
-    
-    def _process_json_components(self, component_mappings: List[Dict]) -> List[Dict]:
-        """Process component mappings from JSON for enhanced LLM context"""
-        enhanced_components = []
-        
-        for mapping in component_mappings:
-            try:
-                enhanced_component = {
-                    # Basic component info
-                    'biztalk_component': mapping.get('biztalk_component', ''),
-                    'component_type': mapping.get('component_type', ''),
-                    'business_purpose': mapping.get('business_purpose', ''),
-                    'implementation_priority': mapping.get('implementation_priority', 'medium'),
-                    'confidence': mapping.get('confidence', 0.8),
-                    'reasoning': mapping.get('reasoning', ''),
-                    
-                    # ACE Components Details
-                    'primary_artifact': mapping.get('ace_components', {}).get('primary_artifact', {}),
-                    'supporting_artifacts': mapping.get('ace_components', {}).get('supporting_artifacts', []),
-                    
-                    # Integration Details for MessageFlow configuration
-                    'integration_details': mapping.get('ace_components', {}).get('integration_details', {}),
-                    
-                    # Extract key integration info for easy access
-                    'input_queue': mapping.get('ace_components', {}).get('integration_details', {}).get('input_queue', ''),
-                    'output_endpoint': mapping.get('ace_components', {}).get('integration_details', {}).get('output_endpoint', ''),
-                    'database_operations': mapping.get('ace_components', {}).get('integration_details', {}).get('database_operations', []),
-                    'transformation_logic': mapping.get('ace_components', {}).get('integration_details', {}).get('transformation_logic', '')
-                }
-                enhanced_components.append(enhanced_component)
-            except Exception as e:
-                print(f"   ⚠️ Warning: Error processing component mapping: {e}")
-                continue
-        
-        print(f"   🔧 Enhanced {len(enhanced_components)} component mappings with integration details")
-        return enhanced_components
+
     
     
             

@@ -18,6 +18,7 @@ import shutil
 import requests
 from bs4 import BeautifulSoup
 from fetch_naming import run_pdf_naming_extraction
+from cleanup_manager import CleanupManager
 # Vector DB imports - MANDATORY, no fallback
 try:
     from vector_knowledge.pdf_processor import PDFProcessor
@@ -416,7 +417,6 @@ def reset_pipeline():
 
 def render_program_1_ui():
     """Render Program 1: Specification-Driven BizTalk ACE Mapper UI - REDESIGNED"""
-
     
     st.header("Agent 1: BizTalk to ACE Mapper")
     st.markdown("Business specification-driven **intelligent mapping** with sequential workflow")
@@ -434,6 +434,30 @@ def render_program_1_ui():
         st.session_state.vector_db_ready = False
     if 'agent1_completed' not in st.session_state:
         st.session_state.agent1_completed = False
+    if 'agent1_error' not in st.session_state:
+        st.session_state.agent1_error = None
+    
+def render_program_1_ui():
+    """Render Program 1: BizTalk to ACE Mapper UI - REDESIGNED"""
+    
+    st.header("Agent 1: BizTalk to ACE Mapper")
+    st.markdown("Business specification-driven **intelligent mapping** with sequential workflow")
+    
+    # Initialize session states if not exists
+    if 'cleanup_completed' not in st.session_state:
+        st.session_state.cleanup_completed = False
+    if 'inputs_provided' not in st.session_state:
+        st.session_state.inputs_provided = False
+    if 'business_input_method' not in st.session_state:
+        st.session_state.business_input_method = 'pdf'
+    if 'confluence_content' not in st.session_state:
+        st.session_state.confluence_content = ""
+    if 'vector_db_ready' not in st.session_state:
+        st.session_state.vector_db_ready = False
+    if 'agent1_completed' not in st.session_state:
+        st.session_state.agent1_completed = False
+    if 'agent1_error' not in st.session_state:
+        st.session_state.agent1_error = None
     
     # ===== STEP 1: CLEANUP & RESET BUTTON (Center Position, Always Available) =====
     st.markdown("---")
@@ -441,62 +465,52 @@ def render_program_1_ui():
     
     col1, col2, col3 = st.columns([1.5, 1, 1.5])  # Create center alignment
     with col2:
-        if st.button("🧹 Cleanup & Reset", type="primary", use_container_width=True, 
-                    help="Clean Vector DB and output folder to start fresh"):
+        if st.button("🧹 Cleanup & Reset", type="primary", width="stretch", 
+                    help="Clean Vector DB, output folder, and temporary files"):
             
-            # Perform cleanup inline
+            # Perform cleanup using CleanupManager
             with st.spinner("🧹 Cleaning workspace..."):
                 try:
-                    # Vector DB Cleanup using ChromaDB API
-                    try:
-                        import chromadb
-                        import time
-                        client = chromadb.PersistentClient(path="chroma_db")
-                        
-                        # List and delete all collections
-                        collections = client.list_collections()
-                        for collection in collections:
-                            client.delete_collection(collection.name)
-                            st.write(f"✅ Deleted collection: {collection.name}")
-                        
-                        # Close client properly
-                        client = None  # Release connection
-                        st.write("✅ Vector database cleared")
-                        
-                        # Physical ChromaDB file cleanup
-                        time.sleep(1)  # Brief pause to ensure client is released
-                        chroma_path = "chroma_db"
-                        if os.path.exists(chroma_path):
-                            try:
-                                # Count and remove all UUID-named ChromaDB instance folders
-                                deleted_count = 0
-                                for item in os.listdir(chroma_path):
-                                    item_path = os.path.join(chroma_path, item)
-                                    if os.path.isdir(item_path):
-                                        shutil.rmtree(item_path)
-                                        deleted_count += 1
-                                
-                                if deleted_count > 0:
-                                    st.write(f"✅ Deleted {deleted_count} ChromaDB instances")
-                                else:
-                                    st.write("✅ ChromaDB folder already clean")
-                                    
-                            except Exception as e:
-                                st.write(f"⚠️ ChromaDB file cleanup: {str(e)}")
-                        
-                    except Exception as e:
-                        st.write(f"⚠️ ChromaDB cleanup: {str(e)}")
+                    # Initialize CleanupManager
+                    cleanup_manager = CleanupManager(
+                        chroma_db_path="chroma_db",
+                        output_dir="output",
+                        root_cleanup_patterns=[
+                            "naming_convention*.json",
+                            "msgflow_template.xml"
+                        ]
+                    )
                     
-                    # Output folder cleanup
-                    output_dir = "output"
-                    if os.path.exists(output_dir):
-                        for item in os.listdir(output_dir):
-                            item_path = os.path.join(output_dir, item)
-                            if os.path.isfile(item_path):
-                                os.remove(item_path)
-                            elif os.path.isdir(item_path):
-                                shutil.rmtree(item_path)
-                        st.write("✅ Output folder cleared")
+                    # Perform full cleanup
+                    cleanup_results = cleanup_manager.perform_full_cleanup()
+                    
+                    # Display cleanup results
+                    st.write("📋 Cleanup Results:")
+                    
+                    # Vector DB
+                    vdb_result = cleanup_results['vector_db']
+                    if vdb_result['status'] == 'success':
+                        st.write(f"✅ {vdb_result['message']}")
+                    else:
+                        st.write(f"⚠️ {vdb_result['message']}")
+                    
+                    # Output Folder
+                    out_result = cleanup_results['output_folder']
+                    if out_result['status'] == 'success':
+                        st.write(f"✅ {out_result['message']}")
+                    else:
+                        st.write(f"⚠️ {out_result['message']}")
+                    
+                    # Root Files
+                    root_result = cleanup_results['root_files']
+                    if root_result['status'] == 'success':
+                        st.write(f"✅ {root_result['message']}")
+                        if root_result.get('files_removed'):
+                            with st.expander("📄 Files Removed"):
+                                for file in root_result['files_removed']:
+                                    st.text(f"  • {file}")
+                    else:
+                        st.write(f"⚠️ {root_result['message']}")
                     
                     # Reset session states
                     st.session_state.cleanup_completed = True
@@ -504,12 +518,31 @@ def render_program_1_ui():
                     st.session_state.vector_db_ready = False
                     st.session_state.agent1_completed = False
                     st.session_state.confluence_content = ""
+                    st.session_state.agent1_error = None
+                    
+                    # Reset pipeline progress
+                    if 'pipeline_progress' in st.session_state:
+                        if 'program_1' in st.session_state.pipeline_progress:
+                            st.session_state.pipeline_progress['program_1'] = {
+                                'status': None,
+                                'output': None,
+                                'error_message': None,
+                                'timestamp': None
+                            }
                     
                     st.write("✅ Session states reset")
-                    st.success("Cleanup completed successfully!")
+                    
+                    # Overall status
+                    if cleanup_results['overall_status'] == 'success':
+                        st.success("✅ Cleanup completed successfully!")
+                    else:
+                        st.warning("⚠️ Cleanup completed with some warnings. Check details above.")
                     
                 except Exception as e:
                     st.error(f"❌ Cleanup failed: {str(e)}")
+                    import traceback
+                    with st.expander("🔍 Error Details"):
+                        st.code(traceback.format_exc())
     
     # Show cleanup status
     if st.session_state.cleanup_completed:
@@ -525,7 +558,7 @@ def render_program_1_ui():
     biztalk_folder = st.text_input(
         "📁 **BizTalk Folder Path**",
         disabled=not st.session_state.cleanup_completed,
-        value="C:\@Official\@Gen AI\DSV\BizTalk\MH.ESB.EE.Out.DocPackApp\MH.ESB.EE.Out.DocPackApp",
+        value="",
         help="Path to your BizTalk project folder containing maps and schemas"
     )
     
@@ -607,95 +640,175 @@ def render_program_1_ui():
         st.session_state.inputs_provided = True
         st.success("✅ All required inputs provided!")
     
-    # ===== STEP 3: SETUP VECTOR KNOWLEDGE BASE (Disabled until inputs ready) =====
+
+    # ===== STEP 3: SETUP VECTOR KNOWLEDGE BASE =====
     st.markdown("---")
     st.markdown("### Step 3: Setup Vector Knowledge Base")
     
-    if st.button(
-        "Setup Vector Knowledge Base", 
-        disabled=not st.session_state.inputs_provided,
-        type="primary" if st.session_state.inputs_provided else "secondary",
-        help="Create vector embeddings from business requirements"
-    ):
-        # Setup vector knowledge base inline
-        try:
-            with st.spinner("Setting up Vector Knowledge Base..."):
-                # Use the SAME function that works in old method
-                if uploaded_file is not None:
-                    st.write("Processing PDF content...")
-                    success = setup_vector_knowledge_base(uploaded_file, "Agent 1")
-                else:
-                    st.write("Processing Confluence content...")
-                    # For confluence, we need to handle differently - maybe create temp file
-                    # or check if setup_vector_knowledge_base can handle text content
-                    success = setup_vector_knowledge_base(st.session_state.confluence_content, "Agent 1")
-                
-                if success:
-                    st.session_state.vector_db_ready = True
-                    st.success("Vector Knowledge Base setup completed!")
-                else:
-                    st.session_state.vector_db_ready = False
-                    st.error("Vector Knowledge Base setup failed!")
-                
-        except Exception as e:
-            st.error(f"Vector Knowledge Base setup failed: {str(e)}")
-            st.session_state.vector_db_ready = False
+    # ✅ FIX: Check if PDF uploaded OR Confluence content available
+    inputs_ready = (
+        uploaded_file is not None or 
+        st.session_state.get('confluence_content') is not None
+    )
+    
+    # Update session state
+    st.session_state.inputs_provided = inputs_ready
+    
+    col1, col2, col3 = st.columns([1.5, 1, 1.5])  # Create center alignment
+    with col2:
+        if st.button(
+            "🚀 Setup Vector DB", 
+            disabled=not inputs_ready,
+            type="primary" if inputs_ready else "secondary",
+            width="stretch",
+            help="Create vector embeddings from business requirements (PDF or Confluence)"
+        ):
+            try:
+                with st.spinner("Setting up Vector Knowledge Base..."):
+                    # ✅ Show correct processing message based on source
+                    if uploaded_file is not None:
+                        success = setup_vector_knowledge_base(uploaded_file, "Agent 1")
+                    elif st.session_state.get('confluence_content'):
+                        st.write("🌐 Processing Confluence content...")
+                        success = setup_vector_knowledge_base(st.session_state.confluence_content, "Agent 1")
+                    else:
+                        st.error("❌ No content source available!")
+                        success = False
+                    
+                    if success:
+                        st.session_state.vector_db_ready = True
+                        st.session_state.agent1_error = None
+                        st.success("✅ Vector Knowledge Base setup completed!")
+                    else:
+                        st.session_state.vector_db_ready = False
+                        st.error("❌ Vector Knowledge Base setup failed!")
+                    
+            except Exception as e:
+                st.error(f"❌ Vector Knowledge Base setup failed: {str(e)}")
+                st.session_state.vector_db_ready = False
     
     # Show vector DB status
-    if st.session_state.vector_db_ready:
+    if st.session_state.get('vector_db_ready', False):
         st.success("✅ Vector Knowledge Base ready!")
         debug_vector_db_state("Agent 1 - After Setup")
         verify_business_requirements_quality()
-
-    elif st.session_state.inputs_provided:
-        st.info("🔄 Click 'Setup Vector Knowledge Base' to process requirements")
     
+    elif inputs_ready:
+        st.info("🔄 Click 'Setup Vector Knowledge Base' to process requirements")
+    else:
+        st.warning("⚠️ Please upload a PDF or provide Confluence content first")
+
     # ===== STEP 4: RUN AGENT 1 (Disabled until Vector DB ready) =====
     st.markdown("---")
     st.markdown("### Step 4: Execute Agent 1")
     
-    if st.button(
-        "Run Agent 1 & create Mapping", 
-        disabled=not st.session_state.vector_db_ready,
-        type="primary" if st.session_state.vector_db_ready else "secondary",
-        help="Execute BizTalk to ACE mapping"
-    ):
-        # Run Agent 1 inline
-        try:
-            with st.spinner("🎯 Running Agent 1..."):
-                # Get required parameters
-                groq_api_key = os.getenv('GROQ_API_KEY', '')
-                groq_model = os.getenv('GROQ_MODEL', 'llama-3.1-8b-instant')
-                output_dir = "output"
-                
-                # Use the proper high-level method that handles Vector DB integration
-                run_specification_mapping(
-                    biztalk_folder=biztalk_folder,
-                    confluence_pdf=uploaded_file if uploaded_file else st.session_state.confluence_content,
-                    groq_api_key=groq_api_key,
-                    groq_model=groq_model,
-                    output_dir=output_dir
-                )
-                
-                st.session_state.agent1_completed = True
-                st.success("✅ Agent 1 execution completed!")
-                
-                # Display results
-                if os.path.exists(output_dir):
-                    st.subheader("📁 Generated Files:")
-                    for file in os.listdir(output_dir):
-                        if file.endswith(('.txt', '.json', '.md')):
-                            st.write(f"• {file}")
-                
-        except Exception as e:
-            st.error(f"❌ Agent 1 execution failed: {str(e)}")
-            st.session_state.agent1_completed = False
+    # Check for successful run from pipeline progress
+    program_1_status = st.session_state.pipeline_progress.get('program_1', {}).get('status')
     
-    # Show agent status
-    if st.session_state.agent1_completed:
-        st.success("✅ Agent 1 completed successfully!")
-    elif st.session_state.vector_db_ready:
-        st.info("🔄 Click 'Run Agent 1' to execute mapping")
+    # Display any existing error
+    if st.session_state.agent1_error:
+        st.error(f"Agent 1 failed: {st.session_state.agent1_error}")
+    
+    # Execute button
+
+
+    col1, col2, col3 = st.columns([1.5, 1, 1.5])  # Create center alignment
+    with col2:
+        if st.button(
+            "Run Agent 1 & create Mapping", 
+            disabled=not st.session_state.vector_db_ready,
+            type="primary" if st.session_state.vector_db_ready else "secondary",
+            width="stretch",
+            help="Execute BizTalk to ACE mapping"
+        ):
+            # Run Agent 1 inline
+            try:
+                with st.spinner("🎯 Running Agent 1..."):
+                    # Get required parameters
+                    groq_api_key = os.getenv('GROQ_API_KEY', '')
+                    groq_model = os.getenv('GROQ_MODEL', 'llama-3.1-8b-instant')
+                    output_dir = "output"
+                    
+                    # Clear any existing error
+                    st.session_state.agent1_error = None
+                    
+                    # Use the proper high-level method that handles Vector DB integration
+                    result = run_specification_mapping(
+                        biztalk_folder=biztalk_folder,
+                        confluence_pdf=None,  # Vector DB will be used
+                        groq_api_key=groq_api_key,
+                        groq_model=groq_model,
+                        output_dir=output_dir
+                    )
+
+                    st.session_state.pipeline_progress['program_1']['components_processed'] = result.get('components_processed', 0)
+                    st.session_state.pipeline_progress['program_1']['mappings_generated'] = result.get('mappings_generated', 0)
+                    st.session_state.pipeline_progress['program_1']['vector_content_length'] = result.get('vector_content_length', 0)
+                    
+                    st.session_state.agent1_completed = True
+                    st.success("✅ Agent 1 execution completed!")
+                    st.rerun()
+                    
+            except Exception as e:
+                # Store error for display
+                error_message = str(e)
+                st.session_state.agent1_error = error_message
+                st.error(f"❌ Agent 1 execution failed: {error_message}")
+                st.session_state.agent1_completed = False
+    
+    # ===== DISPLAY RESULTS (Only if execution was successful) =====
+    if program_1_status == 'success' or st.session_state.agent1_completed:
+        st.markdown("---")
+        st.markdown("## Generated Files")
+        
+        # Get generated files
+        output_dir = "output"
+        if os.path.exists(output_dir):
+            files_found = False
+            
+            for file in os.listdir(output_dir):
+                file_path = os.path.join(output_dir, file)
+                if os.path.isfile(file_path):
+                    files_found = True
+                    st.success(f"📄 {file}")
+            
+            # Check root directory for msgflow_template.xml
+            msgflow_path = "msgflow_template.xml"
+            if os.path.exists(msgflow_path):
+                files_found = True
+                st.success(f"📄 {file}")
+            
+            if not files_found:
+                st.warning("No output files found in the output directory.")
+        else:
+            st.warning("Output directory not found. Please run Agent 1 first.")
+
+
+
+        
+        # Get generated files
+        output_dir = "output"
+        if os.path.exists(output_dir):
+            files_found = False
+            
+            for file in os.listdir(output_dir):
+                file_path = os.path.join(output_dir, file)
+                if os.path.isfile(file_path):
+                    files_found = True
+                    st.success(f"📄 {file}")
+                    # Show file info
+
+            
+            # Check root directory for msgflow_template.xml
+            msgflow_path = "msgflow_template.xml"
+            if os.path.exists(msgflow_path):
+                files_found = True
+                st.success(f"📄 {file}")
+            
+            if not files_found:
+                st.warning("No output files found in the output directory.")
+        else:
+            st.warning("Output directory not found. Please run Agent 1 first.")
 
 
 
@@ -841,7 +954,6 @@ def verify_business_requirements_quality():
         return False
 
 
-
 def run_specification_mapping(biztalk_folder, confluence_pdf, groq_api_key, groq_model, output_dir):
     """Execute specification-driven mapping with Vector DB optimization"""
     progress_placeholder = st.empty()
@@ -863,7 +975,7 @@ def run_specification_mapping(biztalk_folder, confluence_pdf, groq_api_key, groq
         
         progress_placeholder.progress(20)
         
-        #   NEW: Vector DB Integration Check
+        # Vector DB Integration Check
         if (st.session_state.get('vector_enabled', False) and 
             st.session_state.get('vector_ready', False) and 
             st.session_state.get('vector_pipeline')):
@@ -897,7 +1009,7 @@ def run_specification_mapping(biztalk_folder, confluence_pdf, groq_api_key, groq
             result['processing_method'] = 'Vector DB Optimization'
             
         else:
-            #   Vector DB not available - raise error (no fallback)
+            # Vector DB not available - raise error (no fallback)
             error_msg = "Vector DB not enabled or not ready. Please setup Vector Knowledge Base first."
             
             if not st.session_state.get('vector_enabled', False):
@@ -912,88 +1024,66 @@ def run_specification_mapping(biztalk_folder, confluence_pdf, groq_api_key, groq
         
         progress_placeholder.progress(100)
         
-        # Update session state
+        # Update session state - IMPORTANT UPDATE HERE
         st.session_state.pipeline_progress['program_1']['status'] = 'success'
-        st.session_state.pipeline_progress['program_1']['output'] = result['json_file']
+        st.session_state.pipeline_progress['program_1']['output'] = result.get('json_file')
         st.session_state.pipeline_progress['program_1']['timestamp'] = datetime.now()
+
+        st.session_state.pipeline_progress['program_1']['components_processed'] = result.get('components_processed', 0)
+        st.session_state.pipeline_progress['program_1']['mappings_generated'] = result.get('mappings_generated', 0)
+        st.session_state.pipeline_progress['program_1']['vector_content_length'] = result.get('vector_content_length', 0)
+        
+        
+        # Add msgflow_template to session state for other agents to use
+        if 'msgflow_template' in result:
+            st.session_state.pipeline_progress['program_1']['msgflow_template'] = result['msgflow_template']
         
         # Success message with vector info
         vector_info = ""
         if result.get('vector_processing'):
             vector_info = f" (Vector optimized: {result.get('vector_content_length', 0)} chars)"
         
-        status_placeholder.success(f"  Specification-driven mapping completed!{vector_info}")
+        status_placeholder.success(f"  Specification-driven mapping completed!")
         
-        # Display Results
-        st.subheader("  Mapping Results")
+        # Clear the error message container if it exists
+        if 'agent1_error_container' in st.session_state:
+            st.session_state.agent1_error_container = None
         
-        col1, col2, col3 = st.columns(3)
+        # Force UI refresh
+        st.rerun()
         
-        with col1:
-            st.metric("Components Processed", result['components_processed'])
-            st.metric("Mappings Generated", result['mappings_generated'])
-        
-        with col2:
-                    st.metric("Business Requirements", "Vector DB" if result.get('vector_processing') else "Traditional")
-                
-        with col3:
-            st.metric("Processing Method", "Vector Optimized" if result.get('vector_processing') else "Traditional")
-
-        # Show Vector DB performance info
-        if result.get('vector_processing'):
-            st.info(f"  **Vector DB Performance:** Processed {result.get('vector_content_length', 0)} characters of focused content (~85% reduction from full PDF)")
-
-        # Show generated files
-        st.subheader("  Generated Files")
-        
-        # Excel file download
-        if os.path.exists(result['excel_file']):
-            with open(result['excel_file'], "rb") as file:
-                st.download_button(
-                    label="   Download Excel Mapping",
-                    data=file,
-                    file_name=os.path.basename(result['excel_file']),
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-        
-        # JSON file download
-        if os.path.exists(result['json_file']):
-            with open(result['json_file'], "r") as file:
-                st.download_button(
-                    label="  Download JSON Mapping",
-                    data=file.read(),
-                    file_name=os.path.basename(result['json_file']),
-                    mime="application/json"
-                )
-        
-        # ESQL template download
-        if result.get('template_file') and os.path.exists(result['template_file']):
-            with open(result['template_file'], "r") as file:
-                st.download_button(
-                    label="Download ESQL Template",
-                    data=file.read(),
-                    file_name=os.path.basename(result['template_file']),
-                    mime="text/plain"
-                )
-
         return result
         
     except Exception as e:
-        # Update session state with error
+        # Update status
         st.session_state.pipeline_progress['program_1']['status'] = 'error'
-        st.session_state.pipeline_progress['program_1']['error'] = str(e)
+        st.session_state.pipeline_progress['program_1']['error_message'] = str(e)
         st.session_state.pipeline_progress['program_1']['timestamp'] = datetime.now()
         
-        # Show appropriate error message
-        error_message = str(e)
-        if "Vector DB Error" in error_message:
-            status_placeholder.error(f"  {error_message}")
-            st.error("ðŸ”§ **How to Fix:** Enable Vector DB in sidebar and setup knowledge base using PDF upload.")
+        progress_placeholder.progress(100)
+        status_placeholder.error(f"  Mapping failed: {str(e)}")
+        
+        # Store error for display
+        st.session_state.agent1_error_container = str(e)
+        
+        # Enhanced error handling for Vector DB issues
+        error_msg = str(e).lower()
+        if "vector" in error_msg or "knowledge base" in error_msg:
+            st.error("  Vector DB issue. Please check Vector Knowledge Base status.")
+        elif "groq" in error_msg or "api" in error_msg:
+            st.error("  LLM API issue. Please verify your GROQ API key is valid and has sufficient credits.")
         else:
-            status_placeholder.error(f"  Agent 1 failed: {error_message}")
+            st.error("  Check your inputs and try again")
+            
+        # Show error details
+        with st.expander("  Error Details"):
+            import traceback
+            st.code(traceback.format_exc())
         
         progress_placeholder.empty()
         raise e
+    
+
     
 
 def render_program_2_ui():
@@ -1778,7 +1868,7 @@ def render_program_4_ui():
     # Run button
     col1, col2, col3 = st.columns([2, 1, 2])
     with col2:
-        run_button = st.button("🚀 Start Smart Review", type="primary", use_container_width=True)
+        run_button = st.button("🚀 Start Smart Review", type="primary", width='stretch')
     
     if run_button:
         # Create progress placeholders
@@ -2058,7 +2148,7 @@ def render_program_5_ui():
     
     
     # Generation controls - Single column, cleanest approach
-    if st.button("   Generate Collections", type="primary", key="run_postman_gen", use_container_width=False):
+    if st.button("   Generate Collections", type="primary", key="run_postman_gen", width='content'):
         run_postman_collection_generation(
             reviewed_modules_path=program_4_output,
             target_output_folder=target_output_folder,
@@ -2074,7 +2164,7 @@ def render_program_5_ui():
 
     if st.session_state.pipeline_progress.get('program_5', {}).get('status') == 'success':
         output_path = st.session_state.pipeline_progress['program_5']['output']
-        if st.button("  Open Output Folder", key="open_output", use_container_width=False):
+        if st.button("  Open Output Folder", key="open_output", width='content'):
             open_output_folder(output_path)
 
 def check_postman_dependencies():
@@ -2742,7 +2832,7 @@ def render_token_analytics_tab():
                 }
                 
                 cost_df = pd.DataFrame(cost_data)
-                st.dataframe(cost_df, use_container_width=True)
+                st.dataframe(cost_df, width='stretch')
                 
                 # Subscription requirements
                 st.markdown("###   Subscription Requirements")
@@ -2824,7 +2914,7 @@ def render_token_analytics_tab():
             })
         
         agent_df = pd.DataFrame(agent_data)
-        st.dataframe(agent_df, use_container_width=True)
+        st.dataframe(agent_df, width='stretch')
         
         # Agent cost visualization
         if len(agent_breakdown) > 1:
@@ -2841,7 +2931,7 @@ def render_token_analytics_tab():
                     names=agent_names,
                     title="Cost Distribution by Agent"
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
             
             with col2:
                 # Token distribution  
@@ -2852,7 +2942,7 @@ def render_token_analytics_tab():
                     names=agent_names,
                     title="Token Distribution by Agent"
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
     
     else:
         st.info("  No agent data available yet. Run some programs to see agent performance breakdown.")
@@ -2877,7 +2967,7 @@ def render_token_analytics_tab():
             })
         
         model_df = pd.DataFrame(model_data)
-        st.dataframe(model_df, use_container_width=True)
+        st.dataframe(model_df, width='stretch')
         
         # Model comparison insights
         if len(model_usage) > 1:
@@ -3076,7 +3166,7 @@ def render_results_dashboard():
                     agent_df['token_percentage'] = (agent_df['tokens'] / total_tokens * 100).round(1)
                     agent_df['cost_percentage'] = (agent_df['cost'] / total_cost * 100).round(1)
                 
-                st.dataframe(agent_df, use_container_width=True)
+                st.dataframe(agent_df, width='stretch')
     
     # Show final results if all programs completed
     if all(progress[prog]['status'] == 'success' for prog in progress):
