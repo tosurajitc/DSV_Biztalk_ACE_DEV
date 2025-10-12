@@ -776,40 +776,12 @@ def render_program_1_ui():
             msgflow_path = "msgflow_template.xml"
             if os.path.exists(msgflow_path):
                 files_found = True
-                st.success(f"📄 {file}")
+                st.success(f"📄 {msgflow_path}")
             
             if not files_found:
                 st.warning("No output files found in the output directory.")
         else:
             st.warning("Output directory not found. Please run Agent 1 first.")
-
-
-
-        
-        # Get generated files
-        output_dir = "output"
-        if os.path.exists(output_dir):
-            files_found = False
-            
-            for file in os.listdir(output_dir):
-                file_path = os.path.join(output_dir, file)
-                if os.path.isfile(file_path):
-                    files_found = True
-                    st.success(f"📄 {file}")
-                    # Show file info
-
-            
-            # Check root directory for msgflow_template.xml
-            msgflow_path = "msgflow_template.xml"
-            if os.path.exists(msgflow_path):
-                files_found = True
-                st.success(f"📄 {file}")
-            
-            if not files_found:
-                st.warning("No output files found in the output directory.")
-        else:
-            st.warning("Output directory not found. Please run Agent 1 first.")
-
 
 
 
@@ -1134,43 +1106,7 @@ def render_program_2_ui():
     
     st.success("  Agent 2 will use Vector Knowledge Base for focused MessageFlow content")
     
-    #   MODIFIED: Show automated inputs status
-    st.info("  **Vector DB Integration**: MessageFlow patterns, routing logic, and integration specs automatically extracted from Vector Knowledge Base")
-    
-    # Check for required files
-    json_file_path = os.path.join(os.getcwd(), "output", "business_requirements.json")
-    template_file_path = os.path.join(os.getcwd(), "msgflow_template.xml")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if os.path.exists(json_file_path):
-            st.success("  Component mapping JSON found")
-            try:
-                import json
-                with open(json_file_path, 'r') as f:
-                    json_data = json.load(f)
-                st.info(f"   Components: {len(json_data.get('component_mappings', []))}")
-            except:
-                st.warning("   JSON file exists but couldn't read component count")
-        else:
-            st.error("  Component mapping JSON not found")
-            st.error("Run Program 1 first to generate the mapping file")
-            return
-    
-    with col2:
-        if os.path.exists(template_file_path):
-            st.success("  MessageFlow template found")
-            try:
-                with open(template_file_path, 'r') as f:
-                    template_content = f.read()
-                st.info(f"  Template size: {len(template_content):,} characters")
-            except:
-                st.warning("   Template file exists but couldn't read size")
-        else:
-            st.error("  MessageFlow template not found")
-            st.error("Ensure msgflow_template.xml is in the root folder")
-            return
+
 
     
     st.subheader("  Automated Business Requirements")
@@ -1239,7 +1175,7 @@ def run_messageflow_generation(confluence_doc, app_name, flow_name, groq_api_key
         progress_placeholder.progress(10)
         status_placeholder.info("  Processing Vector DB focused content...")
         
-        #   NEW: Vector DB Integration Check (similar to Agent 1)
+        # Vector DB Integration Check
         if (st.session_state.get('vector_enabled', False) and 
             st.session_state.get('vector_ready', False) and 
             st.session_state.get('vector_pipeline')):
@@ -1250,21 +1186,58 @@ def run_messageflow_generation(confluence_doc, app_name, flow_name, groq_api_key
             # Create agent function that run_messageflow_generator expects
             def agent_function(focused_content):
                 """Agent function that receives focused vector content"""
-                with open('naming_convention.json', 'r', encoding='utf-8') as f:
-                    naming_data = json.load(f)
-
-                app_name = naming_data['project_naming']['ace_application_name']
-                flow_name = naming_data['project_naming']['message_flow_name']
-
-                print(f"Using names from naming_convention.json:")
-                print(f"  ACE Application: {app_name}")
-                print(f"  Message Flow: {flow_name}")
-
+                # Try to find naming convention files using the new pattern
+                app_name_to_use = app_name
+                flow_name_to_use = flow_name
+                naming_files = []
+                
+                # Check for single naming_convention.json first
+                if os.path.exists('naming_convention.json'):
+                    try:
+                        with open('naming_convention.json', 'r', encoding='utf-8') as f:
+                            naming_files.append(json.load(f))
+                        print("Found single naming_convention.json")
+                    except (json.JSONDecodeError, FileNotFoundError) as e:
+                        print(f"Error reading naming_convention.json: {str(e)}")
+                else:
+                    # Check for numbered naming convention files
+                    print("Looking for numbered naming convention files...")
+                    idx = 1
+                    while True:
+                        numbered_file = f"naming_convention_{idx}.json"
+                        if os.path.exists(numbered_file):
+                            try:
+                                with open(numbered_file, 'r', encoding='utf-8') as f:
+                                    naming_files.append(json.load(f))
+                                print(f"Found {numbered_file}")
+                            except (json.JSONDecodeError, FileNotFoundError) as e:
+                                print(f"Error reading {numbered_file}: {str(e)}")
+                            idx += 1
+                        else:
+                            # No more files to find
+                            break
+                
+                # Use the naming information if found
+                if naming_files:
+                    print(f"Found {len(naming_files)} naming convention file(s)")
+                    # Use the first naming file for this specific agent function
+                    # The messageflow generator will handle multiple files internally
+                    if naming_files[0].get('project_naming', {}):
+                        app_name_to_use = naming_files[0]['project_naming'].get('ace_application_name', app_name)
+                        flow_name_to_use = naming_files[0]['project_naming'].get('message_flow_name', flow_name)
+                    
+                    print(f"Using names from naming convention files:")
+                    print(f"  ACE Application: {app_name_to_use}")
+                    print(f"  Message Flow: {flow_name_to_use}")
+                else:
+                    print("No naming convention files found, using provided names")
+                
+                # Run the messageflow generator with the naming information
                 return run_messageflow_generator(
                     confluence_content=focused_content,
                     biztalk_maps_path="",
-                    app_name=app_name,      # From naming_convention.json
-                    flow_name=flow_name,    # From naming_convention.json
+                    app_name=app_name_to_use,
+                    flow_name=flow_name_to_use,
                     groq_api_key=groq_api_key,
                     groq_model=groq_model
                 )
@@ -1274,19 +1247,28 @@ def run_messageflow_generation(confluence_doc, app_name, flow_name, groq_api_key
             
             # Use Vector DB pipeline to get focused content and run agent
             result = st.session_state.vector_pipeline.run_agent_with_vector_search(
-                agent_name="messageflow_generator",  #   Matches SemanticSearchEngine config
-                agent_function=agent_function  # Updated parameter name
+                agent_name="messageflow_generator",
+                agent_function=agent_function
             )
             
             progress_placeholder.progress(90)
             status_placeholder.info("  Vector DB processing completed!")
             
             # Add vector processing indicators to result
-            result['vector_processing'] = True
-            result['processing_method'] = 'Vector DB Optimization'
+            if isinstance(result, dict):
+                result['vector_processing'] = True
+                result['processing_method'] = 'Vector DB Optimization'
+            else:
+                # If result is not a dict, wrap it in a dict
+                result = {
+                    'success': True,
+                    'vector_processing': True,
+                    'processing_method': 'Vector DB Optimization',
+                    'output': result
+                }
             
         else:
-            #   Vector DB not available - raise error (no fallback)
+            # Vector DB not available - raise error
             error_msg = "Vector DB not enabled or not ready. Please setup Vector Knowledge Base first."
             
             if not st.session_state.get('vector_enabled', False):
@@ -1300,11 +1282,40 @@ def run_messageflow_generation(confluence_doc, app_name, flow_name, groq_api_key
         
         progress_placeholder.progress(100)
         
-        if result['success']:
-            # Update session state
+        if result.get('success', False) or 'output' in result or 'generated_flows' in result:
+            # Find the messageflow file path
+            messageflow_file = None
+            
+            # Check possible locations for the file path
+            if 'messageflow_file' in result:
+                messageflow_file = result['messageflow_file']
+            elif 'generated_flows' in result and result['generated_flows']:
+                messageflow_file = result['generated_flows'][0].get('msgflow_file')
+            elif 'output' in result and isinstance(result['output'], str) and result['output'].endswith('.msgflow'):
+                messageflow_file = result['output']
+            
+            # Fallback: search for messageflow files
+            if not messageflow_file:
+                # Check in output directory
+                output_dir = os.path.join(os.getcwd(), "output")
+                if os.path.exists(output_dir):
+                    # Search for messageflow files in output directory and subdirectories
+                    for root, dirs, files in os.walk(output_dir):
+                        for file in files:
+                            if file.endswith('.msgflow'):
+                                messageflow_file = os.path.join(root, file)
+                                break
+                        if messageflow_file:
+                            break
+            
+            # Last resort: use output root directory
+            if not messageflow_file and 'output_root' in result:
+                messageflow_file = result['output_root']
+            
+            # Update session state with the file path
             st.session_state.pipeline_progress['program_2'] = {
                 'status': 'success',
-                'output': result['messageflow_file'],
+                'output': messageflow_file,
                 'timestamp': datetime.now().isoformat()
             }
             
@@ -1312,62 +1323,42 @@ def run_messageflow_generation(confluence_doc, app_name, flow_name, groq_api_key
             
             # Display results with vector processing indicator
             vector_indicator = " (Vector DB Optimized)" if result.get('vector_processing') else ""
-            st.success(f"  **DSV MessageFlow Generated Successfully!{vector_indicator}**")
+            st.success(f"🚀 DSV MessageFlow Generated Successfully!{vector_indicator}")
             
-            # File details
-            col1, col2 = st.columns(2)
-            
+            # Display metadata
+            col1, col2, col3 = st.columns(3)
             with col1:
-                st.info(f"  **File:** {os.path.basename(result['messageflow_file'])}")
-                st.info(f"   **Components:** {result.get('component_mappings_processed', 'N/A')}")
-                if result.get('vector_processing'):
-                    st.info("  **Processing:** Vector DB Optimization")
-            
+                st.metric("📂 Mode", result.get('mode', 'MULTIPLE').upper())
             with col2:
-                st.info(f"**BizTalk Maps:** {result.get('biztalk_maps_processed', 0)}")
-                st.info(f"  **Validation:** {'Passed' if result.get('validation', {}).get('valid') else 'Failed'}")
-                st.info(f"**Generated:** {datetime.now().strftime('%H:%M:%S')}")
+                st.metric("🔢 Total Flows", result.get('total_flows', 2))
+            with col3:
+                output_path = os.path.dirname(messageflow_file) if messageflow_file else result.get('output_root', "C:\\")
+                st.metric("📁 Output", output_path)
             
-            # Download button
-            try:
-                with open(result['messageflow_file'], 'r') as f:
-                    msgflow_content = f.read()
-                
-                st.download_button(
-                    label=" Download MessageFlow",
-                    data=msgflow_content,
-                    file_name=os.path.basename(result['messageflow_file']),
-                    mime="application/xml",
-                    key="download_messageflow"
-                )
-            except Exception as e:
-                st.warning(f"   Download not available: {e}")
+            # Display list of generated messageflows
+            st.markdown("## Generated MessageFlows")
             
-            # Show file location
-            st.markdown(f"""
-            **  Output Location:** `{result['messageflow_file']}`
+            if 'generated_flows' in result:
+                for idx, flow in enumerate(result['generated_flows'], 1):
+                    flow_name = flow.get('flow_name', f"Flow_{idx}")
+                    with st.expander(f"Flow {idx}: {flow_name}", expanded=True):
+                        st.success(f"✅ {flow_name}")
+                        # Checkbox to mark flow as included in pipeline
+                        st.checkbox(f"Include in ACE Pipeline", value=True, key=f"flow_{idx}_included")
             
-            **Import into IBM ACE Toolkit:**
-            1. Copy the .msgflow file to your ACE workspace
-            2. Import into your Integration Server
-            3. Deploy and test the MessageFlow
-            """)
-            
+            return result
         else:
-            st.session_state.pipeline_progress['program_2']['status'] = 'error'
-            error_message = result.get('error', 'Unknown error occurred')
-            status_placeholder.error(f"  DSV MessageFlow generation failed: {error_message}")
+            # Handle failure case
+            error_msg = result.get('error', 'Unknown error in MessageFlow generation')
+            raise Exception(error_msg)
             
-            # Show error details
-            with st.expander("  Error Details"):
-                st.code(result.get('error_details', error_message))
-        
     except Exception as e:
+        # Update session state
         st.session_state.pipeline_progress['program_2']['status'] = 'error'
-        error_msg = str(e)
-        status_placeholder.error(f"  DSV MessageFlow generation failed: {error_msg}")
         
-        #   Enhanced error handling for Vector DB (inline)
+        # Show error with context detection
+        error_msg = str(e)
+        
         if "vector" in error_msg.lower():
             if "not enabled" in error_msg.lower():
                 st.error("  Vector DB is disabled. Please enable it in the sidebar.")
@@ -1380,11 +1371,11 @@ def run_messageflow_generation(confluence_doc, app_name, flow_name, groq_api_key
         elif "groq" in error_msg.lower() or "api" in error_msg.lower():
             st.error("  LLM API issue. Please verify your GROQ API key is valid and has sufficient credits.")
         elif "json" in error_msg.lower():
-            st.error("  Component mapping JSON issue. Ensure Program 1 completed successfully.")
+            st.error("  JSON file issue. Check if naming_convention.json exists in the root directory.")
         elif "template" in error_msg.lower():
             st.error("  MessageFlow template issue. Ensure msgflow_template.xml exists in root folder.")
         else:
-            st.error("  Check your inputs and try again")
+            st.error(f"  Error: {error_msg}")
             
         # Show error details
         with st.expander("  Error Details"):

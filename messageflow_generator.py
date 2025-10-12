@@ -36,77 +36,90 @@ class DSVMessageFlowGenerator:
         self.groq_model = groq_model or os.getenv('GROQ_MODEL', 'llama-3.1-70b-versatile')
         self.root_path = Path.cwd()  # Current working directory as root
         print(f"🎯 DSV MessageFlow Generator Ready: {flow_name} | Model: {self.groq_model}")
+
+
+
     
     def generate_messageflow(self, confluence_spec: str, biztalk_maps_path: str, output_dir: str) -> Dict:
-        """Generate DSV Standard MessageFlow with automated JSON and template input"""
+        """
+        Generate DSV Standard MessageFlow with automated JSON and template input
+        Supports single and multiple MessageFlow generation with flow connectors
+        """
         print("🚀 Starting DSV Standard MessageFlow Generation")
         
         try:
-            # Step 1: Load component mapping JSON from output folder
+            # Step 1: Load business requirements
             print("📋 Loading business requirements...")
             business_reqs = self._load_business_requirements()
             print(f"   ✅ Business requirements loaded")
 
+            # Step 2: Detect naming convention files
             print("📋 Detecting naming convention files...")
             naming_conventions = self._detect_and_load_naming_conventions()
-            print(f"   ✅ Found {len(naming_conventions)} MessageFlow(s) to generate")
-            for idx, naming in enumerate(naming_conventions, 1):
-                flow_name = naming['project_naming']['message_flow_name']
-                print(f"      • Flow {idx}: {flow_name}")
+            num_flows = len(naming_conventions)
+            print(f"   ✅ Found {num_flows} MessageFlow(s) to generate")
             
-            # Step 2: Load MessageFlow template from root folder
-            print("📄 Loading MessageFlow template...")
-            msgflow_template = self._load_msgflow_template()
-            print(f"   ✅ Template loaded ({len(msgflow_template)} characters)")
-
+            # Step 3: Determine folder structure (single vs multiple)
+            base_output_dir = self.root_path / "output"
+            if num_flows == 1:
+                mode = "single"
+                output_root = base_output_dir / "single"
+                print(f"   📁 Mode: Single MessageFlow")
+            else:
+                mode = "multiple"
+                output_root = base_output_dir / "multiple"
+                print(f"   📁 Mode: Multiple MessageFlows with connectors")
             
-            # Step 3: Validate inputs
-            self._validate_inputs(component_data, msgflow_template, confluence_spec, biztalk_maps_path)
+            os.makedirs(output_root, exist_ok=True)
             
-            # Step 4: Process BizTalk Maps (.btm files) - Optional
-            print(f"🔍 Processing BizTalk Maps from: {biztalk_maps_path}")
-            biztalk_maps = self._process_biztalk_maps(biztalk_maps_path)
-            print(f"   📊 Processed {len(biztalk_maps)} BizTalk map files")
+            # Step 4: Generate MessageFlows with connectors
+            generated_flows = []
             
-            # Step 5: Process business requirements
-            print("📋 Processing business requirements...")
-            business_context = self._process_business_requirements(confluence_spec)
+            for idx, naming_conv in enumerate(naming_conventions, 1):
+                flow_name = naming_conv['project_naming']['message_flow_name']
+                app_name = naming_conv['project_naming'].get('ace_application', 'ACE_Application')
+                
+                print(f"\n🔄 Generating Flow {idx}/{num_flows}: {flow_name}")
+                
+                # Create flow-specific directory
+                flow_output_dir = output_root / flow_name
+                os.makedirs(flow_output_dir, exist_ok=True)
+                os.makedirs(flow_output_dir / "schemas", exist_ok=True)
+                os.makedirs(flow_output_dir / "esql", exist_ok=True)
+                
+                # Determine input/output queues for connectors
+                connector_config = self._create_connector_config(
+                    idx, num_flows, naming_conventions
+                )
+                
+                # Generate the MessageFlow
+                msgflow_result = self._generate_single_messageflow(
+                    flow_name=flow_name,
+                    app_name=app_name,
+                    naming_conv=naming_conv,
+                    business_reqs=business_reqs,
+                    connector_config=connector_config,
+                    output_dir=flow_output_dir,
+                    biztalk_maps_path=biztalk_maps_path
+                )
+                
+                generated_flows.append({
+                    'flow_name': flow_name,
+                    'flow_index': idx,
+                    'output_dir': str(flow_output_dir),
+                    'msgflow_file': msgflow_result['msgflow_file'],
+                    'connector_config': connector_config
+                })
+                
+                print(f"   ✅ {flow_name} generated successfully")
             
-            # Step 6: Process component mappings from JSON
-            print("🔄 Processing component mappings...")
-            component_context = self._process_json_components(component_data['component_mappings'])
-
-            # Step 6.5: Enforce 6-module standard
-            print("🎯 Enforcing 6-module DSV standard...")
-            standard_modules = self._enforce_6_module_standard(self.flow_name)
-            
-            # Step 7: Generate MessageFlow XML with enhanced context
-            print("Generating DSV Standard MessageFlow...")
-            msgflow_file = self._generate_xml_with_enhanced_context(
-                msgflow_template, business_context, component_context, 
-                biztalk_maps, component_data, output_dir, standard_modules
-            )
-            
-            # Step 8: Validate output
-            print("✅ Validating generated MessageFlow...")
-            validation = self._validate_xml(msgflow_file)
-            if not validation['valid']:
-                raise MessageFlowGenerationError(f"Generated XML validation failed: {validation['errors']}")
-            
-
-
-            # Step 9: Add 6-module validation
-            print("ℹ️ Skipping 6-module validation - ESQL modules will be created by ESQL Generator")
-
-
-            print("🎉 DSV Standard MessageFlow generation completed successfully")
+            # Step 5: Return summary
             return {
                 'success': True,
-                'messageflow_file': msgflow_file,
-                'component_mappings_processed': len(component_data.get('component_mappings', [])),
-                'biztalk_maps_processed': len(biztalk_maps),
-                'validation': validation,
-                'dsv_standard': True,
+                'mode': mode,
+                'total_flows': num_flows,
+                'generated_flows': generated_flows,
+                'output_root': str(output_root),
                 'timestamp': datetime.now().isoformat()
             }
             
@@ -115,6 +128,117 @@ class DSVMessageFlowGenerator:
             print(f"❌ {error_msg}")
             raise MessageFlowGenerationError(error_msg)
     
+
+
+    def _process_template_with_connectors(self, template: str, flow_name: str, 
+                                     app_name: str, connector_config: Dict) -> str:
+        """
+        Process MessageFlow template and inject connector queue names
+        """
+        # Replace placeholders
+        processed = template.replace('{FLOW_NAME}', flow_name)
+        processed = processed.replace('{APP_NAME}', app_name)
+        processed = processed.replace('{INPUT_QUEUE_NAME}', connector_config['input_queue'])
+        processed = processed.replace('{OUTPUT_QUEUE_NAME}', connector_config['output_queue'])
+        
+        # Add connector metadata as XML comment
+        connector_info = f"""
+        <!-- Flow Connector Configuration -->
+        <!-- Flow Index: {connector_config['flow_index']} -->
+        <!-- Input Queue: {connector_config['input_queue']} -->
+        <!-- Output Queue: {connector_config['output_queue']} -->
+        <!-- First Flow: {connector_config['is_first']} -->
+        <!-- Last Flow: {connector_config['is_last']} -->
+        """
+        
+        # Insert after XML declaration
+        if '<?xml' in processed:
+            processed = processed.replace('<?xml version="1.0" encoding="UTF-8"?>', 
+                                        f'<?xml version="1.0" encoding="UTF-8"?>\n{connector_info}')
+        
+        return processed
+
+
+
+    def _generate_single_messageflow(self, flow_name: str, app_name: str, 
+                                naming_conv: Dict, business_reqs: Dict,
+                                connector_config: Dict, output_dir: Path,
+                                biztalk_maps_path: str) -> Dict:
+        """
+        Generate a single MessageFlow with connector configuration
+        """
+        print(f"      📝 Loading MessageFlow template...")
+        msgflow_template = self._load_msgflow_template()
+        
+        # Process template with connector queues
+        print(f"      🔧 Applying connector configuration...")
+        processed_xml = self._process_template_with_connectors(
+            msgflow_template, 
+            flow_name, 
+            app_name,
+            connector_config
+        )
+        
+        # Save MessageFlow file
+        msgflow_filename = f"{flow_name}.msgflow"
+        msgflow_file = output_dir / msgflow_filename
+        
+        with open(msgflow_file, 'w', encoding='utf-8') as f:
+            f.write(processed_xml)
+        
+        print(f"      💾 Saved: {msgflow_filename}")
+        
+        return {
+            'msgflow_file': str(msgflow_file),
+            'flow_name': flow_name,
+            'app_name': app_name
+        }
+
+
+
+    def _create_connector_config(self, flow_index: int, total_flows: int, 
+                            naming_conventions: List[Dict]) -> Dict:
+        """
+        Create connector configuration for flow chaining
+        Flow N output → Flow N+1 input
+        """
+        connector = {
+            'is_first': flow_index == 1,
+            'is_last': flow_index == total_flows,
+            'flow_index': flow_index,
+            'input_queue': None,
+            'output_queue': None
+        }
+        
+        current_flow_name = naming_conventions[flow_index - 1]['project_naming']['message_flow_name']
+        
+        # For multiple flows, create connectors
+        if total_flows > 1:
+            # Input queue: From previous flow (except first)
+            if not connector['is_first']:
+                prev_flow_name = naming_conventions[flow_index - 2]['project_naming']['message_flow_name']
+                connector['input_queue'] = f"{prev_flow_name}_OUT.QL"
+                print(f"      🔗 Input: {connector['input_queue']} (from Flow {flow_index - 1})")
+            else:
+                # First flow gets input from external source
+                connector['input_queue'] = f"{current_flow_name}_IN.QL"
+                print(f"      📥 Input: {connector['input_queue']} (external)")
+            
+            # Output queue: To next flow (except last)
+            if not connector['is_last']:
+                connector['output_queue'] = f"{current_flow_name}_OUT.QL"
+                print(f"      📤 Output: {connector['output_queue']} (to Flow {flow_index + 1})")
+            else:
+                # Last flow sends to final destination
+                connector['output_queue'] = f"{current_flow_name}_FINAL.QL"
+                print(f"      🎯 Output: {connector['output_queue']} (final)")
+        else:
+            # Single flow: standard input/output
+            connector['input_queue'] = f"{current_flow_name}_IN.QL"
+            connector['output_queue'] = f"{current_flow_name}_OUT.QL"
+        
+        return connector
+
 
 
     def _load_business_requirements(self) -> Dict:

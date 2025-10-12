@@ -11,12 +11,13 @@ import pandas as pd
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Union
-import xml.etree.ElementTree as ET
 import PyPDF2
 import groq
 from dotenv import load_dotenv
 from llm_json_parser import LLMJSONParser
 import streamlit as st
+import lxml.etree as ET
+
 load_dotenv()
 
 class BizTalkACEMapper:
@@ -104,6 +105,8 @@ class BizTalkACEMapper:
                 has_transco = True
         
         return has_xsl, has_transco
+    
+
 
     def optimize_msgflow_template(self, has_xsl, has_transco, template_path="templates/standard_msgflow_template.xml", output_path="msgflow_template.xml"):
         """
@@ -118,54 +121,121 @@ class BizTalkACEMapper:
             str: Path to generated template
         """
         
-        # Load standard template
-        template_path = "templates/standard_msgflow_template.xml"
-        tree = ET.parse(template_path)
-        root = tree.getroot()
+        # Ensure template_path is valid - don't overwrite it if it's a parameter
+        if not os.path.exists(template_path):
+            # Try common fallback locations
+            fallback_paths = [
+                "templates/standard_msgflow_template.xml",
+                "standard_msgflow_template.xml",
+                os.path.join(os.path.dirname(__file__), "templates/standard_msgflow_template.xml"),
+                os.path.join(os.getcwd(), "templates/standard_msgflow_template.xml")
+            ]
+            
+            for fallback in fallback_paths:
+                if os.path.exists(fallback):
+                    template_path = fallback
+                    print(f"Found template at: {template_path}")
+                    break
+            else:
+                raise FileNotFoundError(f"MessageFlow template not found at {template_path} or any fallback locations")
         
-        nodes_to_remove = []
-        connections_to_remove = []
+        # Load standard template as text
+        with open(template_path, 'r', encoding='utf-8') as f:
+            template_content = f.read()
         
-        # Remove Transco-related nodes
+        # Track modifications
+        modifications = []
+        
+        # Process BeforeEnrichment and AfterEnrichment nodes
         if not has_transco:
-            print("⚠️  No Transco mentioned - Removing BeforeEnrichment & AfterEnrichment")
-            for node in root.findall(".//subFlow"):
-                if node.get('name') in ['BeforeEnrichment', 'AfterEnrichment']:
-                    nodes_to_remove.append(node)
-                    node_name = node.get('name')
-                    # Remove connections to/from these subflows
-                    for conn in root.findall(".//connections"):
-                        if conn.get('source') == node_name or conn.get('target') == node_name:
-                            connections_to_remove.append(conn)
+            print("⚠️ No Transco mentioned - Removing BeforeEnrichment & AfterEnrichment")
+            modifications.append("Removed BeforeEnrichment and AfterEnrichment nodes")
+            
+            # Use regular expressions to find and remove the BeforeEnrichment node
+            import re
+            pattern_before = r'<!-- 2\. BEFORE ENRICHMENT SUBFLOW.*?<translation xmi:type="utility:ConstantString" string="BeforeEnrichment"/>\s*</nodes>'
+            template_content = re.sub(pattern_before, '', template_content, flags=re.DOTALL)
+            
+            # Remove the AfterEnrichment node
+            pattern_after = r'<!-- 4\. AFTER ENRICHMENT SUBFLOW.*?<translation xmi:type="utility:ConstantString" string="AfterEnrichment"/>\s*</nodes>'
+            template_content = re.sub(pattern_after, '', template_content, flags=re.DOTALL)
+            
+            # Remove connections involving these nodes
+            # Connections to BeforeEnrichment (FCMComposite_1_4)
+            pattern_conn_before = r'<!-- Connection \d+:.*?FCMComposite_1_4.*?-->\s*<connections.*?/>'
+            template_content = re.sub(pattern_conn_before, '', template_content, flags=re.DOTALL)
+            
+            # Connections to AfterEnrichment (FCMComposite_1_12)
+            pattern_conn_after = r'<!-- Connection \d+:.*?FCMComposite_1_12.*?-->\s*<connections.*?/>'
+            template_content = re.sub(pattern_conn_after, '', template_content, flags=re.DOTALL)
+            
+            # Add new connection from MQInput to Compute
+            mqinput_to_compute = '''
+        <!-- New Connection: MQInput → Compute (After template optimization) -->
+        <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_99" 
+                    targetNode="FCMComposite_1_1" sourceNode="FCMComposite_1_7" 
+                    sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.in"/>
+    '''
+            # Insert before the closing </composition> tag
+            template_content = template_content.replace('</composition>', mqinput_to_compute + '\n    </composition>')
+            modifications.append("Added direct connection from MQInput to Compute")
         
-        # Remove XSL Transform node
+        # Process XSLTransform node
         if not has_xsl:
-            print("⚠️  No XSL mentioned - Removing XSLTransform node")
-            for node in root.findall(".//node[@type='XSLTransform']"):
-                nodes_to_remove.append(node)
-                node_name = node.get('name')
-                for conn in root.findall(".//connections"):
-                    if conn.get('source') == node_name or conn.get('target') == node_name:
-                        connections_to_remove.append(conn)
+            print("⚠️ No XSL mentioned - Removing XSLTransform node")
+            modifications.append("Removed XSLTransform node")
+            
+            # Remove the XSLTransform node
+            import re
+            pattern_xsl = r'<!-- 3\. XSL TRANSFORM NODE.*?<translation xmi:type="utility:ConstantString" string="XSLTransform"/>\s*</nodes>'
+            template_content = re.sub(pattern_xsl, '', template_content, flags=re.DOTALL)
+            
+            # Remove connections involving the XSLTransform node
+            pattern_conn_xsl = r'<!-- Connection \d+:.*?FCMComposite_1_5.*?-->\s*<connections.*?/>'
+            template_content = re.sub(pattern_conn_xsl, '', template_content, flags=re.DOTALL)
+            
+            # Add new direct connection
+            if has_transco:
+                # Compute to AfterEnrichment
+                compute_to_afterenrich = '''
+        <!-- New Connection: Compute → AfterEnrichment (After template optimization) -->
+        <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_98" 
+                    targetNode="FCMComposite_1_12" sourceNode="FCMComposite_1_1" 
+                    sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+    '''
+                template_content = template_content.replace('</composition>', compute_to_afterenrich + '\n    </composition>')
+                modifications.append("Added direct connection from Compute to AfterEnrichment")
+            else:
+                # Compute to MQOutput
+                compute_to_mqoutput = '''
+        <!-- New Connection: Compute → MQOutput (After template optimization) -->
+        <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_97" 
+                    targetNode="FCMComposite_1_14" sourceNode="FCMComposite_1_1" 
+                    sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.Input"/>
+    '''
+                template_content = template_content.replace('</composition>', compute_to_mqoutput + '\n    </composition>')
+                modifications.append("Added direct connection from Compute to MQOutput")
         
-        # Apply removals
-        for node in nodes_to_remove:
-            root.remove(node)
-        
-        for conn in connections_to_remove:
-            root.remove(conn)
-        
-        # Adjust connections for simplified flow
+        # Handle the simplified flow case
         if not has_xsl and not has_transco:
             print("✅ Simplified flow: MQInput → Compute → MQOutput → SOAPRequest")
-            # Update connection logic here if needed
         
-        # Save optimized template
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        tree.write(output_path, encoding='utf-8', xml_declaration=True)
+        # Save the optimized template
+        # Create output directory if it doesn't exist
+        output_dir = os.path.dirname(output_path)
+        if output_dir:  # Only create directories if there's a path specified
+            os.makedirs(output_dir, exist_ok=True)
+        
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(template_content)
         
         print(f"✅ Optimized template saved: {output_path}")
+        for mod in modifications:
+            print(f"  - {mod}")
+        
         return output_path
+    
+
 
     def _parse_single_component(self, file_path: Path) -> Optional[Dict]:
         """Parse individual BizTalk component file"""
