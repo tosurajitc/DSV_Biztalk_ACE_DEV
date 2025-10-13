@@ -105,14 +105,14 @@ class SchemaGenerator:
 
     def generate_schemas(self, 
                     vector_content: str,  # New: Vector DB content instead of PDF path
-                    component_mapping_json_path: str,
+                    business_requirements_json_path: str,
                     output_dir: str) -> Dict[str, Any]:
         """
         Main entry point - Generate all XSD schemas using LLM analysis
         
         Args:
             confluence_pdf_path: Path to Confluence PDF with business requirements
-            component_mapping_json_path: Path to component mapping JSON
+            business_requirements_json_path: Path to component mapping JSON
             output_dir: Output directory for generated schemas
             
         Returns:
@@ -124,7 +124,7 @@ class SchemaGenerator:
         # Step 1: Process ALL inputs completely
         print("\n📄 Step 1: Processing ALL inputs for LLM analysis...")
         vector_processed_content = self._process_vector_content(vector_content)
-        json_mappings = self._extract_complete_json_mappings(component_mapping_json_path)
+        json_mappings = self._extract_complete_json_mappings(business_requirements_json_path)
         
         # Step 2: LLM Analysis of requirements
         print("\n🧠 Step 2: LLM analyzing schema requirements...")
@@ -578,7 +578,7 @@ def main():
     # Generate schemas using Vector DB content
     result = generator.generate_schemas(
         vector_content=vector_content,                      # ✅ Vector DB content
-        component_mapping_json_path="component_mapping.json",  # ✅ Direct path for testing
+        business_requirements_json_path="business_requirements.json",  # ✅ Direct path for testing
         output_dir="test_output"                           # ✅ Direct path for testing
     )
     

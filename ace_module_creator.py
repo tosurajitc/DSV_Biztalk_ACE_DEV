@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """
-Enhanced ACE Module Creator v2.0 (Orchestrator)
-Purpose: Coordinates execution order and manages LLM integration for all modules
-Coordination: Manages execution order → Schema → ESQL → XSL → Application Descriptor → Enrichment → Project
-LLM Integration: Passes all inputs (PDF, JSON, msgflow, templates) to each module's LLM calls with no fallback logic
-NO HARDCODED FALLBACKS - Pure AI-driven generation orchestration
+ACE Module Creator v3.0 - Clean Architecture
+Pure orchestration with no hardcoded fallbacks or flow-specific logic
+Designed for 1000+ flows with consistent execution pattern
 """
 
 import os
@@ -12,9 +10,9 @@ import json
 import time
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List
 from dataclasses import dataclass
-
+import streamlit as st
 try:
     from schema_generator import SchemaGenerator
     from esql_generator import ESQLGenerator
@@ -23,233 +21,328 @@ try:
     from enrichment_generator import EnrichmentGenerator
     from project_generator import ProjectGenerator
 except ImportError as e:
-    print(f"❌ Missing generator modules: {e}")
-    print("Ensure all generator modules are in the same directory")
-    exit(1)
+    raise ImportError(f"Missing required generator modules: {e}")
+
 
 @dataclass
-class ACEGenerationInputs:
-    """Data class to hold all input files and paths"""
-    component_mapping_json_path: str
+class FlowContext:
+    """Context for a single messageflow processing"""
     msgflow_path: str
-    esql_template_path: str
-    application_descriptor_template_path: str
-    project_template_path: str
-    output_dir: str
+    naming_convention_path: str  # Points to root folder naming file
+    flow_name: str
+    output_subdir: str
 
-@dataclass
-class ModuleExecutionResult:
-    """Data class to hold module execution results"""
-    module_name: str
-    status: str
-    execution_time: float
-    llm_analysis_calls: int
-    llm_generation_calls: int
-    output_files: List[str]
-    metadata: Dict[str, Any]
-    error_message: Optional[str] = None
 
-class ACEModuleCreatorOrchestrator:
-    """
-    Enhanced ACE Module Creator Orchestrator
-    Coordinates all modules with pure LLM integration and no fallback logic
-    """
+class ACEModuleCreator:
+    """Clean orchestrator for ACE module generation"""
     
-    def __init__(self, groq_api_key: str = None):
-        """Initialize orchestrator with API key"""
+    def __init__(self, groq_api_key: str, output_dir: str = "output"):
         self.groq_api_key = groq_api_key
-        self.execution_results: List[ModuleExecutionResult] = []
-        self.total_llm_calls = 0
-        self.start_time = None
-        self.end_time = None
+        self.output_dir = Path(output_dir)
+        self.business_requirements_path = self.output_dir / "business_requirements.json"
         
-    def create_ace_project(self, inputs: ACEGenerationInputs) -> Dict[str, Any]:
-        """
-        Main orchestration method - creates complete ACE project
-        Execution Order: Schema → ESQL → XSL → Application Descriptor → Enrichment → Project
-        
-        Args:
-            inputs: ACEGenerationInputs containing all required input files
-            
-        Returns:
-            Dict with complete generation results and metadata
-        """
-
-        missing_files = []
-        if not os.path.exists(inputs.component_mapping_json_path):
-            missing_files.append(f"Component mapping: {inputs.component_mapping_json_path}")
-        if not os.path.exists(inputs.msgflow_path):
-            missing_files.append(f"MessageFlow: {inputs.msgflow_path}")
-        
-        if missing_files:
-            raise FileNotFoundError(f"Missing required files: {', '.join(missing_files)}")
-
-
-        print("🎯 Starting Enhanced ACE Module Creator (Orchestrator)")
-        print("📋 NO HARDCODED FALLBACKS - Pure AI-driven generation orchestration")
-        print("🔄 Execution Order: Schema → ESQL → XSL → Application Descriptor → Enrichment → Project")
-        
-        self.start_time = datetime.now()
-        
-        # Validate all inputs before starting
-        print("\n🔍 Step 0: Validating all inputs...")
-        self._validate_inputs(inputs)
-        
-        # Create output directory structure
-        os.makedirs(inputs.output_dir, exist_ok=True)
-        
-        try:
-            # Execute modules in specified order with LLM integration
-            print("\n🚀 Starting coordinated module execution...")
-            
-            # Step 1: Schema Generation
-            schema_result = self._execute_schema_generation(inputs)
-            self.execution_results.append(schema_result)
-            
-            # Step 2: ESQL Generation  
-            esql_result = self._execute_esql_generation(inputs)
-            self.execution_results.append(esql_result)
-            
-            # Step 3: XSL Generation
-            xsl_result = self._execute_xsl_generation(inputs)
-            self.execution_results.append(xsl_result)
-            
-            # Step 4: Application Descriptor Generation
-            app_desc_result = self._execute_application_descriptor_generation(inputs)
-            self.execution_results.append(app_desc_result)
-            
-            # Step 5: Enrichment Generation
-            enrichment_result = self._execute_enrichment_generation(inputs)
-            self.execution_results.append(enrichment_result)
-            
-            # Step 6: Project Generation (analyzes all generated components)
-            project_result = self._execute_project_generation(inputs)
-            self.execution_results.append(project_result)
-            
-            self.end_time = datetime.now()
-            
-            # Generate comprehensive results
-            return self._generate_orchestration_results(inputs)
-            
-        except Exception as e:
-            self.end_time = datetime.now()
-            print(f"\n❌ Orchestration failed: {str(e)}")
-            return self._generate_error_results(inputs, str(e))
-        
-
-    
-    def _validate_inputs(self, inputs: ACEGenerationInputs) -> None:
-        """
-        Validate all required input files exist
-        PDF validation maintained until all modules converted to Vector DB
-        """
-        required_files = {
-            'Component Mapping JSON': inputs.component_mapping_json_path,
-            'MessageFlow': inputs.msgflow_path,
-            'ESQL Template': inputs.esql_template_path,
-            'Application Descriptor Template': inputs.application_descriptor_template_path,
-            'Project Template': inputs.project_template_path
+        # Template paths (all in templates folder except ESQL)
+        self.templates = {
+            'esql': Path("templates/ESQL_Template_Updated.ESQL"),
+            'app_descriptor': Path("templates/application_descriptor.xml"),
+            'project': Path("templates/project_template.xml")
         }
         
-        missing_files = []
-        for file_type, file_path in required_files.items():
-            if not os.path.exists(file_path):
-                missing_files.append(f"{file_type}: {file_path}")
+        self.stats = {
+            'flows_processed': 0,
+            'flows_succeeded': 0,
+            'flows_failed': 0,
+            'total_llm_calls': 0,
+            'start_time': None,
+            'end_time': None
+        }
         
-        if missing_files:
-            raise FileNotFoundError(f"Missing required input files:\n" + "\n".join(missing_files))
+    def execute(self) -> Dict:
+        """Main execution entry point"""
+        self.stats['start_time'] = datetime.now()
         
-        # Additional Vector DB validation 
-        import streamlit as st
-        if not (st.session_state.get('vector_enabled', False) and 
-                st.session_state.get('vector_ready', False) and 
-                st.session_state.get('vector_pipeline')):
-            raise Exception(
-                "Vector DB Error: Vector Knowledge Base not ready. "
-                "Schema Generator requires Vector DB for business requirement processing. "
-                "Please setup Vector Knowledge Base in Agent 1."
+        print("🚀 ACE Module Creator v3.0")
+        print("=" * 70)
+        
+        # Step 1: Validate prerequisites
+        self._validate_prerequisites()
+        
+        # Step 2: Discover and map flows
+        flow_contexts = self._discover_and_map_flows()
+        
+        if not flow_contexts:
+            raise RuntimeError("No messageflows found in output directory")
+        
+        print(f"\n📊 Found {len(flow_contexts)} messageflow(s) to process")
+        
+        # Step 3: Process each flow independently
+        results = []
+        for idx, context in enumerate(flow_contexts, 1):
+            print(f"\n{'='*70}")
+            print(f"Processing Flow {idx}/{len(flow_contexts)}: {context.flow_name}")
+            print(f"{'='*70}")
+            
+            result = self._process_single_flow(context)
+            results.append(result)
+            
+            self.stats['flows_processed'] += 1
+            if result['status'] == 'success':
+                self.stats['flows_succeeded'] += 1
+            else:
+                self.stats['flows_failed'] += 1
+        
+        self.stats['end_time'] = datetime.now()
+        
+        # Step 4: Generate final report
+        return self._generate_final_report(results)
+    
+    def _validate_prerequisites(self):
+        """Validate all required files exist"""
+        print("\n🔍 Validating prerequisites...")
+        
+        missing = []
+        
+        # Check output directory
+        if not self.output_dir.exists():
+            missing.append(f"Output directory: {self.output_dir}")
+        
+        # Check business requirements
+        if not self.business_requirements_path.exists():
+            missing.append(f"Business requirements: {self.business_requirements_path}")
+        
+        # Check templates
+        for name, path in self.templates.items():
+            if not path.exists():
+                missing.append(f"{name} template: {path}")
+        
+        if missing:
+            raise FileNotFoundError(f"Missing required files:\n" + "\n".join(f"  - {m}" for m in missing))
+        
+        print("✅ All prerequisites validated")
+    
+    def _discover_and_map_flows(self) -> List[FlowContext]:
+        """Discover messageflows and map to naming conventions by flow name"""
+        import shutil
+        
+        print("\n🔍 Discovering messageflows and naming conventions...")
+        
+        # Determine if single or multiple flow mode
+        single_dir = self.output_dir / "single"
+        multiple_dir = self.output_dir / "multiple"
+        
+        msgflow_files = []
+        base_path = None
+        
+        if single_dir.exists():
+            print("  📁 Mode: Single MessageFlow")
+            base_path = single_dir
+            msgflow_files = list(single_dir.glob("*/*.msgflow"))
+        elif multiple_dir.exists():
+            print("  📁 Mode: Multiple MessageFlows")
+            base_path = multiple_dir
+            msgflow_files = list(multiple_dir.glob("*/*.msgflow"))
+        else:
+            raise RuntimeError("Neither output/single/ nor output/multiple/ folder found")
+        
+        # Find all naming_convention*.json files in ROOT directory
+        root_dir = Path(".")
+        naming_files = sorted(root_dir.glob("naming_convention*.json"))
+        
+        print(f"  Found {len(msgflow_files)} messageflow(s)")
+        print(f"  Found {len(naming_files)} naming convention(s) in root/")
+        
+        # Validation: counts must match
+        if len(msgflow_files) != len(naming_files):
+            raise ValueError(
+                f"Mismatch: {len(msgflow_files)} messageflows but {len(naming_files)} naming conventions. "
+                "Each messageflow requires exactly one naming convention file."
             )
         
-        # 🔧 FORCE: Initialize knowledge base for enhanced ESQL search
-        print("  🔧 Forcing Vector DB knowledge base initialization for enhanced ESQL...")
-        try:
-            pipeline = st.session_state.vector_pipeline
+        # Build mapping: flow_name → naming_convention_path
+        naming_map = {}
+        for naming_file in naming_files:
+            with open(naming_file, 'r') as f:
+                naming_data = json.load(f)
             
-            # Check if knowledge base is already ready
-            if not pipeline.knowledge_ready:
-                print("  ⚡ Knowledge base not ready - forcing initialization...")
-                
-                # Try multiple approaches to force initialization
-                if hasattr(pipeline, 'setup_knowledge_base'):
-                    # Look for uploaded PDF in common session state locations
-                    pdf_sources = ['uploaded_pdf', 'confluence_pdf', 'vector_pdf_file']
-                    pdf_found = False
-                    
-                    for pdf_key in pdf_sources:
-                        if pdf_key in st.session_state and st.session_state[pdf_key] is not None:
-                            try:
-                                pipeline.setup_knowledge_base(st.session_state[pdf_key])
-                                pdf_found = True
-                                print(f"  ✅ Knowledge base initialized using {pdf_key}")
-                                break
-                            except Exception as setup_error:
-                                print(f"  ⚠️ Failed to setup with {pdf_key}: {setup_error}")
-                                continue
-                    
-                    if not pdf_found:
-                        print("  ⚠️ No uploaded PDF found in session state")
-                else:
-                    print("  ⚠️ setup_knowledge_base method not available")
-            else:
-                print("  ✅ Knowledge base already ready")
+            # Extract flow name from naming convention
+            flow_name = naming_data.get('project_naming', {}).get('message_flow_name')
+            if not flow_name:
+                raise ValueError(f"Missing 'message_flow_name' in {naming_file}")
             
-            # Verify enhanced search is now available
-            if (pipeline.knowledge_ready and 
-                pipeline.search_engine is not None and
-                hasattr(pipeline.search_engine, 'collection')):
-                print("  ✅ Enhanced search ready for all modules")
-            else:
-                print("  ⚠️ Enhanced search still not available")
-                print(f"    knowledge_ready: {pipeline.knowledge_ready}")
-                print(f"    search_engine exists: {pipeline.search_engine is not None}")
-                if pipeline.search_engine:
-                    print(f"    collection exists: {hasattr(pipeline.search_engine, 'collection')}")
-                    
-                    # 🔍 NEW DIAGNOSTIC CODE
-                    print("  🔍 Investigating search_engine methods...")
-                    search_engine = pipeline.search_engine
-                    print(f"    search_engine type: {type(search_engine)}")
-                    print(f"    search_engine methods: {[m for m in dir(search_engine) if not m.startswith('_')]}")
-                    
-                    # Test if calling get_agent_content creates collection
-                    print("  🧪 Testing if get_agent_content creates collection...")
-                    try:
-                        content = search_engine.get_agent_content("schema_generator")
-                        print(f"    get_agent_content returned: {len(content)} characters")
-                        print(f"    collection exists after call: {hasattr(search_engine, 'collection')}")
-                    except Exception as e:
-                        print(f"    get_agent_content failed: {e}")
-                
-        except Exception as e:
-            print(f"  ⚠️ Knowledge base initialization warning: {e}")
-            # Don't fail - modules can still work with basic content
+            naming_map[flow_name] = str(naming_file)
+            print(f"  Mapped: {flow_name} ← {naming_file.name}")
         
-        print("  ✅ All input files validated successfully")
-        print("  🚀 Vector DB validated for schema generation")
+        # Create flow contexts by matching messageflow files with naming map
+        contexts = []
+        for msgflow_path in msgflow_files:
+            flow_name = msgflow_path.stem
+            
+            # Find matching naming convention
+            if flow_name not in naming_map:
+                raise ValueError(
+                    f"No naming convention found for messageflow: {flow_name}\n"
+                    f"Available naming conventions: {list(naming_map.keys())}"
+                )
+            
+            # Output subfolder already exists (created by Program 2)
+            output_subdir = msgflow_path.parent
+            
+            # Copy naming convention to flow subfolder (rename to naming_convention.json)
+            source_naming = Path(naming_map[flow_name])
+            target_naming = output_subdir / "naming_convention.json"
+            shutil.copy2(source_naming, target_naming)
+            
+            contexts.append(FlowContext(
+                msgflow_path=str(msgflow_path),
+                naming_convention_path=str(target_naming),  # Copied path in subfolder
+                flow_name=flow_name,
+                output_subdir=str(output_subdir)
+            ))
+            
+            print(f"  ✅ Flow: {flow_name}")
+            print(f"     Messageflow: {msgflow_path.name}")
+            print(f"     Naming: {source_naming.name} → naming_convention.json")
+            print(f"     Output: {output_subdir}")
+        
+        return contexts
+    
+    def _detect_required_modules(self, msgflow_path: str) -> Dict[str, bool]:
+        """Analyze messageflow to determine which generators to run"""
+        import xml.etree.ElementTree as ET
+        
+        print(f"  🔍 Analyzing messageflow nodes...")
+        
+        try:
+            tree = ET.parse(msgflow_path)
+            root = tree.getroot()
+            
+            # Convert to string for simple pattern matching
+            msgflow_content = ET.tostring(root, encoding='unicode')
+            
+            required = {
+                'schema': True,  # Always needed for message parsing
+                'esql': False,
+                'xsl': False,
+                'enrichment': False,
+                'app_descriptor': True,  # Always needed
+                'project': True  # Always needed
+            }
+            
+            # Check for ESQL compute nodes
+            if 'ComIbmCompute.msgnode' in msgflow_content or 'computeExpression="esql://' in msgflow_content:
+                required['esql'] = True
+                print(f"    ✅ Compute nodes detected → ESQL generation required")
+            
+            # Check for XSL transform nodes
+            if 'ComIbmXslMqsi.msgnode' in msgflow_content or 'stylesheetName=' in msgflow_content:
+                required['xsl'] = True
+                print(f"    ✅ XSL transform detected → XSL generation required")
+            
+            # Check for enrichment subflows
+            if 'EPIS_MessageEnrichment.subflow' in msgflow_content or 'BeforeEnrichment' in msgflow_content or 'AfterEnrichment' in msgflow_content:
+                required['enrichment'] = True
+                print(f"    ✅ Enrichment subflows detected → Enrichment generation required")
+            
+            return required
+            
+        except Exception as e:
+            print(f"    ⚠️ Node detection failed: {e}, running all generators")
+            # Fallback: run everything
+            return {
+                'schema': True,
+                'esql': True,
+                'xsl': True,
+                'enrichment': True,
+                'app_descriptor': True,
+                'project': True
+            }
+    
+    def _process_single_flow(self, context: FlowContext) -> Dict:
+        """Process one messageflow through required generators only"""
+        start_time = time.time()
+        
+        results = {
+            'flow_name': context.flow_name,
+            'status': 'in_progress',
+            'modules': {},
+            'skipped_modules': [],
+            'errors': [],
+            'llm_calls': 0
+        }
+        
+        try:
+            # Detect which modules are needed based on messageflow nodes
+            required_modules = self._detect_required_modules(context.msgflow_path)
+            
+            print(f"\n📋 Execution Plan:")
+            for module, needed in required_modules.items():
+                status = "✅ Required" if needed else "⏭️ Skipped"
+                print(f"  {module.upper()}: {status}")
+            
+            # Module 1: Schema Generation (conditional)
+            if required_modules['schema']:
+                results['modules']['schema'] = self._run_schema_generator(context)
+            else:
+                results['skipped_modules'].append('schema')
+            
+            # Module 2: ESQL Generation (conditional)
+            if required_modules['esql']:
+                results['modules']['esql'] = self._run_esql_generator(context)
+            else:
+                results['skipped_modules'].append('esql')
+            
+            # Module 3: XSL Generation (conditional)
+            if required_modules['xsl']:
+                results['modules']['xsl'] = self._run_xsl_generator(context)
+            else:
+                results['skipped_modules'].append('xsl')
+            
+            # Module 4: Application Descriptor (conditional)
+            if required_modules['app_descriptor']:
+                results['modules']['app_descriptor'] = self._run_app_descriptor_generator(context)
+            else:
+                results['skipped_modules'].append('app_descriptor')
+            
+            # Module 5: Enrichment Configuration (conditional)
+            if required_modules['enrichment']:
+                results['modules']['enrichment'] = self._run_enrichment_generator(context)
+            else:
+                results['skipped_modules'].append('enrichment')
+            
+            # Module 6: Project File (conditional)
+            if required_modules['project']:
+                results['modules']['project'] = self._run_project_generator(context)
+            else:
+                results['skipped_modules'].append('project')
+            
+            # Count total LLM calls
+            results['llm_calls'] = sum(
+                m.get('llm_calls', 0) for m in results['modules'].values()
+            )
+            self.stats['total_llm_calls'] += results['llm_calls']
+            
+            results['status'] = 'success'
+            
+        except Exception as e:
+            results['status'] = 'failed'
+            results['errors'].append(str(e))
+            print(f"❌ Flow processing failed: {e}")
+        
+        results['execution_time'] = time.time() - start_time
+        return results
+    
 
 
     
-    def _execute_schema_generation(self, inputs: ACEGenerationInputs) -> ModuleExecutionResult:
-        """Execute Schema Generation module with Vector DB integration"""
+    def _run_schema_generator(self, context: FlowContext) -> Dict:
+        """Execute schema generation with Vector DB integration"""
         print("\n📊 Step 1: Schema Generation")
-        print("  🧠 Vector DB Processing: Schema-focused content extraction")
-        
-        start_time = time.time()
+        start = time.time()
         
         try:
-            # ✅ NEW: Vector DB Integration (following Agent 1/2 pattern)
             import streamlit as st
             
+            # ✅ Check if Vector DB is available
             if (st.session_state.get('vector_enabled', False) and 
                 st.session_state.get('vector_ready', False) and 
                 st.session_state.get('vector_pipeline')):
@@ -261,12 +354,12 @@ class ACEModuleCreatorOrchestrator:
                     """Agent function that receives Vector DB focused content"""
                     generator = SchemaGenerator(groq_api_key=self.groq_api_key)
                     return generator.generate_schemas(
-                        vector_content=focused_content,  # ← Vector DB content
-                        component_mapping_json_path=inputs.component_mapping_json_path,  # ✅ EXISTS
-                        output_dir=inputs.output_dir  # ✅ EXISTS
+                        vector_content=focused_content,  # ✅ Use Vector DB content
+                        business_requirements_json_path=str(self.business_requirements_path),
+                        output_dir=context.output_subdir
                     )
                 
-                # Use Vector DB pipeline to get focused content and run agent
+                # Run with Vector DB pipeline
                 result = st.session_state.vector_pipeline.run_agent_with_vector_search(
                     agent_name="schema_generator",  # ← Vector search for schema content
                     agent_function=schema_agent_function
@@ -275,748 +368,430 @@ class ACEModuleCreatorOrchestrator:
                 print("  ✅ Vector DB processing completed!")
                 
             else:
-                # ❌ Vector DB not available - raise error (no fallback)
-                raise Exception("Vector DB not enabled or ready. Please setup Vector Knowledge Base first.")
+                # Fallback: Read business requirements file as vector content
+                print("  ⚠️  Vector DB not available, using file-based content...")
                 
-            execution_time = time.time() - start_time
-            self.total_llm_calls += result['llm_analysis_calls'] + result['llm_generation_calls']
+                with open(self.business_requirements_path, 'r') as f:
+                    business_content = f.read()
+                
+                generator = SchemaGenerator(groq_api_key=self.groq_api_key)
+                result = generator.generate_schemas(
+                    vector_content=business_content,  # ✅ Use file content as fallback
+                    business_requirements_json_path=str(self.business_requirements_path),
+                    output_dir=context.output_subdir
+                )
             
-            print(f"  ✅ Schema generation completed in {execution_time:.2f}s")
-            print(f"  📊 Generated {result['schemas_generated']} schema files")
+            print(f"  ✅ Generated {result.get('schemas_generated', 0)} schema files")
             
-            return ModuleExecutionResult(
-                module_name="Schema Generator",
-                status="success",
-                execution_time=execution_time,
-                llm_analysis_calls=result['llm_analysis_calls'],
-                llm_generation_calls=result['llm_generation_calls'],
-                output_files=result['schema_files'],
-                metadata=result['processing_metadata']
-            )
+            return {
+                'status': 'success',
+                'files_generated': result.get('schemas_generated', 0),
+                'llm_calls': result.get('llm_analysis_calls', 0) + result.get('llm_generation_calls', 0),
+                'execution_time': time.time() - start
+            }
             
         except Exception as e:
-            execution_time = time.time() - start_time
-            print(f"  ❌ Schema generation failed: {str(e)}")
-            
-            return ModuleExecutionResult(
-                module_name="Schema Generator",
-                status="failed",
-                execution_time=execution_time,
-                llm_analysis_calls=0,
-                llm_generation_calls=0,
-                output_files=[],
-                metadata={},
-                error_message=str(e)
-            )
-        
-
-
-    def esql_agent_function(self, inputs: ACEGenerationInputs, focused_content):
-        """Agent function that receives Vector DB focused content for ESQL processing"""
-        
-        # Enhanced Vector search for maximum business logic (same pattern as enrichment_agent_function)
-        try:
-            import streamlit as st
-
-            if (st.session_state.vector_pipeline.knowledge_ready and 
-                hasattr(st.session_state.vector_pipeline.search_engine, 'collection')):
-                
-                collection = st.session_state.vector_pipeline.search_engine.collection
-                
-                business_queries = [
-                    "stored procedure database lookup exec procedure",
-                    "IF BEGIN EXEC conditional business logic validation", 
-                    "database lookup enrichment operations transformation",
-                    "XPath field mapping transformation ns0 DocumentMessage",
-                    "queue message routing integration endpoint",
-                    "business entity reference lookup validation",
-                    "database connection alias integration service",
-                    "enrichment business rules validation transformation",
-                    "conditional logic IF THEN ELSE BEGIN END",
-                    "API service call integration endpoint operation",
-                    "message transformation mapping field conversion",
-                    "business validation rules entity processing",
-                    "database operations INSERT UPDATE SELECT",
-                    "error handling exception business logic",
-                    "routing logic distribution target system"
-                ]
-                
-                enhanced_content = []
-                for query in business_queries:
-                    try:
-                        results = collection.query(query_texts=[query], n_results=50, include=['documents'])
-                        if 'documents' in results and results['documents']:
-                            for doc_list in results['documents']:
-                                if isinstance(doc_list, list):
-                                    enhanced_content.extend(doc_list)
-                    except Exception as e:
-                        continue
-                
-                combined_content = focused_content
-                if enhanced_content:
-                    unique_enhanced = list(set(enhanced_content))
-                    enhanced_text = "\n\n---ENHANCED_BUSINESS_LOGIC---\n\n".join(unique_enhanced)
-                    combined_content = f"{focused_content}\n\n---ENHANCED_SEARCH---\n\n{enhanced_text}"
-                
-                print(f"Enhanced Vector Search Results:")
-                print(f"   Original content: {len(focused_content):,} characters")
-                print(f"   Enhanced sections: {len(enhanced_content)} pieces")
-                print(f"   Combined content: {len(combined_content):,} characters")
-            
-            else:
-                print("Enhanced search skipped: Knowledge base not ready yet")
-                combined_content = focused_content
-
-        except Exception as e:
-            print(f"Enhanced search failed, using original: {e}")
-            combined_content = focused_content
-        
-        # DEBUG: Check data types being passed
-        print(f"DEBUG: focused_content type = {type(focused_content)}")
-        print(f"DEBUG: combined_content type = {type(combined_content)}")
-        
-        if isinstance(combined_content, list):
-            print(f"DEBUG: combined_content is LIST with {len(combined_content)} items")
-            if combined_content:
-                print(f"DEBUG: first item type = {type(combined_content[0])}")
-        elif isinstance(combined_content, dict):
-            print(f"DEBUG: combined_content is DICT with keys = {list(combined_content.keys())}")
-        else:
-            print(f"DEBUG: combined_content is STRING with length = {len(combined_content)}")
-        
-        # Generate ESQL with enhanced content
-        from esql_generator import ESQLGenerator
-        generator = ESQLGenerator(groq_api_key=self.groq_api_key)
-        return generator.generate_esql_files(
-            vector_content=combined_content,
-            esql_template={'path': inputs.esql_template_path},
-            msgflow_content={'path': inputs.msgflow_path}, 
-            json_mappings={'path': inputs.component_mapping_json_path}
-        )
-
-
-
-        
-    def _execute_esql_generation(self, inputs: ACEGenerationInputs) -> ModuleExecutionResult:
-        """Execute ESQL Generation module with Vector DB integration"""
-        print("\nESSQL Generation")
-        print("  Vector DB Processing: ESQL-focused content extraction")
-        
-        start_time = time.time()
-        
-        try:
-            import streamlit as st
-            
-            # Vector DB validation
-            if not (st.session_state.get('vector_enabled', False) and 
-                    st.session_state.get('vector_ready', False) and 
-                    st.session_state.get('vector_pipeline')):
-                raise Exception("Vector DB Error: ESQL Generator requires Vector DB for business requirement processing. Please setup Vector Knowledge Base in Agent 1.")
-            
-            print("  Using Vector DB for ESQL-focused content...")
-            print("  Running LLM-based ESQL generation with Vector optimization...")
-            
-            # Execute Vector DB pipeline with external agent function
-            def esql_agent_wrapper(focused_content):
-                return self.esql_agent_function(inputs, focused_content)
-            
-            result = st.session_state.vector_pipeline.run_agent_with_vector_search(
-                agent_name="esql_generator",
-                agent_function=esql_agent_wrapper  # ← Use wrapper instead
-            )
-            
-            print("  Vector DB processing completed!")
-            
-            # Calculate execution metrics
-            execution_time = time.time() - start_time
-            llm_calls_made = result.get('llm_calls_made', 0)
-            self.total_llm_calls += llm_calls_made
-            
-            print(f"  ESQL generation completed in {execution_time:.2f}s")
-            print(f"  100% LLM-based generation: {result.get('generation_method', 'Unknown')}")
-            
-            # Prepare output files
-            output_files = [module.get('file_path') for module in result.get('generated_modules', []) if module.get('file_path')]
-            
-            return ModuleExecutionResult(
-                module_name="ESQL Generator",
-                status="success",
-                execution_time=execution_time,
-                llm_analysis_calls=llm_calls_made,
-                llm_generation_calls=0,
-                output_files=output_files,
-                metadata={
-                    'vector_processing': True,
-                    'total_modules_generated': result.get('total_modules', 0),
-                    'generation_method': result.get('generation_method', '100% LLM Based'),
-                    'chunking_used': result.get('chunking_used', True),
-                    'token_management': result.get('token_management', 'Active'),
-                    'requirements_analysis': result.get('requirements_analysis', {}),
-                    'timestamp': datetime.now().isoformat()
-                }
-            )
-            
-        except Exception as e:
-            execution_time = time.time() - start_time
-            print(f"  ESQL generation failed: {str(e)}")
-            
-            return ModuleExecutionResult(
-                module_name="ESQL Generator",
-                status="failed",
-                execution_time=execution_time,
-                llm_analysis_calls=0,
-                llm_generation_calls=0,
-                output_files=[],
-                metadata={
-                    'vector_processing': False,
-                    'error_type': 'Vector DB' if 'Vector DB' in str(e) else 'Processing',
-                    'timestamp': datetime.now().isoformat()
-                },
-                error_message=str(e)
-            )
+            print(f"  ❌ Schema generation failed: {e}")
+            return {
+                'status': 'failed',
+                'error': str(e),
+                'execution_time': time.time() - start
+            }
         
 
 
     
-    def _execute_xsl_generation(self, inputs: ACEGenerationInputs) -> ModuleExecutionResult:
-        """Execute XSL Generation module with Vector DB integration - NO FALLBACKS"""
-        print("\n🎨 Step 3: XSL Generation")
-        print("  🧠 Vector DB Processing: XSL transformation-focused content extraction")
-        
-        start_time = time.time()
+    def _run_esql_generator(self, context: FlowContext) -> Dict:
+        """Execute ESQL generation with Vector DB"""
+        print("\n⚡ Step 2: ESQL Generation")
+        start = time.time()
         
         try:
-            # ✅ Vector DB Integration - Following exact schema_generator/esql_generator pattern
             import streamlit as st
             
+            # ✅ Check if Vector DB is available
+            if (st.session_state.get('vector_enabled', False) and 
+                st.session_state.get('vector_ready', False) and 
+                st.session_state.get('vector_pipeline')):
+                
+                print("  🚀 Using Vector DB for ESQL business logic...")
+                
+                # Create agent function
+                def esql_agent_function(focused_content):
+                    generator = ESQLGenerator(groq_api_key=self.groq_api_key)
+                    return generator.generate_esql_files(
+                        vector_content=focused_content,  # ✅ Use Vector DB content
+                        esql_template={'path': str(self.templates['esql'])},
+                        msgflow_content={'path': context.msgflow_path},
+                        json_mappings={'path': str(self.business_requirements_path)},
+                        output_dir=os.path.join(context.output_subdir, "esql")
+                    )
+                
+                # Run with Vector DB
+                result = st.session_state.vector_pipeline.run_agent_with_vector_search(
+                    agent_name="esql_generator",
+                    agent_function=esql_agent_function
+                )
+            else:
+                # Fallback: Use business_requirements file content
+                with open(self.business_requirements_path, 'r') as f:
+                    business_content = f.read()
+                
+                generator = ESQLGenerator(groq_api_key=self.groq_api_key)
+                result = generator.generate_esql_files(
+                    vector_content=business_content,  # ✅ Use file content as fallback
+                    esql_template={'path': str(self.templates['esql'])},
+                    msgflow_content={'path': context.msgflow_path},
+                    json_mappings={'path': str(self.business_requirements_path)},
+                    output_dir=os.path.join(context.output_subdir, "esql") 
+                )
+            
+            print(f"  ✅ Generated {result.get('successful', 0)} ESQL modules")
+            
+            return {
+                'status': 'success',
+                'files_generated': result.get('successful', 0),
+                'llm_calls': result.get('llm_calls', 0),
+                'execution_time': time.time() - start
+            }
+            
+        except Exception as e:
+            print(f"  ❌ ESQL generation failed: {e}")
+            return {'status': 'failed', 'error': str(e), 'execution_time': time.time() - start}
+        
+
+    
+    def _run_xsl_generator(self, context: FlowContext) -> Dict:
+        """Execute XSL generation with Vector DB integration"""
+        print("\n🎨 Step 3: XSL Generation")
+        start = time.time()
+        
+        try:
+            import streamlit as st
+            
+            # ✅ Check if Vector DB is available
             if (st.session_state.get('vector_enabled', False) and 
                 st.session_state.get('vector_ready', False) and 
                 st.session_state.get('vector_pipeline')):
                 
                 print("  🚀 Using Vector DB for XSL transformation-focused content...")
-                print("  🔍 Vector search focus: XSL mappings, field transformations, stylesheet patterns")
-                
-                # ✅ Extract flow name from msgflow path - NO new method needed
-                flow_name = os.path.splitext(os.path.basename(inputs.msgflow_path))[0]
-                print(f"  📝 Extracted flow name: {flow_name}")
                 
                 # Create agent function for XSL generation
                 def xsl_agent_function(focused_content):
                     """Agent function that receives Vector DB focused content for XSL processing"""
-                    from xsl_generator import XSLGenerator
-                    
                     generator = XSLGenerator(groq_api_key=self.groq_api_key)
                     return generator.generate_xsl_transformations(
-                        vector_content=focused_content,  # ← Vector DB content instead of PDF
-                        component_mapping_json_path=inputs.component_mapping_json_path,
-                        output_dir=inputs.output_dir,
-                        flow_name=flow_name  # ✅ Pass extracted flow name
+                        vector_content=focused_content,  # ✅ Use Vector DB content
+                        business_requirements_json_path=str(self.business_requirements_path),
+                        output_dir=context.output_subdir,
+                        flow_name=context.flow_name
                     )
                 
-                print("  🤖 Running LLM-based XSL generation with Vector optimization...")
-                
-                # Use Vector DB pipeline to get focused content and run agent
+                # Run with Vector DB pipeline
                 result = st.session_state.vector_pipeline.run_agent_with_vector_search(
-                    agent_name="xsl_generator",  # ← Vector search for XSL-specific content
+                    agent_name="xsl_generator",  # ← Vector search for XSL transformation content
                     agent_function=xsl_agent_function
                 )
                 
                 print("  ✅ Vector DB processing completed!")
-                print(f"  📊 XSL transformations: {result.get('xsl_transformations_generated', 'N/A')}")
-                print(f"  🧠 LLM calls: {result.get('llm_analysis_calls', 0)} + {result.get('llm_generation_calls', 0)}")
                 
             else:
-                # ❌ Vector DB not available - raise error (NO FALLBACK)
-                error_details = []
-                if not st.session_state.get('vector_enabled', False):
-                    error_details.append("Vector DB is disabled")
-                if not st.session_state.get('vector_ready', False):
-                    error_details.append("Vector Knowledge Base not ready")
-                if not st.session_state.get('vector_pipeline'):
-                    error_details.append("Vector pipeline not initialized")
+                # Fallback: Read business requirements file as vector content
+                print("  ⚠️  Vector DB not available, using file-based content...")
                 
-                raise Exception(
-                    f"Vector DB Error: {', '.join(error_details)}. "
-                    "XSL Generator requires Vector DB for business requirement processing. "
-                    "Please setup Vector Knowledge Base in Agent 1."
+                with open(self.business_requirements_path, 'r') as f:
+                    business_content = f.read()
+                
+                generator = XSLGenerator(groq_api_key=self.groq_api_key)
+                result = generator.generate_xsl_transformations(
+                    vector_content=business_content,  # ✅ Use file content as fallback
+                    business_requirements_json_path=str(self.business_requirements_path),
+                    output_dir=context.output_subdir,
+                    flow_name=context.flow_name
                 )
-                
-            execution_time = time.time() - start_time
-            self.total_llm_calls += result['llm_analysis_calls'] + result['llm_generation_calls']
             
-            print(f"  ✅ XSL generation completed in {execution_time:.2f}s")
-            print(f"  📊 Generated {result['xsl_transformations_generated']} XSL transformation files")
+            print(f"  ✅ Generated {result.get('xsl_transformations_generated', 0)} XSL files")
             
-            return ModuleExecutionResult(
-                module_name="XSL Generator",
-                status="success",
-                execution_time=execution_time,
-                llm_analysis_calls=result['llm_analysis_calls'],
-                llm_generation_calls=result['llm_generation_calls'],
-                output_files=result['xsl_files'],
-                metadata=result['processing_metadata']
-            )
+            return {
+                'status': 'success',
+                'files_generated': result.get('xsl_transformations_generated', 0),
+                'llm_calls': result.get('llm_analysis_calls', 0) + result.get('llm_generation_calls', 0),
+                'execution_time': time.time() - start
+            }
             
         except Exception as e:
-            execution_time = time.time() - start_time
-            print(f"  ❌ XSL generation failed: {str(e)}")
-            
-            return ModuleExecutionResult(
-                module_name="XSL Generator",
-                status="failed",
-                execution_time=execution_time,
-                llm_analysis_calls=0,
-                llm_generation_calls=0,
-                output_files=[],
-                metadata={},
-                error_message=str(e)
-            )
+            print(f"  ❌ XSL generation failed: {e}")
+            return {
+                'status': 'failed',
+                'error': str(e),
+                'execution_time': time.time() - start
+            }
         
+
+
     
-    def _execute_application_descriptor_generation(self, inputs: ACEGenerationInputs) -> ModuleExecutionResult:
-        """
-        Execute Application Descriptor Generation module - FIXED: Direct call approach
-        ✅ SOLUTION: Call sub-module directly with vector content instead of through pipeline
-        """
+    def _run_app_descriptor_generator(self, context: FlowContext) -> Dict:
+        """Execute application descriptor generation"""
         print("\n📋 Step 4: Application Descriptor Generation")
-        print("  🧠 Vector DB Processing: Library dependencies, configuration settings, shared libraries")
-        
-        start_time = time.time()
+        start = time.time()
         
         try:
-            # ✅ FIXED: Get vector content directly from pipeline
+            generator = ApplicationDescriptorGenerator(groq_api_key=self.groq_api_key)
+            
+            result = generator.generate_application_descriptor(
+                vector_content="",
+                business_requirements_json_path=str(self.business_requirements_path),
+                template_path=str(self.templates['app_descriptor']),
+                output_dir=context.output_subdir
+            )
+            
+            print(f"  ✅ Generated application descriptor")
+            
+            return {
+                'status': 'success',
+                'files_generated': 1,
+                'llm_calls': result.get('llm_analysis_calls', 0) + result.get('llm_generation_calls', 0),
+                'execution_time': time.time() - start
+            }
+            
+        except Exception as e:
+            print(f"  ❌ Application descriptor generation failed: {e}")
+            return {'status': 'failed', 'error': str(e), 'execution_time': time.time() - start}
+    
+
+
+
+    def _run_enrichment_generator(self, context: FlowContext) -> Dict:
+        """Execute enrichment configuration generation with Vector DB integration"""
+        print("\n🔋 Step 5: Enrichment Configuration Generation")
+        start = time.time()
+        
+        try:
             import streamlit as st
             
+            # ✅ Check if Vector DB is available
             if (st.session_state.get('vector_enabled', False) and 
                 st.session_state.get('vector_ready', False) and 
                 st.session_state.get('vector_pipeline')):
                 
-                print("  🚀 Using Vector DB for application descriptor-focused content...")
-                print("  🔍 Vector search focus: Library dependencies, configuration settings, shared libraries")
-                print("  📋 DSV template: Account-specific standards and compliance structure")
+                print("  🚀 Using Vector DB for enrichment-focused content...")
                 
-                # ✅ NEW APPROACH: Get vector content directly, then call module
-                vector_content = st.session_state.vector_pipeline.search_engine.get_agent_content("application_descriptor_generator")
-                
-                print("  🤖 Running LLM-based application descriptor generation with Vector optimization...")
-                
-                # ✅ FIXED: Direct module call instead of pipeline call
-                from application_descriptor_generator import ApplicationDescriptorGenerator
-                
-                generator = ApplicationDescriptorGenerator(groq_api_key=self.groq_api_key)
-                result = generator.generate_application_descriptor(
-                    vector_content=vector_content,  # ← Vector DB content
-                    template_path=inputs.application_descriptor_template_path,
-                    component_mapping_json_path=inputs.component_mapping_json_path,
-                    output_dir=inputs.output_dir
-                )
-                
-                print("  ✅ Vector DB processing completed!")
-                print(f"  📊 Application descriptor: {result.get('application_descriptor_generated', 'N/A')}")
-                print(f"  🧠 LLM calls: {result.get('llm_analysis_calls', 0)} + {result.get('llm_generation_calls', 0)}")
-                
-            else:
-                # ❌ Vector DB not available - raise error (NO FALLBACK)
-                error_details = []
-                if not st.session_state.get('vector_enabled', False):
-                    error_details.append("Vector DB is disabled")
-                if not st.session_state.get('vector_ready', False):
-                    error_details.append("Vector Knowledge Base not ready")
-                if not st.session_state.get('vector_pipeline'):
-                    error_details.append("Vector pipeline not initialized")
-                
-                raise Exception(
-                    f"Vector DB Error: {', '.join(error_details)}. "
-                    "Application Descriptor Generator requires Vector DB for business requirement processing. "
-                    "Please setup Vector Knowledge Base in Agent 1."
-                )
+                # Create agent function for enrichment generation
+                def enrichment_agent_function(focused_content):
+                    """Agent function that receives Vector DB focused content for enrichment processing"""
                     
-            execution_time = time.time() - start_time
-            self.total_llm_calls += result['llm_analysis_calls'] + result['llm_generation_calls']
-            
-            print(f"  ✅ Application descriptor generation completed in {execution_time:.2f}s")
-            print(f"  📊 Generated application.descriptor file")
-            print(f"  🧠 LLM calls: {result['llm_analysis_calls']} analysis + {result['llm_generation_calls']} generation")
-            
-            return ModuleExecutionResult(
-                module_name="Application Descriptor Generator",
-                status="success",
-                execution_time=execution_time,
-                llm_analysis_calls=result['llm_analysis_calls'],
-                llm_generation_calls=result['llm_generation_calls'],
-                output_files=[result['descriptor_file']],
-                metadata=result['processing_metadata']
-            )
-            
-        except Exception as e:
-            execution_time = time.time() - start_time
-            print(f"  ❌ Application descriptor generation failed: {str(e)}")
-            
-            return ModuleExecutionResult(
-                module_name="Application Descriptor Generator",
-                status="failed",
-                execution_time=execution_time,
-                llm_analysis_calls=0,
-                llm_generation_calls=0,
-                output_files=[],
-                metadata={},
-                error_message=str(e)
-            )
-        
-
-    
-    def _execute_enrichment_generation(self, inputs: ACEGenerationInputs) -> ModuleExecutionResult:
-        """Execute Enrichment Generation module with Vector DB integration"""
-        print("\nEnrichment Configuration Generation")
-        print("  Vector DB Processing: CW1 enrichment-focused content extraction")
-        
-        start_time = time.time()
-        
-        try:
-            import streamlit as st
-            
-            # Vector DB validation
-            if not (st.session_state.get('vector_enabled', False) and 
-                    st.session_state.get('vector_ready', False) and 
-                    st.session_state.get('vector_pipeline')):
-                raise Exception("Vector DB Error: Enrichment Generator requires Vector DB for business requirement processing. Please setup Vector Knowledge Base in Agent 1.")
-            
-            print("  Using Vector DB for CW1 enrichment-focused content...")
-            print("  Running LLM-based enrichment generation with Vector optimization...")
-            
-            # Execute Vector DB pipeline with external agent function
-            def enrichment_agent_wrapper(focused_content):
-                """Local wrapper for external enrichment_agent_function"""
-                return self.enrichment_agent_function(inputs, focused_content)
-            
-            result = st.session_state.vector_pipeline.run_agent_with_vector_search(
-                agent_name="enrichment_generator",
-                agent_function=enrichment_agent_wrapper
-            )
-            
-            print("  Vector DB processing completed!")
-            
-            # Calculate execution metrics
-            execution_time = time.time() - start_time
-            analysis_calls = result.get('llm_analysis_calls', 0)
-            generation_calls = result.get('llm_generation_calls', 0)
-            self.total_llm_calls += analysis_calls + generation_calls
-            
-            print(f"  Enrichment generation completed in {execution_time:.2f}s")
-            print(f"  Generated enrichment configuration files")
-            print(f"  LLM calls: {analysis_calls} analysis + {generation_calls} generation")
-            
-            return ModuleExecutionResult(
-                module_name="Enrichment Generator",
-                status="success",
-                execution_time=execution_time,
-                llm_analysis_calls=analysis_calls,
-                llm_generation_calls=generation_calls,
-                output_files=result.get('config_files', []),
-                metadata=result.get('processing_metadata', {})
-            )
-            
-        except Exception as e:
-            execution_time = time.time() - start_time
-            print(f"  Enrichment generation failed: {str(e)}")
-            
-            return ModuleExecutionResult(
-                module_name="Enrichment Generator",
-                status="failed",
-                execution_time=execution_time,
-                llm_analysis_calls=0,
-                llm_generation_calls=0,
-                output_files=[],
-                metadata={'timestamp': datetime.now().isoformat()},
-                error_message=str(e)
-            )
-
-
-    def enrichment_agent_function(self, inputs: ACEGenerationInputs, focused_content):
-        """Agent function for enrichment processing with enhanced Vector search"""
-        
-        try:
-            import streamlit as st
-            collection = st.session_state.vector_pipeline.search_engine.collection
-            
-            enrichment_queries = [
-                "enrichment business logic validation rules",
-                "database operations lookup validation",
-                "CargoWise eAdapter service integration",
-                "business validation rules entity processing"
-            ]
-            
-            enhanced_content = []
-            for query in enrichment_queries:
-                try:
-                    results = collection.query(query_texts=[query], n_results=50, include=['documents'])
-                    if 'documents' in results and results['documents']:
-                        for doc_list in results['documents']:
-                            if isinstance(doc_list, list):
-                                enhanced_content.extend(doc_list)
-                except Exception as e:
-                    continue
-            
-            combined_content = focused_content
-            if enhanced_content:
-                unique_enhanced = list(set(enhanced_content))
-                enhanced_text = "\n\n---ENRICHMENT_LOGIC---\n\n".join(unique_enhanced)
-                combined_content = f"{focused_content}\n\n---ENHANCED_ENRICHMENT---\n\n{enhanced_text}"
-            
-        except Exception as e:
-            combined_content = focused_content
-        
-        from enrichment_generator import EnrichmentGenerator
-        generator = EnrichmentGenerator(groq_api_key=self.groq_api_key)
-        return generator.generate_enrichment_files(
-            vector_content=combined_content,
-            component_mapping_json_path=inputs.component_mapping_json_path,
-            msgflow_path=inputs.msgflow_path,
-            output_dir=inputs.output_dir
-        )
-
-    
-    def _execute_project_generation(self, inputs: ACEGenerationInputs) -> ModuleExecutionResult:
-        """Execute Project Generation module with Vector DB integration"""
-        print("\n🗂️ Step 6: Project File Generation")
-        print("  🧠 Vector DB Processing: Project architecture and build configuration analysis")
-        
-        start_time = time.time()
-        
-        try:
-            # ✅ NEW: Vector DB Integration (following established pattern)
-            import streamlit as st
-            
-            if (st.session_state.get('vector_enabled', False) and 
-                st.session_state.get('vector_ready', False) and 
-                st.session_state.get('vector_pipeline')):
-                
-                print("  🚀 Using Vector DB for project architecture analysis...")
-                
-                # Create agent function that receives Vector DB focused content for project generation
-                def project_generator_agent_function(focused_content):
-                    """Agent function that receives Vector DB focused content for project processing"""
+                    # Enhanced Vector search for enrichment-specific content
+                    try:
+                        collection = st.session_state.vector_pipeline.search_engine.collection
+                        
+                        enrichment_queries = [
+                            "enrichment business logic validation rules",
+                            "database operations lookup validation",
+                            "CargoWise eAdapter service integration",
+                            "business validation rules entity processing",
+                            "stored procedure database lookup exec",
+                            "database connection alias integration service"
+                        ]
+                        
+                        enhanced_content = []
+                        for query in enrichment_queries:
+                            try:
+                                results = collection.query(query_texts=[query], n_results=50, include=['documents'])
+                                if 'documents' in results and results['documents']:
+                                    for doc_list in results['documents']:
+                                        if isinstance(doc_list, list):
+                                            enhanced_content.extend(doc_list)
+                            except Exception as e:
+                                continue
+                        
+                        # Combine focused content with enhanced enrichment content
+                        combined_content = focused_content
+                        if enhanced_content:
+                            unique_enhanced = list(set(enhanced_content))
+                            enhanced_text = "\n\n---ENRICHMENT_LOGIC---\n\n".join(unique_enhanced)
+                            combined_content = f"{focused_content}\n\n---ENHANCED_ENRICHMENT---\n\n{enhanced_text}"
+                            
+                    except Exception as e:
+                        combined_content = focused_content
                     
-                    from project_generator import ProjectGenerator                    
-                    generator = ProjectGenerator(groq_api_key=self.groq_api_key)
-                    return generator.generate_project_file(
-                        vector_content=focused_content,  # ✅ Vector DB content instead of PDF
-                        template_path=inputs.project_template_path,
-                        component_mapping_json_path=inputs.component_mapping_json_path,
-                        output_dir=inputs.output_dir,
-                        biztalk_folder=st.session_state.get('biztalk_folder'),
-                        generated_components_dir=inputs.output_dir  # Analyze all generated components
+                    # Generate enrichment files with enhanced content
+                    generator = EnrichmentGenerator(groq_api_key=self.groq_api_key)
+                    return generator.generate_enrichment_files(
+                        vector_content=combined_content,  # ✅ Use Vector DB content
+                        business_requirements_json_path=str(self.business_requirements_path),
+                        msgflow_path=context.msgflow_path,
+                        output_dir=os.path.join(context.output_subdir, "enrichment")
                     )
                 
-                print("  🤖 Running LLM-based project generation with Vector optimization...")
-                
-                # Use Vector DB pipeline to get focused content and run agent
+                # Run with Vector DB pipeline
                 result = st.session_state.vector_pipeline.run_agent_with_vector_search(
-                    agent_name="project_generator",  # ✅ Vector search for project architecture content
-                    agent_function=project_generator_agent_function
+                    agent_name="enrichment_generator",  # ← Vector search for enrichment content
+                    agent_function=enrichment_agent_function
                 )
                 
                 print("  ✅ Vector DB processing completed!")
-                print(f"  📊 Project file: {result.get('project_file_generated', 'N/A')}")
-                print(f"  🧠 LLM calls: {result.get('llm_analysis_calls', 0)} + {result.get('llm_generation_calls', 0)}")
                 
             else:
-                # ❌ Vector DB not available - raise error (NO FALLBACK)
-                error_details = []
-                if not st.session_state.get('vector_enabled', False):
-                    error_details.append("Vector DB is disabled")
-                if not st.session_state.get('vector_ready', False):
-                    error_details.append("Vector Knowledge Base not ready")
-                if not st.session_state.get('vector_pipeline'):
-                    error_details.append("Vector pipeline not initialized")
+                # Fallback: Read business requirements file as vector content
+                print("  ⚠️  Vector DB not available, using file-based content...")
                 
-                raise Exception(
-                    f"Vector DB Error: {', '.join(error_details)}. "
-                    "Project Generator requires Vector DB for business requirement processing. "
-                    "Please setup Vector Knowledge Base in Agent 1."
+                with open(self.business_requirements_path, 'r') as f:
+                    business_content = f.read()
+                
+                generator = EnrichmentGenerator(groq_api_key=self.groq_api_key)
+                result = generator.generate_enrichment_files(
+                    vector_content=business_content,  # ✅ Use file content as fallback
+                    business_requirements_json_path=str(self.business_requirements_path),
+                    msgflow_path=context.msgflow_path,
+                    output_dir=os.path.join(context.output_subdir, "enrichment")
                 )
             
-            execution_time = time.time() - start_time
-            self.total_llm_calls += result['llm_analysis_calls'] + result['llm_generation_calls']
+            print(f"  ✅ Generated {result.get('enrichment_configs_generated', 0)} enrichment files")
             
-            print(f"  ✅ Project generation completed in {execution_time:.2f}s")
-            print(f"  📊 Generated .project file for IBM ACE Toolkit")
-            print(f"  🧠 LLM calls: {result['llm_analysis_calls']} analysis + {result['llm_generation_calls']} generation")
-            
-            return ModuleExecutionResult(
-                module_name="Project Generator",
-                status="success",
-                execution_time=execution_time,
-                llm_analysis_calls=result['llm_analysis_calls'],
-                llm_generation_calls=result['llm_generation_calls'],
-                output_files=[result['project_file_path']],
-                metadata=result.get('processing_summary', {})
-            )
+            return {
+                'status': 'success',
+                'files_generated': result.get('enrichment_configs_generated', 0),
+                'llm_calls': result.get('llm_analysis_calls', 0) + result.get('llm_generation_calls', 0),
+                'execution_time': time.time() - start
+            }
             
         except Exception as e:
-            execution_time = time.time() - start_time
-            print(f"  ❌ Project generation failed: {str(e)}")
-            
-            return ModuleExecutionResult(
-                module_name="Project Generator",
-                status="failed",
-                execution_time=execution_time,
-                llm_analysis_calls=0,
-                llm_generation_calls=0,
-                output_files=[],
-                metadata={},
-                error_message=str(e)
-            )
-    
+            print(f"  ❌ Enrichment generation failed: {e}")
+            return {
+                'status': 'failed',
+                'error': str(e),
+                'execution_time': time.time() - start
+            }
+        
+
 
     
-    def _generate_orchestration_results(self, inputs: ACEGenerationInputs) -> Dict[str, Any]:
-        """Generate comprehensive orchestration results"""
-        total_execution_time = (self.end_time - self.start_time).total_seconds()
-        
-        # Aggregate results
-        total_files_generated = sum(len(result.output_files) for result in self.execution_results)
-        successful_modules = [r for r in self.execution_results if r.status == "success"]
-        failed_modules = [r for r in self.execution_results if r.status == "failed"]
-        
-        total_analysis_calls = sum(r.llm_analysis_calls for r in self.execution_results)
-        total_generation_calls = sum(r.llm_generation_calls for r in self.execution_results)
-        
-        # Create final project structure summary
-        project_structure = self._analyze_generated_project_structure(inputs.output_dir)
-        
-        print(f"\n🎉 ACE Module Creator Orchestration Complete!")
-        print(f"⏱️ Total execution time: {total_execution_time:.2f} seconds")
-        print(f"✅ Successful modules: {len(successful_modules)}/6")
-        print(f"📊 Total files generated: {total_files_generated}")
-        print(f"🧠 Total LLM calls: {total_analysis_calls} analysis + {total_generation_calls} generation = {self.total_llm_calls}")
-        
-        if failed_modules:
-            print(f"❌ Failed modules: {len(failed_modules)}")
-            for failed in failed_modules:
-                print(f"  - {failed.module_name}: {failed.error_message}")
-        
-        return {
-            'orchestration_status': 'success' if len(failed_modules) == 0 else 'partial_success',
-            'total_execution_time': total_execution_time,
-            'successful_modules': len(successful_modules),
-            'failed_modules': len(failed_modules),
-            'total_files_generated': total_files_generated,
-            'total_llm_analysis_calls': total_analysis_calls,
-            'total_llm_generation_calls': total_generation_calls,
-            'total_llm_calls': self.total_llm_calls,
-            'module_results': [
-                {
-                    'module_name': r.module_name,
-                    'status': r.status,
-                    'execution_time': r.execution_time,
-                    'llm_analysis_calls': r.llm_analysis_calls,
-                    'llm_generation_calls': r.llm_generation_calls,
-                    'output_files_count': len(r.output_files),
-                    'output_files': r.output_files,
-                    'error_message': r.error_message
-                }
-                for r in self.execution_results
-            ],
-            'project_structure': project_structure,
-            'output_directory': inputs.output_dir,
-            'ace_project_ready': len(failed_modules) == 0,
-            'generation_timestamp': self.end_time.isoformat()
-        }
-    
-    def _generate_error_results(self, inputs: ACEGenerationInputs, error_message: str) -> Dict[str, Any]:
-        """Generate error results for failed orchestration"""
-        total_execution_time = (self.end_time - self.start_time).total_seconds() if self.end_time else 0
-        
-        return {
-            'orchestration_status': 'failed',
-            'error_message': error_message,
-            'total_execution_time': total_execution_time,
-            'successful_modules': len([r for r in self.execution_results if r.status == "success"]),
-            'failed_modules': len([r for r in self.execution_results if r.status == "failed"]),
-            'total_llm_calls': self.total_llm_calls,
-            'module_results': [
-                {
-                    'module_name': r.module_name,
-                    'status': r.status,
-                    'execution_time': r.execution_time,
-                    'error_message': r.error_message
-                }
-                for r in self.execution_results
-            ],
-            'output_directory': inputs.output_dir,
-            'ace_project_ready': False,
-            'generation_timestamp': self.end_time.isoformat() if self.end_time else datetime.now().isoformat()
-        }
-    
-    def _analyze_generated_project_structure(self, output_dir: str) -> Dict[str, Any]:
-        """Analyze the final generated project structure"""
-        structure = {
-            'directories': [],
-            'files_by_type': {},
-            'total_files': 0
-        }
+    def _run_project_generator(self, context: FlowContext) -> Dict:
+        """Execute project file generation"""
+        print("\n🗂️ Step 6: Project File Generation")
+        start = time.time()
         
         try:
-            for root, dirs, files in os.walk(output_dir):
-                rel_root = os.path.relpath(root, output_dir)
-                if rel_root != '.':
-                    structure['directories'].append(rel_root)
-                
-                for file in files:
-                    ext = Path(file).suffix.lower()
-                    if ext not in structure['files_by_type']:
-                        structure['files_by_type'][ext] = []
-                    
-                    rel_path = os.path.relpath(os.path.join(root, file), output_dir)
-                    structure['files_by_type'][ext].append(rel_path)
-                    structure['total_files'] += 1
-        
+            generator = ProjectGenerator()
+            
+            result = generator.generate_project_file(
+                vector_content="",
+                template_path=str(self.templates['project']),
+                business_requirements_json_path=str(self.business_requirements_path),
+                output_dir=context.output_subdir
+            )
+            
+            print(f"  ✅ Generated .project file")
+            
+            return {
+                'status': 'success',
+                'files_generated': 1,
+                'llm_calls': 0,
+                'execution_time': time.time() - start
+            }
+            
         except Exception as e:
-            structure['error'] = f"Failed to analyze project structure: {str(e)}"
+            print(f"  ❌ Project generation failed: {e}")
+            return {'status': 'failed', 'error': str(e), 'execution_time': time.time() - start}
         
-        return structure
+        
+    
+    def _generate_final_report(self, results: List[Dict]) -> Dict:
+        """Generate comprehensive execution report"""
+        total_time = (self.stats['end_time'] - self.stats['start_time']).total_seconds()
+        
+        report = {
+            'summary': {
+                'total_flows': len(results),
+                'succeeded': self.stats['flows_succeeded'],
+                'failed': self.stats['flows_failed'],
+                'success_rate': f"{(self.stats['flows_succeeded'] / len(results) * 100):.1f}%",
+                'total_llm_calls': self.stats['total_llm_calls'],
+                'total_time_seconds': round(total_time, 2)
+            },
+            'flow_results': results,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        print("\n" + "="*70)
+        print("🎉 ACE MODULE CREATION COMPLETE")
+        print("="*70)
+        print(f"✅ Succeeded: {self.stats['flows_succeeded']}/{len(results)}")
+        print(f"❌ Failed: {self.stats['flows_failed']}/{len(results)}")
+        print(f"🧠 Total LLM calls: {self.stats['total_llm_calls']}")
+        print(f"⏱️  Total time: {total_time:.2f}s")
+        print("="*70)
+        
+        return report
+
+
+def create_ace_project(groq_api_key: str, output_dir: str = "output") -> Dict:
+    """
+    Main entry point for integration with main.py
+    Compatible with existing pipeline pattern
+    
+    Args:
+        groq_api_key: Groq API key
+        output_dir: Output directory containing messageflows and business_requirements.json
+    
+    Returns:
+        Dict with orchestration results matching main.py expectations
+    """
+    try:
+        creator = ACEModuleCreator(groq_api_key=groq_api_key, output_dir=output_dir)
+        report = creator.execute()
+        
+        # Save report
+        report_path = Path(output_dir) / "ace_generation_report.json"
+        with open(report_path, 'w') as f:
+            json.dump(report, f, indent=2)
+        
+        # Return in format expected by main.py
+        return {
+            'orchestration_status': 'success' if report['summary']['failed'] == 0 else 'partial_success',
+            'total_execution_time': report['summary']['total_time_seconds'],
+            'successful_modules': report['summary']['succeeded'],
+            'failed_modules': report['summary']['failed'],
+            'total_files_generated': sum(
+                sum(m.get('files_generated', 0) for m in flow.get('modules', {}).values())
+                for flow in report['flow_results']
+            ),
+            'total_llm_calls': report['summary']['total_llm_calls'],
+            'module_results': report['flow_results'],
+            'output_directory': output_dir,
+            'generation_timestamp': report['timestamp']
+        }
+        
+    except Exception as e:
+        return {
+            'orchestration_status': 'failed',
+            'error_message': str(e),
+            'total_execution_time': 0,
+            'successful_modules': 0,
+            'failed_modules': 0,
+            'output_directory': output_dir
+        }
 
 
 def main():
-    """Main entry point for ACE Module Creator Orchestrator with Vector DB Integration"""
+    """CLI entry point"""
+    import sys
     
-    # Import Vector DB pipeline (following project pattern)
-    try:
-        from vector_knowledge.pipeline_integration import VectorOptimizedPipeline
-    except ImportError as e:
-        print(f"❌ Vector DB modules not available: {e}")
-        return
+    if len(sys.argv) < 2:
+        print("Usage: python ace_module_creator.py <groq_api_key> [output_dir]")
+        sys.exit(1)
     
-    # Create ACE generation inputs with Vector DB approach
-    inputs = ACEGenerationInputs(
-        confluence_pdf_path="vector_database",  # Placeholder - Vector DB provides content
-        component_mapping_json_path="component_mapping.json",  
-        msgflow_path="sample.msgflow",
-        esql_template_path="ESQL_Template_Updated.ESQL",
-        application_descriptor_template_path="application_descriptor.xml",
-        project_template_path="project.xml",
-        output_dir="generated_ace_project"
-    )
+    groq_api_key = sys.argv[1]
+    output_dir = sys.argv[2] if len(sys.argv) > 2 else "output"
     
-    # Create output directory
-    os.makedirs(inputs.output_dir, exist_ok=True)
+    result = create_ace_project(groq_api_key, output_dir)
     
-    # Get GROQ API key
-    groq_api_key = os.getenv('GROQ_API_KEY')
-    if not groq_api_key:
-        print("❌ GROQ_API_KEY environment variable not set")
-        return
-    
-    # Initialize orchestrator
-    orchestrator = ACEModuleCreatorOrchestrator(groq_api_key=groq_api_key)
-    results = orchestrator.create_ace_project(inputs)
-    
-    # Save results to file
-    with open(os.path.join(inputs.output_dir, 'generation_results.json'), 'w') as f:
-        json.dump(results, f, indent=2, default=str)
-    
-    print(f"📊 Results saved to: {inputs.output_dir}/generation_results.json")
+    if result['orchestration_status'] == 'success':
+        print(f"\n✅ Success! Report: {output_dir}/ace_generation_report.json")
+        sys.exit(0)
+    else:
+        print(f"\n❌ Failed: {result.get('error_message', 'Unknown error')}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

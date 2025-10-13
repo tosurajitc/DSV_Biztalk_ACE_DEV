@@ -36,7 +36,7 @@ class XSLGenerator:
     
     def generate_xsl_transformations(self, 
                                     vector_content: str,
-                                    component_mapping_json_path: str,
+                                    business_requirements_json_path: str,
                                     output_dir: str,
                                     flow_name: str) -> Dict[str, Any]:
         """
@@ -62,7 +62,7 @@ class XSLGenerator:
             print("\n🧠 Step 3: LLM analyzing business requirements...")
             business_analysis = self._llm_analyze_business_requirements(
                 vector_content, 
-                component_mapping_json_path,
+                business_requirements_json_path,
                 contract
             )
             print(f"   ✅ Analysis complete")

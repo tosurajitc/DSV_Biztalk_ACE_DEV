@@ -37,7 +37,7 @@ class ProjectGenerator:
     def generate_project_file(self, 
                             vector_content: str,
                             template_path: str,
-                            component_mapping_json_path: str,
+                            business_requirements_json_path: str,
                             output_dir: str,
                             biztalk_folder: str = None,  # ✅ FIXED: Added parameter
                             generated_components_dir: str = None) -> Dict[str, Any]:
@@ -192,8 +192,8 @@ class ProjectGenerator:
             
             # ✅ STEP 2: Read JSON file (basic JSON reading only)
             print("📄 Step 2: Reading JSON mappings...")
-            if os.path.exists(component_mapping_json_path):
-                with open(component_mapping_json_path, 'r', encoding='utf-8') as f:
+            if os.path.exists(business_requirements_json_path):
+                with open(business_requirements_json_path, 'r', encoding='utf-8') as f:
                     json_data = json_module.load(f)
                 print(f"  ✅ JSON loaded: {len(str(json_data))} characters")
             else:
@@ -251,7 +251,7 @@ class ProjectGenerator:
                 'llm_generation_calls': 0,  # No LLM used
                 'processing_metadata': {
                     'template_found': os.path.exists(template_path),
-                    'json_found': os.path.exists(component_mapping_json_path),
+                    'json_found': os.path.exists(business_requirements_json_path),
                     'components_found': component_count,
                     'vector_content_length': len(vector_content) if vector_content else 0
                 }

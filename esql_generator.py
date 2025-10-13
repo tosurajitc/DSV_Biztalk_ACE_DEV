@@ -57,7 +57,7 @@ class ESQLGenerator:
     
     
     def _load_inputs(self, esql_template: Dict, msgflow_content: Dict, 
-                     json_mappings: Dict) -> Tuple[str, str, Dict, Dict]:
+                 json_mappings: Dict, output_dir: str) -> Tuple[str, str, Dict, Dict]:
         """
         Load all input files needed for ESQL generation.
         
@@ -109,20 +109,18 @@ class ESQLGenerator:
         print(f"  ✅ Mappings loaded: {len(mappings_data)} items")
         
         # Load Naming Convention
-        naming_data = self._load_naming_convention()
+        naming_data = self._load_naming_convention(output_dir)
         
         return template_content, msgflow_xml, mappings_data, naming_data
     
     
-    def _load_naming_convention(self) -> Dict:
-        """
-        Load naming convention from naming_convention.json.
-        Supports both old and new formats.
+    
+    def _load_naming_convention(self, output_dir: str) -> Dict:
+        """Load naming convention from parent directory of output_dir"""
+        # Get parent directory (go one level up from esql folder)
+        parent_dir = os.path.dirname(output_dir)
+        naming_path = os.path.join(parent_dir, "naming_convention.json")
         
-        Returns:
-            Dict with flow naming information
-        """
-        naming_path = "naming_convention.json"
         if not os.path.exists(naming_path):
             raise FileNotFoundError(f"Naming convention not found: {naming_path}")
         
@@ -1041,7 +1039,7 @@ NO markdown, NO code blocks, just pure ESQL."""
         try:
             # STEP 1: Load all inputs
             template_content, msgflow_xml, mappings_data, naming_data = self._load_inputs(
-                esql_template, msgflow_content, json_mappings
+                esql_template, msgflow_content, json_mappings, output_dir
             )
             
             # STEP 2: Extract requirements (MessageFlow-first)

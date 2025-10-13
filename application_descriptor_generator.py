@@ -44,7 +44,7 @@ class ApplicationDescriptorGenerator:
 
 
     
-    def generate_application_descriptor(self, vector_content, template_path, component_mapping_json_path, output_dir):
+    def generate_application_descriptor(self, vector_content, template_path, business_requirements_json_path, output_dir):
         
         # ADD: Convert string to expected dict format
         if isinstance(vector_content, str):
@@ -62,7 +62,7 @@ class ApplicationDescriptorGenerator:
         Args:
             vector_content: Vector DB focused content for library dependencies and configuration
             template_path: Path to application_descriptor.xml DSV standard template
-            component_mapping_json_path: Path to component mapping JSON with library dependencies
+            business_requirements_json_path: Path to component mapping JSON with library dependencies
             output_dir: Output directory (project root) for application.descriptor file
             
         Returns:
@@ -76,7 +76,7 @@ class ApplicationDescriptorGenerator:
         # Step 1: Process ALL inputs completely
         print("\n📄 Step 1: Processing ALL inputs for library dependency analysis...")
         template_content = self._extract_complete_template_content(template_path)
-        json_mappings = self._extract_complete_json_mappings(component_mapping_json_path)
+        json_mappings = self._extract_complete_json_mappings(business_requirements_json_path)
         
         # Step 2: LLM Analysis of library dependencies using Vector DB + template + mappings
         print("\n🧠 Step 2: LLM analyzing shared library dependencies from Vector DB + DSV template...")
@@ -642,7 +642,7 @@ def main():
     # Test with sample inputs
     result = generator.generate_application_descriptor(
         template_path="application_descriptor.xml",
-        component_mapping_json_path="component_mapping.json",
+        business_requirements_json_path="business_requirements.json",
         output_dir="test_output"
     )
     

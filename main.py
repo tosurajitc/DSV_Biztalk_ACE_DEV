@@ -19,6 +19,7 @@ import requests
 from bs4 import BeautifulSoup
 from fetch_naming import run_pdf_naming_extraction
 from cleanup_manager import CleanupManager
+from ace_module_creator import create_ace_project
 # Vector DB imports - MANDATORY, no fallback
 try:
     from vector_knowledge.pdf_processor import PDFProcessor
@@ -71,7 +72,7 @@ st.set_page_config(
 
 def optimized_pipeline_execution():
     # Import required classes
-    from ace_module_creator import ACEModuleCreatorOrchestrator, ACEGenerationInputs
+    from ace_module_creator import create_ace_project
     from schema_generator import SchemaGenerator
     from migration_quality_reviewer import SmartACEQualityReviewer
     
@@ -107,7 +108,7 @@ def optimized_pipeline_execution():
         ('ace_module_creator', lambda confluence_content: ACEModuleCreatorOrchestrator(
             groq_api_key=st.session_state.get('groq_api_key', '')
         ).create_ace_project(ACEGenerationInputs(
-            component_mapping_json_path=st.session_state.pipeline_progress['program_1']['output'],
+            business_requirements_json_path=st.session_state.pipeline_progress['program_1']['output'],
             msgflow_path=st.session_state.pipeline_progress['program_2']['output'],
             esql_template_path="ESQL_Template.esql",
             application_descriptor_template_path="application_descriptor.xml",
@@ -119,7 +120,7 @@ def optimized_pipeline_execution():
             groq_api_key=st.session_state.get('groq_api_key', '')
         ).generate_schemas(
             vector_content=confluence_content,  #   CORRECT - Matches updated schema_generator.py
-            component_mapping_json_path=st.session_state.pipeline_progress['program_1']['output'],
+            business_requirements_json_path=st.session_state.pipeline_progress['program_1']['output'],
             output_dir=st.session_state.get('output_dir', 'output')
         )),
         
@@ -1448,54 +1449,6 @@ def render_program_3_ui():
         st.info("   Upload PDF in Agent 1 to initialize Vector Knowledge Base")
         return  # Don't show rest of UI if no knowledge base
 
-    # Auto-detected Inputs Display
-    st.subheader("  Auto-detected Inputs")
-    
-    col3, col4, col5 = st.columns(3)
-    
-    with col3:
-        st.markdown("**Component Mapping** (Program 1)")
-        if prog1_output and os.path.exists(prog1_output):
-            st.success("  Component mapping detected")
-        else:
-            st.error("  Component mapping not found")
-    
-    with col4:
-        st.markdown("**MessageFlow** (Program 2)")
-        msgflow_found = False
-        if prog2_output and os.path.exists(prog2_output):
-            if os.path.isfile(prog2_output):
-                prog2_dir = os.path.dirname(prog2_output)
-            else:
-                prog2_dir = prog2_output
-            msgflow_files = list(Path(prog2_dir).glob('*.msgflow'))
-            if msgflow_files:
-                st.success(f"  {len(msgflow_files)} MessageFlow(s) detected")
-                msgflow_found = True
-        if not msgflow_found:
-            st.error("  MessageFlow files not found")
-    
-    with col5:
-        st.markdown("**Standard Templates**")
-        
-        # Check root templates
-        root_templates = ['application_descriptor.xml', 'project.xml']
-        root_found = sum(1 for template in root_templates if os.path.exists(template))
-        
-        # Check generated template (from Program 1 output)
-        esql_template_locations = [
-            'ESQL_Template_Updated.ESQL', # Fallback: root directory
-            'output/ESQL_Template_Updated.ESQL'
-        ]
-        esql_found = any(os.path.exists(loc) for loc in esql_template_locations)
-        
-        total_found = root_found + (1 if esql_found else 0)
-        
-        # Display status with details
-        if total_found == 3:
-            st.success(f"  {total_found}/3 templates found")
-        else:
-            st.warning(f"   {total_found}/3 templates found")
 
     # AI Configuration Section  
     groq_api_key = os.getenv('GROQ_API_KEY', '') 
@@ -1527,218 +1480,34 @@ def render_program_3_ui():
 
 
 def run_program_3(groq_api_key):
-    """Execute Program 3 - Enhanced ACE Module Creator Orchestrator with auto-detection"""
     progress_placeholder = st.empty()
     status_placeholder = st.empty()
     
     try:
         st.session_state.pipeline_progress['program_3']['status'] = 'running'
-        progress_placeholder.progress(0)
-        status_placeholder.info("  Initializing Enhanced ACE Module Creator Orchestrator...")
-        
-        # Set environment variable
-        os.environ['GROQ_API_KEY'] = groq_api_key
-
-        debug_vector_db_state("Agent 3 - Before ACE Generation")
-        business_quality = verify_business_requirements_quality()
-
-        if not business_quality:
-            st.error("❌ Business requirements not properly loaded in Vector DB")
-            st.info("Try: 1) Reset Vector DB, 2) Re-upload PDF in Agent 1")
-            return
-        
-        progress_placeholder.progress(10)
-        status_placeholder.info("  Auto-detecting inputs from previous programs...")
-        
-        # Get Program 1 and Program 2 outputs
-        prog1_output = st.session_state.pipeline_progress['program_1']['output']
-        prog2_output = st.session_state.pipeline_progress['program_2']['output']
-        
-        # Auto-detect Component Mapping JSON from Program 1 output
-        component_mapping_path = None
-        if prog1_output and os.path.exists(prog1_output):
-            if prog1_output.endswith('.json'):
-                component_mapping_path = prog1_output
-            else:
-                # Look for JSON files in Program 1 output directory
-                json_files = list(Path(prog1_output).glob('*.json'))
-                if json_files:
-                    component_mapping_path = str(json_files[0])
-        
-        if not component_mapping_path:
-            raise FileNotFoundError("Component mapping JSON not found from Program 1 output")
-        
-        # Auto-detect MessageFlow from Program 2 output
-        msgflow_path = None
-        if prog2_output and os.path.exists(prog2_output):
-            if os.path.isfile(prog2_output):
-                prog2_dir = os.path.dirname(prog2_output)
-            else:
-                prog2_dir = prog2_output
-            msgflow_files = list(Path(prog2_dir).glob('*.msgflow'))
-            if msgflow_files:
-                msgflow_path = str(msgflow_files[0])
-        
-        if not msgflow_path:
-            raise FileNotFoundError("MessageFlow file not found from Program 2 output")
-        
-        # Auto-detect standard templates from root directory
-        esql_template_path = None
-        if prog1_output and os.path.exists(prog1_output):
-            if os.path.isfile(prog1_output):
-                prog1_dir = os.path.dirname(prog1_output)
-            else:
-                prog1_dir = prog1_output
-            esql_files = list(Path(prog1_dir).glob('ESQL_Template_Updated.ESQL'))
-            if esql_files:
-                esql_template_path = str(esql_files[0])
-
-        if not esql_template_path:
-            # Fallback to default location
-            esql_template_path = "ESQL_Template_Updated.ESQL"
-        app_descriptor_template_path = "application_descriptor.xml"
-        project_template_path = "project.xml"
-        
-        # Validate standard templates exist
-        for template_name, template_path in [
-            ("ESQL Template", esql_template_path),
-            ("Application Descriptor Template", app_descriptor_template_path),
-            ("Project Template", project_template_path)
-        ]:
-            if not os.path.exists(template_path):
-                raise FileNotFoundError(f"{template_name} not found: {template_path}")
-        
-        progress_placeholder.progress(20)
-        status_placeholder.info("  Preparing Confluence PDF...")
-        
         progress_placeholder.progress(30)
-        status_placeholder.info("  Starting Enhanced Orchestrator with auto-detected inputs...")
+        status_placeholder.info("🚀 Starting ACE module generation...")
         
-        # Create output directory
-        output_directory = os.path.join(os.path.dirname(prog2_output if os.path.isdir(prog2_output) else os.path.dirname(prog2_output)), "Enhanced_ACE_Project")
-        os.makedirs(output_directory, exist_ok=True)
+        output_directory = "output"
         
-        # Import Enhanced Orchestrator
-        from ace_module_creator import ACEModuleCreatorOrchestrator, ACEGenerationInputs
-        
-        # Create ACEGenerationInputs object with auto-detected inputs
-        inputs = ACEGenerationInputs(
-            component_mapping_json_path=component_mapping_path,
-            msgflow_path=msgflow_path,
-            esql_template_path=esql_template_path,
-            application_descriptor_template_path=app_descriptor_template_path,
-            project_template_path=project_template_path,
+        results = create_ace_project(
+            groq_api_key=groq_api_key,
             output_dir=output_directory
         )
         
-        # Display auto-detected inputs for confirmation
-        st.info("  **Auto-detected Inputs:**")
-        st.text(f"  Component Mapping: {os.path.basename(component_mapping_path)}")
-        st.text(f"  MessageFlow: {os.path.basename(msgflow_path)}")
-        st.text(f"  ESQL Template: {os.path.basename(esql_template_path)}")
-        st.text(f"  App Descriptor: {os.path.basename(app_descriptor_template_path)}")
-        st.text(f"  Project Template: {os.path.basename(project_template_path)}")
-        
-        progress_placeholder.progress(50)
-        status_placeholder.info("  Running orchestrated module execution...")
-        
-        # Initialize and run Enhanced Orchestrator
-        orchestrator = ACEModuleCreatorOrchestrator(groq_api_key=groq_api_key)
-        results = orchestrator.create_ace_project(inputs)
-        
         progress_placeholder.progress(100)
         
-        # Check orchestration results
         if results['orchestration_status'] in ['success', 'partial_success']:
             st.session_state.pipeline_progress['program_3']['status'] = 'success'
             st.session_state.pipeline_progress['program_3']['output'] = output_directory
-            
-            status_placeholder.success(
-                f"  Enhanced ACE Project generated successfully! "
-                f"Status: {results['orchestration_status'].title()}"
-            )
-            
-            # Display Enhanced Results
-            st.subheader("  Enhanced Orchestration Results")
-            
-            # Overall metrics
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("   Total Files", results['total_files_generated'])
-            with col2:
-                st.metric("  Execution Time", f"{results['total_execution_time']:.1f}s")
-            with col3:
-                st.metric("  LLM Calls", results['total_llm_calls'])
-            with col4:
-                st.metric("  Success Rate", f"{results['successful_modules']}/6")
-            
-            # Module execution details
-            with st.expander("  Module Execution Details", expanded=True):
-                for module_result in results['module_results']:
-                    status_icon = "" if module_result['status'] == 'success' else ""
-                    
-                    col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-                    with col1:
-                        st.text(f"{status_icon} {module_result['module_name']}")
-                    with col2:
-                        st.text(f"{module_result['execution_time']:.1f}s")
-                    with col3:
-                        st.text(f"{module_result['llm_analysis_calls'] + module_result['llm_generation_calls']} LLM")
-                    with col4:
-                        st.text(f"{module_result['output_files_count']} files")
-            
-            # Project structure
-            with st.expander("  Generated Project Structure"):
-                structure = results.get('project_structure', {})
-                st.text(f"Total Files: {structure.get('total_files', 0)}")
-                
-                for file_ext, files in structure.get('files_by_type', {}).items():
-                    if files:
-                        st.markdown(f"**{file_ext.upper()} Files ({len(files)}):**")
-                        for file_path in files[:5]:  # Show first 5
-                            st.text(f"    {file_path}")
-                        if len(files) > 5:
-                            st.text(f"  ... and {len(files) - 5} more")
-            
-            # Next steps
-            st.subheader("  Next Steps")
-            st.markdown(f"""
-            **Your Enhanced ACE project is ready!**
-            
-              **Project Location:** `{output_directory}`
-            
-            **Import into IBM ACE Toolkit:**
-            1. Open IBM ACE Toolkit
-            2. File Import General Existing Projects into Workspace
-            3. Select directory: `{output_directory}`
-            4. Import the complete project structure
-            """)
-            
+            status_placeholder.success(f"✅ Generated {results['total_files_generated']} files")
         else:
-            st.session_state.pipeline_progress['program_3']['status'] = 'error'
-            status_placeholder.error(f"  Enhanced Orchestration failed: {results.get('error_message', 'Unknown error')}")
+            st.session_state.pipeline_progress['program_3']['status'] = 'failed'
+            status_placeholder.error(f"❌ Failed: {results.get('error_message', 'Unknown')}")
             
-            # Show module-specific errors
-            with st.expander("  Module Execution Details"):
-                for module_result in results['module_results']:
-                    status_icon = "" if module_result['status'] == 'success' else ""
-                    st.text(f"{status_icon} {module_result['module_name']}: {module_result['status']}")
-                    if module_result.get('error_message'):
-                        st.error(f"  Error: {module_result['error_message']}")
-        
-        # Cleanup temporary PDF file
-        try:
-            os.unlink("vector_database")
-        except:
-            pass
-        
     except Exception as e:
-        st.session_state.pipeline_progress['program_3']['status'] = 'error'
-        status_placeholder.error(f"  Enhanced Orchestrator failed: {str(e)}")
-        
-        with st.expander("  Error Details"):
-            import traceback
-            st.code(traceback.format_exc(), language='python')            
+        st.session_state.pipeline_progress['program_3']['status'] = 'failed'
+        status_placeholder.error(f"❌ Error: {str(e)}")     
 
 
 def render_program_4_ui():
@@ -1759,102 +1528,7 @@ def render_program_4_ui():
 
     ace_toolkit_path = r"C:\Program Files\IBM\ACE\13.0.4.0"
 
-    # Configuration section
-    with st.expander("🔧 Smart Review Configuration", expanded=True):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("**🛠️ IBM ACE Toolkit Path**")
-            ace_toolkit_path = st.text_input(
-                "ACE Installation Directory",
-                value=r"C:\Program Files\IBM\ACE\13.0.4.0",
-                help="Path to your IBM ACE Toolkit installation"
-            )
-            
-            # Auto-detect button
-            if st.button("🔍 Auto-Detect ACE", help="Scan common locations for ACE installation"):
-                common_ace_paths = [
-                    r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\IBM App Connect Enterprise 13.0.4.0",
-                    r"C:\Program Files\IBM\ACE\13.0.4.0",
-                    r"C:\Program Files (x86)\IBM\ACE\13.0.4.0", 
-                    r"C:\IBM\ACE\13.0.4.0",
-                    r"C:\Program Files\IBM\App Connect Enterprise\13.0.4.0",
-                    r"C:\Program Files (x86)\IBM\App Connect Enterprise\13.0.4.0"
-                ]
-                
-                detected_path = None
-                for path in common_ace_paths:
-                    if os.path.exists(path):
-                        detected_path = path
-                        break
-                
-                if detected_path:
-                    st.success(f"✅ Found ACE at: {detected_path}")
-                    ace_toolkit_path = detected_path
-                    st.rerun()
-                else:
-                    st.warning("⚠️ ACE not found in common locations. Please enter path manually.")
-            
-            # ACE Status
-            if ace_toolkit_path and os.path.exists(ace_toolkit_path):
-                st.success("✅ ACE Toolkit path is valid")
-                ace_toolkit_available = True
-            else:
-                st.warning("⚠️ ACE Toolkit path not found - will use basic validation")
-                ace_toolkit_available = False
-        
-        with col2:
-            st.markdown("**📋 Naming Standards File**")
-            naming_standards_file = st.text_input(
-                "Path to Naming Standards JSON",
-                value=r"C:\@Official\@Gen AI\DSV\BizTalk\Analyze_this_folder\DSV_Biztalk_ACE\naming_convention.json",
-                help="JSON file containing smart naming convention rules"
-            )
-            
-            if naming_standards_file and os.path.exists(naming_standards_file):
-                try:
-                    with open(naming_standards_file, 'r') as f:
-                        naming_data = json.load(f)
-                    st.success(f"✅ Naming standards loaded ({len(naming_data)} rules)")
-                except:
-                    st.warning("⚠️ File exists but couldn't read JSON format")
-            elif naming_standards_file:
-                st.warning("⚠️ Naming standards file not found - will use defaults")
-            else:
-                st.info("ℹ️ Using default naming standards")
 
-    # Enhanced validation status display
-    st.markdown("**🔧 Validation Mode**")
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        if ace_toolkit_available:
-            st.success("✅ **Enhanced Mode**")
-            st.caption("ACE Toolkit validation enabled")
-        else:
-            st.info("ℹ️ **Basic Mode**")
-            st.caption("Rule-based validation only")
-
-    with col2:
-        st.metric("Components Source", "output/ folder")
-        st.caption("Fixed root folder")
-
-    with col3:
-        if ace_toolkit_available:
-            st.metric("Quality Checks", "Advanced")
-            st.caption("IBM ACE + Business Rules")
-        else:
-            st.metric("Quality Checks", "Standard")
-            st.caption("Business Rules only")
-    
-    # User requirements section
-    with st.expander("👤 Optional User Requirements", expanded=False):
-        user_requirements = st.text_area(
-            "Additional Quality Requirements",
-            placeholder="Enter any specific quality requirements, customizations, or business rules...",
-            height=100,
-            help="Optional: Provide specific requirements for customized quality analysis"
-        )
     
     # Run button
     col1, col2, col3 = st.columns([2, 1, 2])
@@ -1882,6 +1556,8 @@ def render_program_4_ui():
         # Import and initialize - EXACT parameter matching
         from migration_quality_reviewer import SmartACEQualityReviewer
         
+        naming_standards_file = ""
+        user_requirements = ""
         reviewer = SmartACEQualityReviewer(
             ace_components_folder=output_folder,
             ace_toolkit_path=ace_toolkit_path,

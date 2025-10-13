@@ -1,0 +1,90 @@
+BROKER SCHEMA Qguar_IN_1C_RECSAT
+CREATE COMPUTE MODULE Qguar_IN_1C_RECSAT_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		
+		-- BUSINESS LOGIC: Full message transformation and processing
+		DECLARE episInfo 		REFERENCE TO 	Environment.variables.EventData.episInfo;
+		DECLARE sourceInfo 		REFERENCE TO 	Environment.variables.EventData.sourceInfo;
+		DECLARE targetInfo 		REFERENCE TO 	Environment.variables.EventData.targetInfo;
+		DECLARE integrationInfo REFERENCE TO 	Environment.variables.EventData.integrationInfo;
+		DECLARE dataInfo 		REFERENCE TO 	Environment.variables.EventData.dataInfo;
+		
+		-- BUSINESS DATA EXTRACTION: Extract business identifiers and data
+		SET dataInfo.mainIdentifier = InputRoot.XMLNSC.[<].*:_BUSINESS_ENTITY_.*:_BUSINESS_IDENTIFIER_;
+		
+		-- Database Operations
+		DECLARE cw1Result CHARACTER;
+		SET cw1Result = PASSTHRU('CALL sp_CW1_Lookup(?, ?)',
+		InputRoot.XMLNSC.:Header.:CompanyCode,
+		InputRoot.XMLNSC.:Header.:CountryCode
+		);
+		SET OutputRoot.XMLNSC.*:CW1Data = cw1Result;
+
+		DECLARE brAppsResult CHARACTER;
+		SET brAppsResult = PASSTHRU('CALL sp_BR_Apps_Lookup(?, ?)',
+		InputRoot.XMLNSC.:Header.:CompanyCode,
+		InputRoot.XMLNSC.:Header.:CountryCode
+		);
+		SET OutputRoot.XMLNSC.*:BRAppsData = brAppsResult;
+
+		DECLARE cw1UpdateResult CHARACTER;
+		SET cw1UpdateResult = PASSTHRU('CALL sp_CW1_Update(?, ?)',
+		InputRoot.XMLNSC.:Header.:CompanyCode,
+		InputRoot.XMLNSC.:Header.:CountryCode
+		);
+		SET OutputRoot.XMLNSC.*:CW1UpdateData = cw1UpdateResult;
+
+		DECLARE cw1QueryResult CHARACTER;
+		SET cw1QueryResult = PASSTHRU('CALL sp_CW1_Query(?, ?)',
+		InputRoot.XMLNSC.:Header.:CompanyCode,
+		InputRoot.XMLNSC.:Header.:CountryCode
+		);
+		SET OutputRoot.XMLNSC.*:CW1QueryData = cw1QueryResult;
+
+		DECLARE errorLogResult CHARACTER;
+		SET errorLogResult = PASSTHRU('CALL sp_Error_Log(?, ?)',
+		InputRoot.XMLNSC.:Header.:CompanyCode,
+		InputRoot.XMLNSC.:Header.:CountryCode
+		);
+		SET OutputRoot.XMLNSC.*:ErrorLogData = errorLogResult;
+
+		-- Transformations
+		SET OutputRoot.XMLNSC.*:XUSData = InputRoot.XMLNSC.*:CDMData;
+		SET OutputRoot.XMLNSC.*:XUEData = InputRoot.XMLNSC.*:CDMData;
+
+		-- Validation Rules
+		DECLARE validationResult BOOLEAN;
+		SET validationResult = PASSTHRU('CALL sp_Validate_XUS_XUE(?, ?)',
+		InputRoot.XMLNSC.:Header.:CompanyCode,
+		InputRoot.XMLNSC.:Header.:CountryCode
+		);
+		IF validationResult = TRUE THEN
+			SET OutputRoot.XMLNSC.*:ValidationResult = 'Valid';
+		ELSE
+			SET OutputRoot.XMLNSC.*:ValidationResult = 'Invalid';
+		END IF;
+
+		-- STANDARD MESSAGE PROCESSING
+		SET OutputRoot = NULL;
+		SET OutputRoot = InputRoot;
+		
+		RETURN TRUE;
+	END;
+
+	-- STANDARD IBM ACE INFRASTRUCTURE
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+
+END MODULE;

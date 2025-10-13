@@ -1,0 +1,34 @@
+{
+  "EnrichConfigs": {
+    "MsgEnrich": [
+      {
+        "DBAlias": "HRDB",
+        "Table": "",
+        "Mandatory": false,
+        "Active": true,
+        "DisableCaching": false,
+        "SQLCommand": "sp_GetEmployeeDetails @employeeId='{0}'",
+        "Scope_prefix": "",
+        "Scope_xmlns": "",
+        "Scope": "//DBparameters",
+        "Source": [
+          {
+            "FieldName": "employeeId",
+            "xPathValue": "//DBparameters/employeeId",
+            "FieldValue": "",
+            "Optional": true,
+            "Source": "Message"
+          }
+        ],
+        "Dest": [
+          {
+            "FieldName": "//DBparameters/ResultField",
+            "xPathValue": "",
+            "Optional": true,
+            "DefaultValue": ""
+          }
+        ]
+      }
+    ]
+  }
+}

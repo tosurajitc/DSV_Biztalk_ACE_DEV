@@ -58,7 +58,7 @@ class EnrichmentGenerator:
     
     def generate_enrichment_files(self, 
                                 vector_content,  # ← Vector DB content instead of PDF path
-                                component_mapping_json_path: str,
+                                business_requirements_json_path: str,
                                 msgflow_path: str,
                                 output_dir: str) -> Dict[str, Any]:
         """
@@ -66,7 +66,7 @@ class EnrichmentGenerator:
         
         Args:
             vector_content: Vector DB business requirements content (from pipeline)
-            component_mapping_json_path: Path to component mapping JSON with enrichment patterns
+            business_requirements_json_path: Path to component mapping JSON with enrichment patterns
             msgflow_path: Path to .msgflow file with enrichment points
             output_dir: Output directory for before_enrichment.json and after_enrichment.json files
             
@@ -79,7 +79,7 @@ class EnrichmentGenerator:
         # Step 1: Process inputs for Vector DB analysis
         print("\n📄 Step 1: Processing inputs for Vector DB enrichment analysis...")
 
-        json_mappings = self._extract_complete_json_mappings(component_mapping_json_path)
+        json_mappings = self._extract_complete_json_mappings(business_requirements_json_path)
         msgflow_content = self._extract_complete_msgflow_content(msgflow_path)
         
         # Step 2: LLM Analysis of enrichment patterns using Vector DB content
@@ -977,7 +977,7 @@ def main():
     # Test with sample inputs
     result = generator.generate_enrichment_configurations(
         confluence_pdf_path="sample_requirements.pdf",
-        component_mapping_json_path="component_mapping.json",
+        business_requirements_json_path="component_mapping.json",
         msgflow_path="sample.msgflow",
         output_dir="test_output"
     )

@@ -1,0 +1,102 @@
+BROKER SCHEMA BR_APPS_OUT_CW1_PaymentSlips_REC
+CREATE COMPUTE MODULE BR_APPS_OUT_CW1_PaymentSlips_REC_Failure
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		
+		-- ✅ ERROR HANDLING: Error metadata capture for production support
+		DECLARE episInfo 		REFERENCE TO 	Environment.variables.EventData.episInfo;
+		DECLARE sourceInfo 		REFERENCE TO 	Environment.variables.EventData.sourceInfo;
+		DECLARE targetInfo 		REFERENCE TO 	Environment.variables.EventData.targetInfo;
+		DECLARE integrationInfo REFERENCE TO 	Environment.variables.EventData.integrationInfo;
+		DECLARE dataInfo 		REFERENCE TO 	Environment.variables.EventData.dataInfo;
+		DECLARE errorInfo 		REFERENCE TO 	Environment.variables.EventData.errorInfo;
+		
+		-- ✅ ERROR METADATA CAPTURE
+		SET errorInfo.errorTimestamp = CURRENT_TIMESTAMP;
+		SET errorInfo.flowName = MessageFlowLabel;
+		SET errorInfo.nodeName = NodeLabel;
+		
+		-- ✅ EXCEPTION HANDLING
+		IF EXISTS(InputExceptionList.*[]) THEN
+			SET errorInfo.exceptionDetails = GetFaultDetailAsString(InputExceptionList);
+		END IF;
+		
+		-- ✅ TECHNICAL METADATA
+		SET dataInfo.messageType = 'ERROR';		
+		SET dataInfo.dataFormat = 'XML';
+		SET dataInfo.batch = false;
+		
+		-- ✅ STANDARD MESSAGE PROCESSING
+		SET OutputRoot = NULL;
+		SET OutputRoot = InputRoot;
+		
+		-- [[[INSERT_BUSINESS_LOGIC_HERE]]]
+		DECLARE guid CHARACTER;
+		SET guid = PASSTHRU('CALL GenerateGuid()');
+		SET OutputRoot.XMLNSC.*:Guid = guid;
+		
+		DECLARE currentDateTime TIMESTAMP;
+		SET currentDateTime = PASSTHRU('CALL GetCurrentDateTime()');
+		SET OutputRoot.XMLNSC.*:CurrentDateTime = currentDateTime;
+		
+		-- Map PaymentSlips to CDM Document
+		DECLARE paymentSlipsToCDM CHARACTER;
+		SET paymentSlipsToCDM = PASSTHRU('CALL MapPaymentSlipsToCDMDocument()', InputRoot);
+		SET OutputRoot.XMLNSC.*:CDMDocument = paymentSlipsToCDM;
+		
+		-- Map CDM Document to Universal Shipment (XUS) + UniversalEvent (XUE)
+		DECLARE cdmToXUSXUE CHARACTER;
+		SET cdmToXUSXUE = PASSTHRU('CALL MapCDMToXUSXUE()', OutputRoot.XMLNSC.*:CDMDocument);
+		SET OutputRoot.XMLNSC.*:XUSXUE = cdmToXUSXUE;
+		
+		-- Enrich PaymentSlips message
+		DECLARE enrichedPaymentSlips CHARACTER;
+		SET enrichedPaymentSlips = PASSTHRU('CALL EnrichPaymentSlipsMessage()', InputRoot);
+		SET OutputRoot.XMLNSC.*:EnrichedPaymentSlips = enrichedPaymentSlips;
+		
+		-- Map XUS + XUE to CW1 format
+		DECLARE xusXueToCW1 CHARACTER;
+		SET xusXueToCW1 = PASSTHRU('CALL MapXUSXUEToCW1Format()', OutputRoot.XMLNSC.*:XUSXUE);
+		SET OutputRoot.XMLNSC.*:CW1Format = xusXueToCW1;
+		
+		-- Update PaymentSlips status
+		DECLARE updatedPaymentSlipsStatus CHARACTER;
+		SET updatedPaymentSlipsStatus = PASSTHRU('CALL UpdatePaymentSlipsStatus()', InputRoot);
+		SET OutputRoot.XMLNSC.*:PaymentSlipsStatus = updatedPaymentSlipsStatus;
+		
+		RETURN TRUE;
+	END;
+
+	-- ✅ ERROR HANDLING FUNCTION
+	CREATE FUNCTION GetFaultDetailAsString(IN fault REFERENCE) RETURNS CHARACTER
+	BEGIN
+		DECLARE str CHARACTER '';
+		IF EXISTS(fault.*:detail.*:ExceptionDetail[]) THEN
+			DECLARE exc REFERENCE TO fault.*:detail.*:ExceptionDetail[1];
+			WHILE EXISTS(exc.*:Type[]) DO
+				IF LENGTH(str) > 0 THEN
+					SET str = str || ' ';
+				END IF;
+				SET str = str || COALESCE(exc.*:Type, '') || ': ' || COALESCE(exc.*:Message, '');
+				MOVE exc TO exc.*:InnerException;
+			END WHILE;
+		END IF;
+		RETURN str;
+	END;
+
+	-- ✅ STANDARD IBM ACE INFRASTRUCTURE
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+
+END MODULE;
