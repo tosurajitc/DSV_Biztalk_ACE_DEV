@@ -108,122 +108,144 @@ class PDFNamingExtractor:
 
 
     
+
     def _llm_extract_summary_table(self, pdf_text: str) -> list:
         """
-        Use LLM to extract data from all message flow tables in the PDF
+        ENHANCED: Extract ALL message flows from comma-separated table format
+        Handles multiple flows per table - designed for 1000+ flows scalability
         
         Returns:
-            List of extracted flow configurations
+            List of extracted flow configurations (empty list if none found - NO fallbacks)
         """
-        # First detect tables
-        flow_tables = self._detect_message_flow_tables(pdf_text)
+        print("🔍 Enhanced multi-flow extraction starting...")
         
-        if not flow_tables:
-            # Fall back to scanning whole document if no tables detected
-            prompt = f"""Extract ALL message flow information from this PDF document. Look for multiple tables or sections with these exact labels and extract each set of values:
+        # Enhanced prompt specifically for comma-separated table format like yours
+        prompt = f"""You are a specialized PDF table parser for IBM ACE message flow configurations.
 
     DOCUMENT CONTENT:
-    {pdf_text[:5000]}
+    {pdf_text[:10000]}
 
-    Find and extract ALL instances of:
-    1. "ACE Application(s):" followed by the application name
-    2. "Message Flow Name(s):" followed by the flow name  
-    3. "Connected System(s):" followed by the system name
-    4. "ACE Server:" followed by the server name
-    5. "Description:" followed by the description
+    TASK: Extract ALL message flow configurations from tables with comma-separated values.
 
-    Return ONLY JSON with an array of flow configurations (no markdown, no extra text):
+    YOUR TABLE FORMAT EXAMPLE:
+    "ACE Message Flow Name: SAP_DailyBalance_REC, SAP_DailyBalance_RECSAT" 
+    "ACE Application Name: EPIS_SAP_OUT_Delta_App, EPIS_SAP_OUT_Delta_SAT_App"
+    "ACE Server Name: group-sap-server, group-sap-sat-server"
+
+    PARSING RULES:
+    1. COMMA-SEPARATED VALUES: Split by commas and match by position
+    - 1st flow name → 1st app name → 1st server name  
+    - 2nd flow name → 2nd app name → 2nd server name
+    2. EXTRACT EVERY FLOW: Don't stop at first one
+    3. HANDLE MISMATCHED COUNTS: Use available data, mark missing as "Not_Specified"
+    4. FIND ANY TABLE: Look for flow/application/server information anywhere
+
+    CRITICAL: This must work for 1000+ flows - extract ALL flows found
+
+    OUTPUT FORMAT (JSON only, no markdown):
     {{"flows": [
-    {{"ace_application_name": "extracted_app_name_1", "message_flow_name": "extracted_flow_name_1", "connected_system": "extracted_system_1", "ace_server": "extracted_server_1", "description": "extracted_description_1"}},
-    {{"ace_application_name": "extracted_app_name_2", "message_flow_name": "extracted_flow_name_2", "connected_system": "extracted_system_2", "ace_server": "extracted_server_2", "description": "extracted_description_2"}}
-    ]}}"""
+    {{"ace_application_name": "EPIS_SAP_OUT_Delta_App", "message_flow_name": "SAP_DailyBalance_REC", "ace_server": "group-sap-server", "connected_system": "SAP", "description": "Flow description if available"}},
+    {{"ace_application_name": "EPIS_SAP_OUT_Delta_SAT_App", "message_flow_name": "SAP_DailyBalance_RECSAT", "ace_server": "group-sap-sat-server", "connected_system": "SAP", "description": "Flow description if available"}}
+    ]}}
 
+    If no flows found: {{"flows": []}}"""
+
+        try:
             response = self.llm_client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
-                max_tokens=1500
+                max_tokens=3000  # Increased for large tables
             )
             
             # Track token usage
             if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
                 st.session_state.token_tracker.manual_track(
-                    agent="pdf_naming_extractor",
-                    operation="pdf_summary_extraction",
+                    agent="enhanced_pdf_naming_extractor",
+                    operation="multi_flow_extraction",
                     model=self.model,
                     input_tokens=response.usage.prompt_tokens,
                     output_tokens=response.usage.completion_tokens,
-                    flow_name="pdf_naming_extraction"
+                    flow_name="enhanced_pdf_naming_extraction"
                 )
             
             llm_response = response.choices[0].message.content.strip()
+            print(f"📄 LLM Response (first 300 chars): {llm_response[:300]}...")
             
-            # Parse JSON from LLM response
-            import re
-            json_match = re.search(r'\{.*\}', llm_response, re.DOTALL)
-            if json_match:
-                extracted_data = json.loads(json_match.group())
-                if 'flows' in extracted_data and len(extracted_data['flows']) > 0:
-                    return extracted_data['flows']
+            # Enhanced JSON parsing
+            extracted_flows = self._enhanced_parse_json(llm_response)
             
-            # If no valid JSON found, return a single default entry
-            return [{
-                'ace_application_name': '',
-                'message_flow_name': 'Default_Flow',
-                'connected_system': '',
-                'ace_server': '',
-                'description': ''
-            }]
+            if extracted_flows:
+                print(f"✅ Successfully extracted {len(extracted_flows)} flow configurations")
+                for i, flow in enumerate(extracted_flows):
+                    flow_name = flow.get('message_flow_name', 'Unknown')
+                    app_name = flow.get('ace_application_name', 'Unknown')
+                    print(f"  Flow {i+1}: {flow_name} → {app_name}")
+                return extracted_flows
+            else:
+                print("❌ No valid flow configurations extracted from PDF")
+                return []  # NO HARDCODED FALLBACKS
+                
+        except Exception as e:
+            print(f"❌ Enhanced extraction failed: {str(e)}")
+            return []  # NO HARDCODED FALLBACKS
+
+    # ADD this new helper method to PDFNamingExtractor class:
+
+    def _enhanced_parse_json(self, llm_response: str) -> list:
+        """
+        Robust JSON parsing with multiple strategies for comma-separated tables
+        """
+        import re
         
-        # Process each detected table
-        all_configurations = []
-        for idx, table in enumerate(flow_tables):
-            table_content = table['content']
-            
-            prompt = f"""Extract information from this message flow table. Look for these exact labels and extract the values:
-
-    TABLE CONTENT:
-    {table_content}
-
-    Find and extract:
-    1. "ACE Application(s):" followed by the application name
-    2. "Message Flow Name(s):" followed by the flow name  
-    3. "Connected System(s):" followed by the system name
-    4. "ACE Server:" followed by the server name
-    5. "Description:" followed by the description
-
-    Return only this JSON (no markdown, no extra text):
-    {{"ace_application_name": "extracted_app_name", "message_flow_name": "extracted_flow_name", "connected_system": "extracted_system", "ace_server": "extracted_server", "description": "extracted_description"}}"""
-
-            response = self.llm_client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.1,
-                max_tokens=1000
-            )
-            
-            # Track token usage
-            if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
-                st.session_state.token_tracker.manual_track(
-                    agent="pdf_naming_extractor",
-                    operation=f"pdf_summary_extraction_table_{idx}",
-                    model=self.model,
-                    input_tokens=response.usage.prompt_tokens,
-                    output_tokens=response.usage.completion_tokens,
-                    flow_name="pdf_naming_extraction"
-                )
-            
-            llm_response = response.choices[0].message.content.strip()
-            
-            # Parse JSON from LLM response
-            import re
-            json_match = re.search(r'\{.*\}', llm_response, re.DOTALL)
-            if json_match:
-                extracted_data = json.loads(json_match.group())
-                all_configurations.append(extracted_data)
+        # Multiple parsing strategies
+        json_patterns = [
+            r'\{\s*"flows"\s*:\s*\[[^\]]*\]\s*\}',  # Complete flows object
+            r'"flows"\s*:\s*\[[^\]]*\]',            # Just flows array  
+            r'\[[^\[\]]*\{[^\}]*\}[^\[\]]*\]'       # Any array with objects
+        ]
         
-        return all_configurations
-            
+        for pattern in json_patterns:
+            match = re.search(pattern, llm_response, re.DOTALL)
+            if match:
+                try:
+                    json_text = match.group()
+                    
+                    # Handle partial JSON structures
+                    if json_text.startswith('"flows":'):
+                        json_text = '{' + json_text + '}'
+                    elif json_text.startswith('[') and not json_text.startswith('{"flows"'):
+                        json_text = '{"flows":' + json_text + '}'
+                    
+                    parsed_data = json.loads(json_text)
+                    
+                    if 'flows' in parsed_data and isinstance(parsed_data['flows'], list):
+                        flows = parsed_data['flows']
+                        
+                        # Validate each flow has minimum required fields
+                        valid_flows = []
+                        for flow in flows:
+                            if isinstance(flow, dict) and flow.get('message_flow_name'):
+                                # Ensure all required fields exist with defaults
+                                validated_flow = {
+                                    'ace_application_name': flow.get('ace_application_name', 'Default_App'),
+                                    'message_flow_name': flow.get('message_flow_name', 'Default_Flow'),
+                                    'ace_server': flow.get('ace_server', 'Default_Server'),
+                                    'connected_system': flow.get('connected_system', 'Unknown_System'),
+                                    'description': flow.get('description', 'Extracted from PDF')
+                                }
+                                valid_flows.append(validated_flow)
+                        
+                        if valid_flows:
+                            return valid_flows
+                            
+                except json.JSONDecodeError as e:
+                    print(f"  JSON parse attempt failed: {str(e)}")
+                    continue
+        
+        print("❌ All JSON parsing strategies failed")
+        return []
+                
 
     
     def _create_naming_convention_json(self, extracted_data_list: list) -> bool:

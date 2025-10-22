@@ -1,18 +1,18 @@
 {
-  "pdf_source": "tmp0etlut5t.pdf",
-  "extraction_timestamp": "2025-10-13T20:32:51.157717",
+  "pdf_source": "tmpm696f1bd.pdf",
+  "extraction_timestamp": "2025-10-22T19:30:48.063985",
   "project_naming": {
-    "ace_application_name": "EPIS_Qguar_SAT_DMZ_App",
-    "message_flow_name": "Qguar_IN_1C_RECSAT",
-    "connected_system": "",
-    "ace_server": ""
+    "ace_application_name": "EPIS_SAP_OUT_Delta_SAT_App",
+    "message_flow_name": "SAP_DailyBalance_RECSAT",
+    "connected_system": "SAP",
+    "ace_server": "group-sap-sat-server"
   },
   "component_naming_rules": {
-    "msgflow_files": "Qguar_IN_1C_RECSAT.msgflow",
-    "project_name": "EPIS_Qguar_SAT_DMZ_App"
+    "msgflow_files": "SAP_DailyBalance_RECSAT.msgflow",
+    "project_name": "EPIS_SAP_OUT_Delta_SAT_App"
   },
   "business_context": {
-    "description": "",
+    "description": "The SAT flow picks the file and stores the filename and directory in MQRFH2 header.",
     "pdf_extracted": true
   }
 }
