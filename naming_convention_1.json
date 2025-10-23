@@ -1,6 +1,6 @@
 {
-  "pdf_source": "tmpm696f1bd.pdf",
-  "extraction_timestamp": "2025-10-22T19:30:48.037026",
+  "pdf_source": "tmp2tx5bjgk.pdf",
+  "extraction_timestamp": "2025-10-23T19:55:22.127138",
   "project_naming": {
     "ace_application_name": "EPIS_SAP_OUT_Delta_App",
     "message_flow_name": "SAP_DailyBalance_REC",
@@ -12,7 +12,7 @@
     "project_name": "EPIS_SAP_OUT_Delta_App"
   },
   "business_context": {
-    "description": "SAP sends the CSV flat file data to a FTP directory to be picked by ESB.",
+    "description": "SAP will have a daily scheduled balance report after midnight with summary by document type, client division and currency (for all Delta transactions SALE/CRET/ASAL/ACRD).",
     "pdf_extracted": true
   }
 }

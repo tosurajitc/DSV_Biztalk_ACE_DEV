@@ -1,6 +1,6 @@
 {
-  "pdf_source": "tmpm696f1bd.pdf",
-  "extraction_timestamp": "2025-10-22T19:30:48.063985",
+  "pdf_source": "tmp2tx5bjgk.pdf",
+  "extraction_timestamp": "2025-10-23T19:55:22.135082",
   "project_naming": {
     "ace_application_name": "EPIS_SAP_OUT_Delta_SAT_App",
     "message_flow_name": "SAP_DailyBalance_RECSAT",
@@ -12,7 +12,7 @@
     "project_name": "EPIS_SAP_OUT_Delta_SAT_App"
   },
   "business_context": {
-    "description": "The SAT flow picks the file and stores the filename and directory in MQRFH2 header.",
+    "description": "Not_Specified",
     "pdf_extracted": true
   }
 }

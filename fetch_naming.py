@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 import PyPDF2
 import streamlit as st
-from vector_knowledge.pdf_processor import PDFProcessor
+from vector_knowledge.pdf_processor import AdaptivePDFProcessor
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -22,7 +22,7 @@ class PDFNamingExtractor:
         self.llm_client = llm_client
         self.model = os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')  # ✅ From .env
         self.output_file = "naming_convention.json"
-        self.pdf_processor = PDFProcessor()
+        self.pdf_processor = AdaptivePDFProcessor()
 
 
 
@@ -61,14 +61,14 @@ class PDFNamingExtractor:
     
 
     def _extract_pdf_text(self) -> str:
-        """Extract text content from PDF file using PDFProcessor"""
+        """Extract text content from PDF file using AdaptivePDFProcessor"""
         try:
             if not self.pdf_file_path.exists():
                 print(f"PDF file not found: {self.pdf_file_path}")
                 return None
             
-            # Use PDFProcessor for extraction
-            self.pdf_processor = PDFProcessor()
+            # Use AdaptivePDFProcessor for extraction
+            self.pdf_processor = AdaptivePDFProcessor()
             text_content = self.pdf_processor.extract_text_from_pdf(str(self.pdf_file_path))
             
             if len(text_content.strip()) < 50:
@@ -105,6 +105,7 @@ class PDFNamingExtractor:
                 })
         
         return flow_tables
+
 
 
     

@@ -22,7 +22,7 @@ from cleanup_manager import CleanupManager
 from ace_module_creator import create_ace_project
 # Vector DB imports - MANDATORY, no fallback
 try:
-    from vector_knowledge.pdf_processor import PDFProcessor
+    from vector_knowledge.pdf_processor import AdaptivePDFProcessor
     from vector_knowledge.vector_store import ChromaVectorStore
     from vector_knowledge.semantic_search import SemanticSearchEngine
     from vector_knowledge.pipeline_integration import VectorOptimizedPipeline
@@ -148,8 +148,10 @@ def reset_vector_pipeline():
     st.session_state.confluence_pdf_processed = False
     st.success("  Vector pipeline reset")
 
+
+
 def setup_vector_knowledge_base(uploaded_pdf, agent_name="Agent 1"):
-    """Setup vector knowledge base from uploaded PDF"""
+    """Setup vector knowledge base from uploaded PDF with AdaptivePDFProcessor integration"""
     if not VECTOR_DB_AVAILABLE or not st.session_state.vector_enabled:
         return False
     
@@ -159,7 +161,7 @@ def setup_vector_knowledge_base(uploaded_pdf, agent_name="Agent 1"):
             # Simple pipeline creation if VectorOptimizedPipeline not available
             st.session_state.vector_pipeline = {
                 'vector_store': ChromaVectorStore(),
-                'pdf_processor': PDFProcessor(),
+                'pdf_processor': AdaptivePDFProcessor(),
                 'search_engine': None
             }
         else:
@@ -171,20 +173,48 @@ def setup_vector_knowledge_base(uploaded_pdf, agent_name="Agent 1"):
         with st.spinner(f"  Setting up Vector Knowledge Base for {agent_name}..."):
             if VECTOR_PIPELINE_AVAILABLE:
                 stats = st.session_state.vector_pipeline.setup_knowledge_base(uploaded_pdf)
+                
+                # NEW: Store adaptive processing results
+                if hasattr(st.session_state.vector_pipeline, 'pdf_processor'):
+                    processor = st.session_state.vector_pipeline.pdf_processor
+                    if hasattr(processor, 'processing_stats'):
+                        st.session_state.vector_pipeline.pdf_processor_stats = processor.processing_stats
+                    if hasattr(processor, 'document_structure'):
+                        st.session_state.vector_pipeline.document_structure = processor.document_structure
+                        
             else:
                 # Simple setup if no pipeline integration
-                pdf_processor = PDFProcessor()
-                text = pdf_processor.extract_text_from_uploaded_file(uploaded_pdf)
-                chunks = pdf_processor.intelligent_chunking(text)
+                pdf_processor = AdaptivePDFProcessor()
                 
+                # Process PDF with adaptive extraction
+                text = pdf_processor.extract_text_from_pdf(uploaded_pdf)
+                
+                # Get processed chunks from the adaptive processor
+                if hasattr(pdf_processor, '_last_chunks') and pdf_processor._last_chunks:
+                    chunks = pdf_processor._last_chunks
+                else:
+                    # Fallback: create basic chunks if adaptive processing didn't store them
+                    print("⚠️ Warning: Using fallback chunking - adaptive chunks not available")
+                    chunks = pdf_processor._create_adaptive_chunks({'text': text})
+                
+                # Create vector store with chunks
                 vector_store = ChromaVectorStore()
                 vector_store.create_knowledge_base(chunks)
+                
+                # Store processor results in session state for later use
+                st.session_state.vector_pipeline['pdf_processor_stats'] = pdf_processor.processing_stats
+                if hasattr(pdf_processor, 'document_structure'):
+                    st.session_state.vector_pipeline['document_structure'] = pdf_processor.document_structure
                 
                 stats = {
                     'chunks_created': len(chunks),
                     'total_chunks': len(chunks),
                     'embedding_model': 'all-MiniLM-L6-v2',
-                    'pdf_processed': True
+                    'pdf_processed': True,
+                    'adaptive_processing': True,
+                    'business_blocks_found': pdf_processor.processing_stats.get('business_blocks_found', 0),
+                    'patterns_discovered': pdf_processor.processing_stats.get('patterns_discovered', 0),
+                    'diagrams_processed': pdf_processor.processing_stats.get('diagrams_processed', 0)
                 }
             
             st.session_state.vector_stats = stats
@@ -194,7 +224,7 @@ def setup_vector_knowledge_base(uploaded_pdf, agent_name="Agent 1"):
             # NEW: Extract naming conventions from PDF
             temp_pdf_path = None
             with st.spinner("  Extracting naming conventions from PDF..."):
-                temp_pdf_path = None  # ✅ Initialize variable
+                temp_pdf_path = None  # Initialize variable
                 try:
                     # Save uploaded PDF to temporary file for fetch_naming.py
                     import tempfile
@@ -202,7 +232,7 @@ def setup_vector_knowledge_base(uploaded_pdf, agent_name="Agent 1"):
                         # Reset file pointer and read content
                         uploaded_pdf.seek(0)
                         temp_file.write(uploaded_pdf.read())
-                        temp_pdf_path = temp_file.name  # ✅ Now properly scoped
+                        temp_pdf_path = temp_file.name  # Now properly scoped
                         uploaded_pdf.seek(0)  # Reset for other uses
                     
                     # Initialize LLM client for PDF processing
@@ -220,20 +250,30 @@ def setup_vector_knowledge_base(uploaded_pdf, agent_name="Agent 1"):
                 except Exception as e:
                     st.warning(f"⚠️ PDF naming extraction error: {str(e)} - using default naming conventions")
                 finally:
-                    # Clean up temp file (os should already be imported at top of main.py)
-                    if temp_pdf_path and os.path.exists(temp_pdf_path):  # ✅ Check if file exists
+                    # Clean up temp file
+                    if temp_pdf_path and os.path.exists(temp_pdf_path):
                         try:
                             os.unlink(temp_pdf_path)
                         except:
                             pass  # Ignore cleanup errors
             
-            st.success(f"  Vector DB Ready! {stats['chunks_created']} chunks indexed")
+            # Enhanced success message with adaptive processing info
+            success_msg = f"  Vector DB Ready! {stats['chunks_created']} chunks indexed"
+            if stats.get('adaptive_processing'):
+                if stats.get('business_blocks_found', 0) > 0:
+                    success_msg += f" | {stats['business_blocks_found']} business blocks discovered"
+                if stats.get('patterns_discovered', 0) > 0:
+                    success_msg += f" | {stats['patterns_discovered']} patterns found"
+            
+            st.success(success_msg)
             return True
             
     except Exception as e:
         st.error(f"  Vector DB setup failed: {e}")
         st.session_state.vector_ready = False
         return False
+    
+
     
 def get_vector_status_display():
     """Get vector status for pipeline display"""
@@ -785,56 +825,72 @@ def render_program_1_ui():
             st.warning("Output directory not found. Please run Agent 1 first.")
 
 
-
-def debug_vector_db_state(agent_name="Unknown"):
-    """Debug Vector DB state across agents"""
-    print(f"\n🔍 VECTOR DB STATE DEBUG - {agent_name}")
-    print("="*50)
+def debug_vector_db_state(context=""):
+    """Debug function to check vector DB state"""
+    print(f"\n🔍 DEBUG: Vector DB State Analysis {context}")
+    print("=" * 50)
     
-    # Session State Check
-    print(f"📊 Session State:")
-    print(f"  vector_enabled: {st.session_state.get('vector_enabled', False)}")
-    print(f"  vector_ready: {st.session_state.get('vector_ready', False)}")
-    print(f"  vector_pipeline exists: {st.session_state.get('vector_pipeline') is not None}")
+    if not st.session_state.get('vector_pipeline'):
+        print("❌ No vector pipeline available")
+        return False
     
-    # Pipeline Details
-    if st.session_state.get('vector_pipeline'):
-        pipeline = st.session_state.vector_pipeline
-        print(f"  pipeline type: {type(pipeline)}")
-        print(f"  knowledge_ready: {getattr(pipeline, 'knowledge_ready', 'N/A')}")
-        print(f"  search_engine exists: {hasattr(pipeline, 'search_engine') and pipeline.search_engine is not None}")
+    pipeline = st.session_state.vector_pipeline
+    
+    try:
+        # PDF processor stats
+        if hasattr(pipeline, 'pdf_processor_stats'):
+            stats = getattr(pipeline, 'pdf_processor_stats', {})
+            print(f"  📊 PDF Processor Stats Available: True")
+            print(f"    - Sections: {stats.get('total_sections', 0)}")
+            print(f"    - Business blocks: {stats.get('business_blocks_found', 0)}")
+            print(f"    - Patterns: {stats.get('patterns_discovered', 0)}")
+            print(f"    - Diagrams: {stats.get('diagrams_processed', 0)}")
+        else:
+            print(f"  📊 PDF Processor Stats Available: False")
         
-        # Collection Check
-        if hasattr(pipeline, 'search_engine') and pipeline.search_engine:
-            print(f"  collection exists: {hasattr(pipeline.search_engine, 'collection') and pipeline.search_engine.collection is not None}")
-            
-            # Try to test collection
+        # Document structure
+        if hasattr(pipeline, 'document_structure'):
+            doc_structure = getattr(pipeline, 'document_structure', {})
+            print(f"  📋 Document Structure Available: True")
+            print(f"    - Document type: {doc_structure.get('document_type', 'Unknown')}")
+            print(f"    - Business indicators: {len(doc_structure.get('business_indicators', []))}")
+            print(f"    - Complexity score: {doc_structure.get('stats', {}).get('complexity_score', 'N/A')}")
+        else:
+            print(f"  📋 Document Structure Available: False")
+        
+        # Vector store status
+        if hasattr(pipeline, 'vector_store') and pipeline.vector_store:
+            print(f"  🗄️ Vector Store: Available")
             try:
-                if hasattr(pipeline.search_engine, 'collection') and pipeline.search_engine.collection:
-                    test_result = pipeline.search_engine.collection.count()
-                    print(f"  collection count: {test_result}")
-                else:
-                    print(f"  collection: None or missing")
+                stats = pipeline.vector_store.get_stats()
+                print(f"    - Total chunks: {stats.get('total_chunks', 0)}")
+                print(f"    - Embedding model: {stats.get('embedding_model', 'Unknown')}")
             except Exception as e:
-                print(f"  collection test failed: {e}")
-    
-    # ChromaDB Physical Check
-    print(f"📁 Physical ChromaDB Check:")
-    chroma_path = "chroma_db"
-    if os.path.exists(chroma_path):
-        folders = [f for f in os.listdir(chroma_path) if os.path.isdir(os.path.join(chroma_path, f))]
-        print(f"  ChromaDB folders: {len(folders)}")
-        if folders:
-            print(f"  Latest folder: {folders[-1] if folders else 'None'}")
-    else:
-        print(f"  ChromaDB folder: Does not exist")
-    
-    print("="*50)
-
+                print(f"    - Stats error: {e}")
+        else:
+            print(f"  🗄️ Vector Store: Not Available")
+        
+        # Search engine status
+        if hasattr(pipeline, 'search_engine') and pipeline.search_engine:
+            print(f"  🔍 Search Engine: Available")
+        else:
+            print(f"  🔍 Search Engine: Not Available")
+        
+        # Knowledge ready status
+        if hasattr(pipeline, 'knowledge_ready'):
+            print(f"  ✅ Knowledge Ready: {pipeline.knowledge_ready}")
+        else:
+            print(f"  ✅ Knowledge Ready: Unknown")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Debug failed: {str(e)}")
+        return False
 
 
 def verify_business_requirements_quality():
-    """Verify Vector DB contains quality business requirements - ADAPTIVE VERSION"""
+    """Verify Vector DB contains quality business requirements - ADAPTIVE SYNC VERSION"""
     print(f"\n🎯 BUSINESS REQUIREMENTS VERIFICATION")
     print("="*50)
     
@@ -845,22 +901,11 @@ def verify_business_requirements_quality():
     pipeline = st.session_state.vector_pipeline
     
     try:
-        print(f"🔍 Testing business requirement extraction...")
+        print(f"🔍 Testing adaptive business requirement extraction...")
         
-        # ADAPTIVE: Check for generic business requirement indicators
-        # These patterns work across ANY BizTalk/ACE migration project
-        generic_indicators = [
-            "database",      # Database operations
-            "lookup",        # Lookups
-            "enrichment",    # Data enrichment
-            "transformation",# Data transformation
-            "mapping",       # Field mapping
-            "routing",       # Message routing
-            "validation",    # Business validation
-            "flow",          # Message flow
-            "integration",   # Integration patterns
-            "message"        # Message processing
-        ]
+        # NEW: Get adaptive processing statistics from PDF processor
+        pdf_processor_stats = getattr(pipeline, 'pdf_processor_stats', {})
+        document_structure = getattr(pipeline, 'document_structure', {})
         
         # Get vector content using the same method as ESQL generator
         vector_content = pipeline.search_engine.get_agent_content("esql_generator")
@@ -871,59 +916,175 @@ def verify_business_requirements_quality():
             
         print(f"✅ Vector content retrieved: {len(vector_content)} characters")
         
-        # Count how many generic indicators are found
-        found_indicators = []
-        for indicator in generic_indicators:
-            if indicator.lower() in vector_content.lower():
-                found_indicators.append(indicator)
+        # ADAPTIVE APPROACH 1: Use discovered indicators (if available)
+        if document_structure and document_structure.get('business_indicators'):
+            discovered_indicators = document_structure['business_indicators']
+            print(f"🎯 Using discovered indicators from PDF analysis: {len(discovered_indicators)}")
+            print(f"📋 Discovered indicators: {discovered_indicators[:10]}...")  # Show first 10
+            
+            # Count discovered indicators in content
+            found_indicators = []
+            for indicator in discovered_indicators:
+                if indicator.lower() in vector_content.lower():
+                    found_indicators.append(indicator)
+            
+            # Adaptive threshold based on discovery count
+            min_indicators_needed = max(3, len(discovered_indicators) // 4)  # At least 25% of discovered
+            
+        else:
+            # FALLBACK APPROACH: Enhanced hardcoded indicators (your current approach)
+            print("⚠️ No discovered indicators available, using enhanced fallback")
+            enhanced_indicators = [
+                # Core technical indicators
+                "database", "lookup", "enrichment", "transformation", "mapping", 
+                "routing", "validation", "flow", "integration", "message",
+                
+                # Business requirement blocks
+                "technical description", "technical diagram", "event data", "event tracking",
+                "routing table", "message routing", "performance requirements", "sla",
+                "migration details", "component overview", "mq details", "queue configuration",
+                
+                # Performance and migration indicators
+                "throughput", "response time", "availability", "scalability",
+                "biztalk", "ace", "component mapping", "migration strategy"
+            ]
+            
+            found_indicators = []
+            for indicator in enhanced_indicators:
+                if indicator.lower() in vector_content.lower():
+                    found_indicators.append(indicator)
+            
+            min_indicators_needed = 6  # Static threshold for fallback
         
-        print(f"📊 Business indicators found: {len(found_indicators)}/{len(generic_indicators)}")
-        print(f"✅ Found: {found_indicators}")
+        print(f"📊 Business indicators found: {len(found_indicators)}")
+        print(f"✅ Found indicators: {found_indicators}")
         
-        # CRITICAL FIX: Check for substantial content rather than specific keywords
+        # ADAPTIVE CONTENT CHECKS
+        # Use document structure stats if available
+        doc_stats = document_structure.get('stats', {})
+        complexity_score = doc_stats.get('complexity_score', 0.5)
+        
+        # Adaptive thresholds based on document complexity
+        if complexity_score > 0.8:  # High complexity document
+            min_content_length = 4000
+            content_quality_multiplier = 1.2
+        elif complexity_score > 0.6:  # Medium complexity
+            min_content_length = 2500
+            content_quality_multiplier = 1.0
+        else:  # Simple document
+            min_content_length = 1500
+            content_quality_multiplier = 0.8
+        
         content_checks = {
-            'has_content': len(vector_content) > 3000,  # At least 5000 chars
-            'has_indicators': len(found_indicators) >= 4,  # At least 4 generic indicators
-            'has_chunks': True  # Vector DB has chunks
+            'has_substantial_content': len(vector_content) > min_content_length,
+            'has_sufficient_indicators': len(found_indicators) >= min_indicators_needed,
+            'has_chunks': True,
+            'document_complexity': complexity_score,
+            'content_quality_score': len(found_indicators) * content_quality_multiplier
         }
         
-        # Additional check: Look for stored procedure patterns (sp_ or proc_)
-        has_stored_procs = 'sp_' in vector_content or 'proc_' in vector_content
-        if has_stored_procs:
-            print(f"✅ Detected stored procedure references in content")
-            content_checks['has_stored_procs'] = True
+        # ENHANCED PATTERN DETECTION
+        pattern_checks = {
+            'stored_procedures': any(pattern in vector_content for pattern in ['sp_', 'proc_']),
+            'queue_patterns': any(pattern in vector_content.lower() for pattern in ['queue', 'topic', 'channel']),
+            'performance_specs': any(pattern in vector_content.lower() for pattern in ['tps', 'rps', 'latency', 'concurrent']),
+            'database_refs': any(pattern in vector_content.lower() for pattern in ['database', 'table', 'schema']),
+            'integration_patterns': any(pattern in vector_content.lower() for pattern in ['api', 'service', 'endpoint']),
+            'business_processes': any(pattern in vector_content.lower() for pattern in ['process', 'workflow', 'business rule'])
+        }
         
-        # Content quality assessment
-        print(f"\n📋 Content Quality Checks:")
-        print(f"  ✅ Substantial content: {content_checks['has_content']} ({len(vector_content)} chars)")
-        print(f"  ✅ Generic indicators: {content_checks['has_indicators']} ({len(found_indicators)} found)")
-        print(f"  ✅ Has vector chunks: {content_checks['has_chunks']}")
-        if has_stored_procs:
-            print(f"  ✅ Has stored procedures: True")
+        # Count detected patterns
+        detected_patterns = sum(1 for found in pattern_checks.values() if found)
+        content_checks['pattern_diversity'] = detected_patterns
+        
+        # Log detected patterns
+        for pattern_name, found in pattern_checks.items():
+            if found:
+                print(f"✅ Detected {pattern_name.replace('_', ' ')}")
+        
+        # COMPREHENSIVE QUALITY ASSESSMENT
+        print(f"\n📋 Adaptive Content Quality Assessment:")
+        print(f"  📝 Substantial content: {content_checks['has_substantial_content']} ({len(vector_content)} chars, need > {min_content_length})")
+        print(f"  🔧 Sufficient indicators: {content_checks['has_sufficient_indicators']} ({len(found_indicators)} found, need >= {min_indicators_needed})")
+        print(f"  📊 Document complexity: {content_checks['document_complexity']:.2f}")
+        print(f"  🎯 Content quality score: {content_checks['content_quality_score']:.1f}")
+        print(f"  🔍 Pattern diversity: {content_checks['pattern_diversity']}/6 patterns detected")
+        print(f"  📦 Vector chunks available: {content_checks['has_chunks']}")
+        
+        # ADVANCED PROCESSING STATISTICS (if available)
+        if pdf_processor_stats:
+            print(f"\n📈 PDF Processing Statistics:")
+            print(f"  📑 Sections discovered: {pdf_processor_stats.get('total_sections', 'N/A')}")
+            print(f"  🔧 Business blocks found: {pdf_processor_stats.get('business_blocks_found', 'N/A')}")
+            print(f"  📊 Patterns discovered: {pdf_processor_stats.get('patterns_discovered', 'N/A')}")
+            print(f"  🖼️ Diagrams processed: {pdf_processor_stats.get('diagrams_processed', 'N/A')}")
         
         # Content preview
         print(f"\n📄 Content preview (first 300 chars):")
         print(f"   {vector_content[:300]}...")
         
-        # ADAPTIVE SUCCESS CRITERIA:
-        # Pass if: (1) Has substantial content AND (2) At least 4 generic indicators
-        # This works for ANY project, not just specific hardcoded examples
-        quality_passed = content_checks['has_content'] and content_checks['has_indicators']
+        # INTELLIGENT SUCCESS CRITERIA
+        # Multiple pathways to success based on document characteristics
+        
+        # Pathway 1: High-quality adaptive assessment
+        adaptive_quality_passed = (
+            content_checks['has_substantial_content'] and
+            content_checks['has_sufficient_indicators'] and
+            content_checks['content_quality_score'] >= 6.0
+        )
+        
+        # Pathway 2: Pattern diversity assessment
+        pattern_quality_passed = (
+            content_checks['has_substantial_content'] and
+            content_checks['pattern_diversity'] >= 3 and  # At least 3 different pattern types
+            len(found_indicators) >= 4  # Minimum indicator threshold
+        )
+        
+        # Pathway 3: Document complexity assessment
+        complexity_quality_passed = (
+            content_checks['document_complexity'] >= 0.6 and
+            len(found_indicators) >= max(3, min_indicators_needed * 0.75)  # 75% of needed indicators
+        )
+        
+        # Overall assessment
+        quality_passed = adaptive_quality_passed or pattern_quality_passed or complexity_quality_passed
+        
+        print(f"\n🎯 INTELLIGENT QUALITY ASSESSMENT:")
+        print(f"   🛤️  Adaptive Quality Path: {'✅ PASS' if adaptive_quality_passed else '❌ FAIL'}")
+        print(f"   🔍 Pattern Diversity Path: {'✅ PASS' if pattern_quality_passed else '❌ FAIL'}")
+        print(f"   📊 Complexity Assessment Path: {'✅ PASS' if complexity_quality_passed else '❌ FAIL'}")
         
         if quality_passed:
             print(f"\n✅ BUSINESS REQUIREMENTS QUALITY CHECK PASSED")
-            print(f"   Vector DB has sufficient business requirement content")
+            if adaptive_quality_passed:
+                print(f"   🎯 Passed via adaptive quality assessment")
+            elif pattern_quality_passed:
+                print(f"   🔍 Passed via pattern diversity assessment")
+            else:
+                print(f"   📊 Passed via document complexity assessment")
+            print(f"   Vector DB contains sufficient business requirement content for ACE generation")
         else:
             print(f"\n⚠️ BUSINESS REQUIREMENTS QUALITY CHECK FAILED")
-            if not content_checks['has_content']:
-                print(f"   ❌ Insufficient content: {len(vector_content)} chars (need > 5000)")
-            if not content_checks['has_indicators']:
-                print(f"   ❌ Insufficient indicators: {len(found_indicators)} found (need >= 4)")
+            print(f"   📋 Improvement recommendations:")
+            
+            if not content_checks['has_substantial_content']:
+                print(f"   • Content volume: Upload more detailed documentation (need > {min_content_length} chars)")
+            
+            if not content_checks['has_sufficient_indicators']:
+                print(f"   • Business indicators: Include more technical details (need >= {min_indicators_needed} indicators)")
+            
+            if content_checks['pattern_diversity'] < 3:
+                print(f"   • Pattern diversity: Add varied content types (technical specs, business processes, integration details)")
+            
+            if content_checks['document_complexity'] < 0.6:
+                print(f"   • Document complexity: Use more comprehensive technical specification documents")
+            
+            print(f"   💡 Recommended content: Technical Description, Event Data, Routing Tables, Performance Requirements, Migration Details, MQ Details")
         
         return quality_passed
             
     except Exception as e:
-        print(f"❌ Business verification failed: {e}")
+        print(f"❌ Adaptive business verification failed: {e}")
         return False
 
 

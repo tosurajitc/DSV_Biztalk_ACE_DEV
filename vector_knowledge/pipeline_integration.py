@@ -1,5 +1,5 @@
 import streamlit as st
-from .pdf_processor import PDFProcessor
+from .pdf_processor import AdaptivePDFProcessor
 from .vector_store import ChromaVectorStore
 from .semantic_search import SemanticSearchEngine
 
@@ -12,7 +12,7 @@ class VectorOptimizedPipeline:
         self.vector_store = None
         self.search_engine = None
         self.knowledge_ready = False
-        self.pdf_processor = PDFProcessor()
+        self.pdf_processor = AdaptivePDFProcessor()
     
 
 
@@ -67,29 +67,32 @@ class VectorOptimizedPipeline:
             uploaded_file.seek(0)
             
             try:
-                # Process PDF using existing function
+                # Process PDF using AdaptivePDFProcessor - this runs the full adaptive pipeline
                 text = self.pdf_processor.extract_text_from_pdf(temp_file_path)
                 
                 if not text.strip():
                     raise Exception("Could not extract text from PDF")
                 
-                # FIXED (includes vector preparation)
-                chunks = self.pdf_processor.intelligent_chunking(text)
+                # UPDATED: Get chunks from the adaptive processing pipeline
+                # After extract_text_from_pdf runs, the adaptive chunks are created internally
+                # We need to extract them using the adaptive chunking method
+                raw_content = {'text': text, 'tables': [], 'diagrams': [], 'metadata': {}}
+                chunks = self.pdf_processor._create_adaptive_chunks(raw_content)
 
                 if not chunks:
                     raise Exception("No chunks created from PDF")
 
-                # NEW: Prepare chunks for vector store with diagram metadata
-                if hasattr(self.pdf_processor, '_prepare_chunks_for_vector_store'):
-                    print("📊 Preparing chunks with diagram data for vector store...")
-                    vector_ready_chunks = self.pdf_processor._prepare_chunks_for_vector_store(chunks)
+                # UPDATED: Check for the correct vector preparation method
+                if hasattr(self.pdf_processor, '_prepare_adaptive_vector_chunks'):
+                    print("📊 Preparing chunks with adaptive metadata for vector store...")
+                    vector_ready_chunks = self.pdf_processor._prepare_adaptive_vector_chunks(chunks)
                     
-                    # Count diagram-enhanced chunks
-                    diagram_chunks = sum(1 for chunk in vector_ready_chunks 
-                                    if chunk['metadata'].get('has_technical_diagrams', False))
-                    print(f"✅ Prepared {len(vector_ready_chunks)} chunks ({diagram_chunks} with diagrams)")
+                    # Count enhanced chunks
+                    enhanced_chunks = sum(1 for chunk in vector_ready_chunks 
+                                    if chunk.get('metadata', {}).get('section_type') == 'content')
+                    print(f"✅ Prepared {len(vector_ready_chunks)} chunks ({enhanced_chunks} with adaptive metadata)")
                 else:
-                    print("⚠️ Diagram preparation not available, using standard chunks")
+                    print("⚠️ Adaptive vector preparation not available, using standard chunks")
                     vector_ready_chunks = chunks
 
                 # Create vector store with enhanced chunks
@@ -103,9 +106,20 @@ class VectorOptimizedPipeline:
                 
                 stats = self.vector_store.get_stats()
                 stats['chunks_created'] = len(chunks)
+                stats['vector_ready_chunks'] = len(vector_ready_chunks)
                 stats['pdf_processed'] = True
+                stats['adaptive_processing'] = True
                 
-                print(f"✅ Vector knowledge base ready! {len(chunks)} chunks indexed")
+                # Add adaptive processing statistics if available
+                if hasattr(self.pdf_processor, 'processing_stats'):
+                    stats.update({
+                        'business_blocks_found': self.pdf_processor.processing_stats.get('business_blocks_found', 0),
+                        'patterns_discovered': self.pdf_processor.processing_stats.get('patterns_discovered', 0),
+                        'diagrams_processed': self.pdf_processor.processing_stats.get('diagrams_processed', 0),
+                        'tables_extracted': self.pdf_processor.processing_stats.get('tables_extracted', 0)
+                    })
+                
+                print(f"✅ Vector knowledge base ready! {len(vector_ready_chunks)} chunks indexed")
                 return stats
                 
             finally:
@@ -119,6 +133,8 @@ class VectorOptimizedPipeline:
             print(f"❌ Vector knowledge base setup failed: {e}")
             self.knowledge_ready = False
             raise e
+        
+
     
     def run_agent_with_vector_search(self, agent_name: str, agent_function):
         """
