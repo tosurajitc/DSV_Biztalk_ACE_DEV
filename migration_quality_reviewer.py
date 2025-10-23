@@ -24,10 +24,13 @@ class MigrationQualityReviewer:
         """
         self.source_dir = Path(source_dir)
         self.root_dir = Path.cwd()  # Project root directory
+
+
+
         
     def process_all_projects(self) -> List[str]:
         """
-        Process all projects in the source directory
+        Process all projects in the source directory with duplicate project name detection
         
         Returns:
             List of created project folder names
@@ -45,22 +48,110 @@ class MigrationQualityReviewer:
         
         print(f"🔍 Found {len(project_folders)} projects to migrate")
         
+        # NEW: Detect duplicate project names and assign versions
+        project_name_mapping = self._detect_duplicate_app_names(project_folders)
+        
         for project_folder in project_folders:
             try:
-                project_name = self._migrate_project(project_folder)
+                project_name = self._migrate_project(project_folder, project_name_mapping)
                 created_projects.append(project_name)
                 print(f"✅ Migrated: {project_name}")
             except Exception as e:
                 print(f"❌ Failed to migrate {project_folder.name}: {e}")
         
         return created_projects
-    
-    def _migrate_project(self, source_project_dir: Path) -> str:
+
+
+
+    def _detect_duplicate_app_names(self, project_folders: List[Path]) -> Dict[str, Dict]:
         """
-        Migrate a single project to production-ready structure
+        Detect duplicate project names and assign version numbers
+        
+        Args:
+            project_folders: List of project folder paths
+            
+        Returns:
+            Dict mapping folder names to versioning info
+        """
+        project_name_counts = {}
+        project_name_mapping = {}
+        
+        # First pass: Count occurrences of each project_name
+        for project_folder in project_folders:
+            naming_path = project_folder / "naming_convention.json"
+            if not naming_path.exists():
+                continue
+                
+            try:
+                with open(naming_path, 'r') as f:
+                    naming_data = json.load(f)
+                
+                # Extract project_name from component_naming_rules
+                component_rules = naming_data.get("component_naming_rules", {})
+                project_name = component_rules.get("project_name", "")
+                
+                if project_name:
+                    project_name_counts[project_name] = project_name_counts.get(project_name, 0) + 1
+                    
+            except Exception as e:
+                print(f"⚠️ Warning: Could not read {naming_path}: {e}")
+        
+        # Second pass: Assign version numbers for duplicates
+        version_counters = {}
+        
+        for project_folder in project_folders:
+            naming_path = project_folder / "naming_convention.json"
+            if not naming_path.exists():
+                continue
+                
+            try:
+                with open(naming_path, 'r') as f:
+                    naming_data = json.load(f)
+                
+                component_rules = naming_data.get("component_naming_rules", {})
+                project_name = component_rules.get("project_name", "")
+                msgflow_files = component_rules.get("msgflow_files", "")
+                message_flow_name = msgflow_files.replace(".msgflow", "") if msgflow_files else ""
+                
+                if project_name:
+                    # If this project name appears multiple times, add version suffix
+                    if project_name_counts[project_name] > 1:
+                        version_counters[project_name] = version_counters.get(project_name, 0) + 1
+                        versioned_name = f"{project_name}_V{version_counters[project_name]}"
+                        
+                        project_name_mapping[project_folder.name] = {
+                            'original_project_name': project_name,
+                            'versioned_project_name': versioned_name,
+                            'version_number': version_counters[project_name],
+                            'message_flow_name': message_flow_name,
+                            'has_duplicates': True
+                        }
+                        
+                        print(f"📋 Duplicate detected: {project_name} → {versioned_name} (Flow: {message_flow_name})")
+                    else:
+                        # Single occurrence, no versioning needed
+                        project_name_mapping[project_folder.name] = {
+                            'original_project_name': project_name,
+                            'versioned_project_name': project_name,
+                            'version_number': 1,
+                            'message_flow_name': message_flow_name,
+                            'has_duplicates': False
+                        }
+                        
+            except Exception as e:
+                print(f"⚠️ Warning: Could not process {naming_path}: {e}")
+        
+        return project_name_mapping 
+
+
+
+    def _migrate_project(self, source_project_dir: Path, app_name_mapping: Dict[str, Dict] = None) -> str:
+        """
+        Migrate a single project to production-ready structure with versioning support
         
         Args:
             source_project_dir: Source project directory
+            app_name_mapping: Mapping of folder names to versioning info (optional for backward compatibility)
             
         Returns:
             Final project name
@@ -73,14 +164,28 @@ class MigrationQualityReviewer:
         with open(naming_path, 'r') as f:
             naming_data = json.load(f)
         
-        # Extract key parameters
-        project_name, msgflow_name = self._extract_naming_params(naming_data)
+        # Get versioning info for this project
+        folder_name = source_project_dir.name
+        versioning_info = app_name_mapping.get(folder_name, {}) if app_name_mapping else {}
+        
+        # Use versioned project name if available, otherwise extract from naming data
+        if versioning_info and 'versioned_project_name' in versioning_info:
+            project_name = versioning_info['versioned_project_name']
+            msgflow_name = versioning_info['message_flow_name']
+            
+            if versioning_info.get('has_duplicates', False):
+                print(f"📁 Using versioned name: {project_name} (Flow: {msgflow_name})")
+            else:
+                print(f"📁 Using project name: {project_name} (Flow: {msgflow_name})")
+        else:
+            # Fallback to original extraction method
+            project_name, msgflow_name = self._extract_naming_params(naming_data)
         
         # Create final project directory
         final_project_dir = self.root_dir / project_name
         
         if final_project_dir.exists():
-            print(f"⚠️  Removing existing project: {project_name}")
+            print(f"⚠️ Removing existing project: {project_name}")
             shutil.rmtree(final_project_dir)
         
         final_project_dir.mkdir(parents=True)
@@ -91,6 +196,9 @@ class MigrationQualityReviewer:
         self._update_project_file(final_project_dir, project_name)
         
         return project_name
+
+
+
     
     def _extract_naming_params(self, naming_data: Dict) -> Tuple[str, str]:
         """Extract project_name and msgflow_name from naming convention"""
