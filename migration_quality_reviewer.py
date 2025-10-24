@@ -41,7 +41,10 @@ class MigrationQualityReviewer:
         created_projects = []
         
         # Find all project folders
-        project_folders = [d for d in self.source_dir.iterdir() if d.is_dir()]
+        project_folders = []
+        for root, dirs, files in os.walk(self.source_dir):
+            if "naming_convention.json" in files:
+                project_folders.append(Path(root))
         
         if not project_folders:
             raise ValueError(f"No project folders found in {self.source_dir}")

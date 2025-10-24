@@ -84,9 +84,21 @@
         <translation xmi:type="utility:ConstantString" string="MQInput"/>
       </nodes>
 
-      
+      <!-- 2. BEFORE ENRICHMENT SUBFLOW - Initial enrichment processing (BEFORE transformation) -->
+      <nodes xmi:type="epis_enrichment_lib_EPIS_MessageEnrichment.subflow:FCMComposite_1" xmi:id="FCMComposite_1_4" 
+             location="30,299" 
+             inputDirectory="{APP_NAME}\{FLOW_NAME}\enrichment" 
+             filenamePattern="BeforeEnrichmentConf.json">
+        <translation xmi:type="utility:ConstantString" string="BeforeEnrichment"/>
+      </nodes>
 
-      
+      <!-- 3. XSL TRANSFORM NODE - CDM to Universal Event transformation -->
+      <nodes xmi:type="ComIbmXslMqsi.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_5" 
+             location="596,45" 
+             stylesheetName="{FLOW_NAME}.xsl" 
+             messageDomainProperty="XMLNSC">
+        <translation xmi:type="utility:ConstantString" string="XSLTransform"/>
+      </nodes>
 
       <!-- 4. MQ OUTPUT SUBFLOW - Message routing and output handling -->
       <nodes xmi:type="epis_common_flows_lib_MQOutput.subflow:FCMComposite_1" xmi:id="FCMComposite_1_14" 
@@ -190,24 +202,95 @@
 
       <!-- PRIMARY FLOW PATH -->
       
-      
+      <!-- Connection 1: MQInput → InputEventMessage -->
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_1" 
+                  targetNode="FCMComposite_1_2" sourceNode="FCMComposite_1_7" 
+                  sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.in"/>
 
-      
+      <!-- Connection 2: InputEventMessage → MQInput (loop back) -->
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_2" 
+                  targetNode="FCMComposite_1_7" sourceNode="FCMComposite_1_2" 
+                  sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.Input"/>
 
-      
+      <!-- Connection 3: MQInput → BeforeEnrichment -->
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_3" 
+                  targetNode="FCMComposite_1_4" sourceNode="FCMComposite_1_7" 
+                  sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.Input"/>
 
-    
-        <!-- New Connection: MQInput → Compute (After template optimization) -->
-        <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_99" 
-                    targetNode="FCMComposite_1_1" sourceNode="FCMComposite_1_7" 
-                    sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.in"/>
-    
-    
-        <!-- New Connection: Compute → MQOutput (After template optimization) -->
-        <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_97" 
-                    targetNode="FCMComposite_1_14" sourceNode="FCMComposite_1_1" 
-                    sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.Input"/>
-    
+      <!-- Connection 4: BeforeEnrichment → Compute -->
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_4" 
+                  targetNode="FCMComposite_1_1" sourceNode="FCMComposite_1_4" 
+                  sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.in"/>
+
+      <!-- Connection 5: Compute → XSLTransform -->
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_5" 
+                  targetNode="FCMComposite_1_5" sourceNode="FCMComposite_1_1" 
+                  sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+
+      <!-- Connection 6: XSLTransform → AfterEnrichment (COMPUTE node) -->
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_6" 
+                  targetNode="FCMComposite_1_12" sourceNode="FCMComposite_1_5" 
+                  sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+
+      <!-- Connection 7: AfterEnrichment → MQOutput -->
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_7" 
+                  targetNode="FCMComposite_1_14" sourceNode="FCMComposite_1_12" 
+                  sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.Input"/>
+
+      <!-- Connection 8: MQOutput → GZipCompression -->
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_8" 
+                  targetNode="FCMComposite_1_6" sourceNode="FCMComposite_1_14" 
+                  sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.Input"/>
+
+      <!-- Connection 9: GZipCompression → SOAPRequest (DIRECT - no SOAPPreparation) -->
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_9" 
+                  targetNode="FCMComposite_1_10" sourceNode="FCMComposite_1_6" 
+                  sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.in"/>
+
+      <!-- Connection 10: SOAPRequest → AfterEventMessage -->
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_10" 
+                  targetNode="FCMComposite_1_15" sourceNode="FCMComposite_1_10" 
+                  sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+
+      <!-- EVENT PROCESSING CONNECTIONS -->
+      
+      <!-- Connection 11: MQOutput → OutputEventMessage -->
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_11" 
+                  targetNode="FCMComposite_1_13" sourceNode="FCMComposite_1_14" 
+                  sourceTerminalName="OutTerminal.Output1" targetTerminalName="InTerminal.in"/>
+
+      <!-- Connection 12: OutputEventMessage → MQOutput (loop back) -->
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_12" 
+                  targetNode="FCMComposite_1_14" sourceNode="FCMComposite_1_13" 
+                  sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.Input1"/>
+
+      <!-- Connection 13: Compute → MQOutput (alternate path for non-transformation routing) -->
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_13" 
+                  targetNode="FCMComposite_1_14" sourceNode="FCMComposite_1_1" 
+                  sourceTerminalName="OutTerminal.out1" targetTerminalName="InTerminal.Input1"/>
+
+      <!-- ERROR HANDLING CONNECTIONS -->
+      
+      <!-- Connection 14: SOAPRequest failure → FailureHandler -->
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_14" 
+                  targetNode="FCMComposite_1_11" sourceNode="FCMComposite_1_10" 
+                  sourceTerminalName="OutTerminal.fault" targetTerminalName="InTerminal.in"/>
+
+      <!-- Connection 15: Compute failure → FailureHandler -->
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_15" 
+                  targetNode="FCMComposite_1_11" sourceNode="FCMComposite_1_1" 
+                  sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
+
+      <!-- Connection 16: XSLTransform failure → FailureHandler -->
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_16" 
+                  targetNode="FCMComposite_1_11" sourceNode="FCMComposite_1_5" 
+                  sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
+
+      <!-- Connection 17: AfterEnrichment failure → FailureHandler -->
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_17" 
+                  targetNode="FCMComposite_1_11" sourceNode="FCMComposite_1_12" 
+                  sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
+
     </composition>
 
     <!-- ================================================== -->
