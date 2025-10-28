@@ -33,7 +33,6 @@ class ProjectGenerator:
 
 
         
-    
     def generate_project_file(self, 
                             vector_content: str,
                             template_path: str,
@@ -64,130 +63,130 @@ class ProjectGenerator:
             else:
                 # Create basic IBM ACE project template
                 template_content = '''<?xml version="1.0" encoding="UTF-8"?>
-<projectDescription>
-	<name>{project_name}</name>
-	<comment></comment>
-	<projects>
-		<project>EPIS_CommonUtils_Lib</project>
-		<project>EPIS_Consumer_Lib_v2</project>
-		<project>EPIS_BlobStorage_Lib</project>
-		<project>EPIS_MessageEnrichment_StaticLib</project>
-		<project>EPIS_CommonFlows_Lib</project>
-        <project>EPIS_CargoWiseOne_eAdapter_Lib</project>
-        <project>EPIS_CargoWiseOne_Schemas_Lib</project>
-	</projects>
-	<buildSpec>
-		<buildCommand>
-			<name>com.ibm.etools.mft.applib.applibbuilder</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-		<buildCommand>
-			<name>com.ibm.etools.mft.applib.applibresourcevalidator</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-		<buildCommand>
-			<name>com.ibm.etools.mft.connector.policy.ui.PolicyBuilder</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-		<buildCommand>
-			<name>com.ibm.etools.mft.applib.mbprojectbuilder</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-		<buildCommand>
-			<name>com.ibm.etools.msg.validation.dfdl.mlibdfdlbuilder</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-		<buildCommand>
-			<name>com.ibm.etools.mft.flow.adapters.adapterbuilder</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-		<buildCommand>
-			<name>com.ibm.etools.mft.flow.sca.scabuilder</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-		<buildCommand>
-			<name>com.ibm.etools.msg.validation.dfdl.mbprojectresourcesbuilder</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-		<buildCommand>
-			<name>com.ibm.etools.mft.esql.lang.esqllangbuilder</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-		<buildCommand>
-			<name>com.ibm.etools.mft.map.builder.mslmappingbuilder</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-		<buildCommand>
-			<name>com.ibm.etools.mft.flow.msgflowxsltbuilder</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-		<buildCommand>
-			<name>com.ibm.etools.mft.flow.msgflowbuilder</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-		<buildCommand>
-			<name>com.ibm.etools.mft.decision.service.ui.decisionservicerulebuilder</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-		<buildCommand>
-			<name>com.ibm.etools.mft.pattern.capture.PatternBuilder</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-		<buildCommand>
-			<name>com.ibm.etools.mft.json.builder.JSONBuilder</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-		<buildCommand>
-			<name>com.ibm.etools.mft.restapi.ui.restApiDefinitionsBuilder</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-		<buildCommand>
-			<name>com.ibm.etools.mft.policy.ui.policybuilder</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-		<buildCommand>
-			<name>com.ibm.etools.mft.msg.assembly.messageAssemblyBuilder</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-		<buildCommand>
-			<name>com.ibm.etools.msg.validation.dfdl.dfdlqnamevalidator</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-		<buildCommand>
-			<name>com.ibm.etools.mft.bar.ext.barbuilder</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-		<buildCommand>
-			<name>com.ibm.etools.mft.unittest.ui.TestCaseBuilder</name>
-			<arguments>
-			</arguments>
-		</buildCommand>
-	</buildSpec>
-	<natures>
-		<nature>com.ibm.etools.msgbroker.tooling.applicationNature</nature>
-		<nature>com.ibm.etools.msgbroker.tooling.messageBrokerProjectNature</nature>
-	</natures>
-</projectDescription>'''
+    <projectDescription>
+        <name>{project_name}</name>
+        <comment></comment>
+        <projects>
+            <project>EPIS_CommonUtils_Lib</project>
+            <project>EPIS_Consumer_Lib_v2</project>
+            <project>EPIS_BlobStorage_Lib</project>
+            <project>EPIS_MessageEnrichment_StaticLib</project>
+            <project>EPIS_CommonFlows_Lib</project>
+            <project>EPIS_CargoWiseOne_eAdapter_Lib</project>
+            <project>EPIS_CargoWiseOne_Schemas_Lib</project>
+        </projects>
+        <buildSpec>
+            <buildCommand>
+                <name>com.ibm.etools.mft.applib.applibbuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.applib.applibresourcevalidator</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.connector.policy.ui.PolicyBuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.applib.mbprojectbuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.msg.validation.dfdl.mlibdfdlbuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.flow.adapters.adapterbuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.flow.sca.scabuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.msg.validation.dfdl.mbprojectresourcesbuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.esql.lang.esqllangbuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.map.builder.mslmappingbuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.flow.msgflowxsltbuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.flow.msgflowbuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.decision.service.ui.decisionservicerulebuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.pattern.capture.PatternBuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.json.builder.JSONBuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.restapi.ui.restApiDefinitionsBuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.policy.ui.policybuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.msg.assembly.messageAssemblyBuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.msg.validation.dfdl.dfdlqnamevalidator</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.bar.ext.barbuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+            <buildCommand>
+                <name>com.ibm.etools.mft.unittest.ui.TestCaseBuilder</name>
+                <arguments>
+                </arguments>
+            </buildCommand>
+        </buildSpec>
+        <natures>
+            <nature>com.ibm.etools.msgbroker.tooling.applicationNature</nature>
+            <nature>com.ibm.etools.msgbroker.tooling.messageBrokerProjectNature</nature>
+        </natures>
+    </projectDescription>'''
                 print("  ⚠️ Template not found - using default IBM ACE template")
             
             # ✅ STEP 2: Read JSON file (basic JSON reading only)
@@ -213,15 +212,17 @@ class ProjectGenerator:
             # ✅ STEP 4: Generate project content (simple string replacement only)
             print("📄 Step 4: Generating project content...")
             
-            # Simple template replacement
+            # Simple template replacement - This handles {project_name} placeholder correctly ✅
             project_content = template_content.replace('{project_name}', project_name)
             project_content = project_content.replace('${project_name}', project_name)
             project_content = project_content.replace('PROJECT_NAME', project_name)
             
-            # Update name tag if it exists
-            if '<name>' in project_content and '</name>' in project_content:
-                import re
-                project_content = re.sub(r'<name>.*?</name>', f'<name>{project_name}</name>', project_content)
+            # ❌ DELETED PROBLEMATIC REGEX BLOCK - No longer needed!
+            # The above replacements already handle the <name>{project_name}</name> correctly
+            # Removed lines that were:
+            # if '<name>' in project_content and '</name>' in project_content:
+            #     import re
+            #     project_content = re.sub(r'<name>.*?</name>', f'<name>{project_name}</name>', project_content)
             
             print(f"  ✅ Project content generated: {len(project_content)} characters")
             

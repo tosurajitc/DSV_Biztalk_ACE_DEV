@@ -1,18 +1,19 @@
 {
-  "pdf_source": "tmpbfrp9ns_.pdf",
-  "extraction_timestamp": "2025-10-24T18:29:22.481039",
+  "pdf_source": "tmps8al2tln.pdf",
+  "extraction_timestamp": "2025-10-29T00:18:45.919987",
   "project_naming": {
-    "ace_application_name": "EPIS_CO2Emissions_ShipmentStatus_App",
-    "message_flow_name": "CO2Emissions_ShipmentStatus_Dinas_SND",
-    "connected_system": "Dinas",
-    "ace_server": "group-heightavailability-server"
+    "ace_application_name": "EPIS_SuccessFactors_IGA_App",
+    "message_flow_name": "SuccessFactors_CSV_IGA_P2P",
+    "connected_system": "SuccessFactors",
+    "ace_server": "group-payroll-server",
+    "input_type": "MQ"
   },
   "component_naming_rules": {
-    "msgflow_files": "CO2Emissions_ShipmentStatus_Dinas_SND.msgflow",
-    "project_name": "EPIS_CO2Emissions_ShipmentStatus_App"
+    "msgflow_files": "SuccessFactors_CSV_IGA_P2P.msgflow",
+    "project_name": "EPIS_SuccessFactors_IGA_App"
   },
   "business_context": {
-    "description": "CDM CO2Emissions message will be received and will be mapped to CDM ShipmentStatus(loopback). This CDM ShipmentStatus is sent to Dinas folder.",
+    "description": "Delivers a CSV formatted file into the target FTP File repository",
     "pdf_extracted": true
   }
 }

@@ -118,6 +118,35 @@ class AdaptivePDFProcessor:
         except Exception:
             return None
 
+
+
+    def _extract_methods_from_content(self, content: str) -> List[Dict]:
+        """Extract SOAP/WS methods from business requirements"""
+        methods = []
+        
+        # Pattern 1: Method names ending with WS/Service
+        method_patterns = [
+            r'\b([a-zA-Z]+(?:WS|Service|Method|Operation))\b',
+            r'(\w+\.(?:Snd|Rec)\.WCF)',
+            r'(subscription|confirm|cancel|submit)\w*'
+        ]
+        
+        for pattern in method_patterns:
+            matches = re.findall(pattern, content, re.IGNORECASE)
+            for match in matches:
+                methods.append({
+                    'name': match,
+                    'type': 'soap_operation',
+                    'source': 'pdf_extraction'
+                })
+        
+        # Pattern 2: Look for "5 methods" or "multiple operations"
+        if re.search(r'(\d+)\s+methods?\s+should\s+be\s+trigger', content):
+            print(f"✓ Multi-method pattern detected")
+        
+        return list({m['name']: m for m in methods}.values())  # Deduplicate
+
+
     # ================================================================================================
     # MAIN PROCESSING PIPELINE - 100% ADAPTIVE
     # ================================================================================================

@@ -111,45 +111,49 @@ class PDFNamingExtractor:
     
 
     def _llm_extract_summary_table(self, pdf_text: str) -> list:
-        """
-        ENHANCED: Extract ALL message flows from comma-separated table format
-        Handles multiple flows per table - designed for 1000+ flows scalability
-        
-        Returns:
-            List of extracted flow configurations (empty list if none found - NO fallbacks)
-        """
-        print("🔍 Enhanced multi-flow extraction starting...")
-        
-        # Enhanced prompt specifically for comma-separated table format like yours
+        # Update the prompt to extract input type
         prompt = f"""You are a specialized PDF table parser for IBM ACE message flow configurations.
 
-    DOCUMENT CONTENT:
-    {pdf_text[:10000]}
+        DOCUMENT CONTENT:
+        {pdf_text[:10000]}
 
-    TASK: Extract ALL message flow configurations from tables with comma-separated values.
+        TASK: Extract ALL message flow configurations from tables with comma-separated values.
 
-    YOUR TABLE FORMAT EXAMPLE:
-    "ACE Message Flow Name: SAP_DailyBalance_REC, SAP_DailyBalance_RECSAT" 
-    "ACE Application Name: EPIS_SAP_OUT_Delta_App, EPIS_SAP_OUT_Delta_SAT_App"
-    "ACE Server Name: group-sap-server, group-sap-sat-server"
+        YOUR TABLE FORMAT EXAMPLE:
+        "ACE Message Flow Name: SAP_DailyBalance_REC, SAP_DailyBalance_RECSAT" 
+        "ACE Application Name: EPIS_SAP_OUT_Delta_App, EPIS_SAP_OUT_Delta_SAT_App"
+        "ACE Server Name: group-sap-server, group-sap-sat-server"
 
-    PARSING RULES:
-    1. COMMA-SEPARATED VALUES: Split by commas and match by position
-    - 1st flow name → 1st app name → 1st server name  
-    - 2nd flow name → 2nd app name → 2nd server name
-    2. EXTRACT EVERY FLOW: Don't stop at first one
-    3. HANDLE MISMATCHED COUNTS: Use available data, mark missing as "Not_Specified"
-    4. FIND ANY TABLE: Look for flow/application/server information anywhere
+        PARSING RULES:
+        1. COMMA-SEPARATED VALUES: Split by commas and match by position
+        - 1st flow name → 1st app name → 1st server name  
+        - 2nd flow name → 2nd app name → 2nd server name
+        2. EXTRACT EVERY FLOW: Don't stop at first one
+        3. HANDLE MISMATCHED COUNTS: Use available data, mark missing as "Not_Specified"
+        4. FIND ANY TABLE: Look for flow/application/server information anywhere
 
-    CRITICAL: This must work for 1000+ flows - extract ALL flows found
+        ADDITIONAL ANALYSIS - CRITICAL:
+        Determine input type for each flow (File, MQ, or HTTP) based on actual flow specifications in the document:
+        - Look for explicit input configuration descriptions mentioning "Input Type: File" or "Source: File" or "File Input"
+        - Look for explicit input configuration descriptions mentioning "Input Type: MQ" or "Source: MQ" or "Queue Input" 
+        - Look for explicit input configuration descriptions mentioning "Input Type: HTTP" or "Source: HTTP" or "REST API"
+        - If RECSAT or SNDSAT appears in the flow name AND the document discusses file handling, use File input
+        - If the document mentions reading from queues for a specific flow, use MQ input
+        - If the document mentions REST API endpoints for a specific flow, use HTTP input
+        - Use flow input type explicitly mentioned in specifications, regardless of flow naming conventions
+        - Default to MQ only when there's no other information available
 
-    OUTPUT FORMAT (JSON only, no markdown):
-    {{"flows": [
-    {{"ace_application_name": "EPIS_SAP_OUT_Delta_App", "message_flow_name": "SAP_DailyBalance_REC", "ace_server": "group-sap-server", "connected_system": "SAP", "description": "Flow description if available"}},
-    {{"ace_application_name": "EPIS_SAP_OUT_Delta_SAT_App", "message_flow_name": "SAP_DailyBalance_RECSAT", "ace_server": "group-sap-sat-server", "connected_system": "SAP", "description": "Flow description if available"}}
-    ]}}
+        DO NOT just rely on the flow name - analyze the full context about each flow's actual input mechanism.
 
-    If no flows found: {{"flows": []}}"""
+        CRITICAL: This must work for 1000+ flows - extract ALL flows found
+
+        OUTPUT FORMAT (JSON only, no markdown):
+        {{"flows": [
+        {{"ace_application_name": "EPIS_SAP_OUT_Delta_App", "message_flow_name": "SAP_DailyBalance_REC", "ace_server": "group-sap-server", "connected_system": "SAP", "input_type": "MQ", "description": "Flow description if available"}},
+        {{"ace_application_name": "EPIS_SAP_OUT_Delta_SAT_App", "message_flow_name": "SAP_DailyBalance_RECSAT", "ace_server": "group-sap-sat-server", "connected_system": "SAP", "input_type": "File", "description": "Flow description if available"}}
+        ]}}
+
+        If no flows found: {{"flows": []}}"""
 
         try:
             response = self.llm_client.chat.completions.create(
@@ -233,6 +237,7 @@ class PDFNamingExtractor:
                                     'message_flow_name': flow.get('message_flow_name', 'Default_Flow'),
                                     'ace_server': flow.get('ace_server', 'Default_Server'),
                                     'connected_system': flow.get('connected_system', 'Unknown_System'),
+                                    'input_type': flow.get('input_type', 'MQ'),  # Default to MQ if not specified
                                     'description': flow.get('description', 'Extracted from PDF')
                                 }
                                 valid_flows.append(validated_flow)
@@ -272,7 +277,8 @@ class PDFNamingExtractor:
                         "ace_application_name": extracted_data.get("ace_application_name", ""),
                         "message_flow_name": extracted_data.get("message_flow_name", ""),
                         "connected_system": extracted_data.get("connected_system", ""),
-                        "ace_server": extracted_data.get("ace_server", "")
+                        "ace_server": extracted_data.get("ace_server", ""),
+                        "input_type": extracted_data.get("input_type", "MQ")  # Added input_type with MQ default
                     },
                     "component_naming_rules": {
                         "msgflow_files": f"{extracted_data.get('message_flow_name', '')}.msgflow",

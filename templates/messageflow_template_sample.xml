@@ -18,8 +18,8 @@
     xmlns:epis_compression_lib_GZipCompressAndB64EncodeElement.subflow="epis/compression/lib/GZipCompressAndB64EncodeElement.subflow" 
     xmlns:epis_enrichment_lib_EPIS_MessageEnrichment.subflow="epis/enrichment/lib/EPIS_MessageEnrichment.subflow" 
     xmlns:utility="http://www.ibm.com/wbi/2005/eflow_utility" 
-    nsURI="SuccessFactors_CSV_IGA_P2P.msgflow" 
-    nsPrefix="SuccessFactors_CSV_IGA_P2P.msgflow">
+    nsURI="{FLOW_NAME}.msgflow" 
+    nsPrefix="{FLOW_NAME}.msgflow">
 
   <eClassifiers xmi:type="eflow:FCMComposite" name="FCMComposite_1" nodeLayoutStyle="RECTANGLE">
     <eSuperTypes href="http://www.ibm.com/wbi/2005/eflow#//FCMBlock"/>
@@ -29,7 +29,7 @@
     <!-- ================================================== -->
     
     <!-- HTTP INPUT PROPERTIES -->
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.HTTP_URL_SPECIFIER" name="HTTP_URL_SPECIFIER" defaultValueLiteral="/api/service">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.HTTP_URL_SPECIFIER" name="HTTP_URL_SPECIFIER" defaultValueLiteral="{HTTP_URL_SPECIFIER}">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -38,7 +38,7 @@
     </eStructuralFeatures>
     
     <!-- MQ INPUT PROPERTIES -->
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.INPUT_QUEUE" name="INPUT_QUEUE" lowerBound="1" defaultValueLiteral="INPUT.QUEUE">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.INPUT_QUEUE" name="INPUT_QUEUE" lowerBound="1" defaultValueLiteral="{INPUT_QUEUE_NAME}">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -61,7 +61,7 @@
     </eStructuralFeatures>
     
     <!-- XSL TRANSFORM PROPERTIES -->
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.stylesheetName" name="stylesheetName" defaultValueLiteral="SuccessFactors_CSV_IGA_P2P.xsl">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.stylesheetName" name="stylesheetName" defaultValueLiteral="{FLOW_NAME}.xsl">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -78,7 +78,7 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
     </eStructuralFeatures>
     
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.BEFORE_INPUT_DIR" name="BEFORE_INPUT_DIR" defaultValueLiteral="EPIS_SuccessFactors_IGA_SAT_App\SuccessFactors_CSV_IGA_P2P\enrichment">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.BEFORE_INPUT_DIR" name="BEFORE_INPUT_DIR" defaultValueLiteral="{APP_NAME}\{FLOW_NAME}\enrichment">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -91,7 +91,7 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
     </eStructuralFeatures>
     
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AFTER_INPUT_DIR" name="AFTER_INPUT_DIR" defaultValueLiteral="EPIS_SuccessFactors_IGA_SAT_App\SuccessFactors_CSV_IGA_P2P\enrichment">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AFTER_INPUT_DIR" name="AFTER_INPUT_DIR" defaultValueLiteral="{APP_NAME}\{FLOW_NAME}\enrichment">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -100,16 +100,16 @@
     </eStructuralFeatures>
 
     <!-- SOAP PROPERTIES -->
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.SOAP_SERVICE_URL" name="SOAP_SERVICE_URL" defaultValueLiteral="http://service.endpoint">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.SOAP_SERVICE_URL" name="SOAP_SERVICE_URL" defaultValueLiteral="{SOAP_SERVICE_URL}">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
 
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.WSDL_FILE_NAME" name="WSDL_FILE_NAME" defaultValueLiteral="service.wsdl">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.WSDL_FILE_NAME" name="WSDL_FILE_NAME" defaultValueLiteral="{WSDL_FILE_NAME}">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
 
     <!-- OUTPUT PROPERTIES -->
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.OUTPUT_QUEUE" name="OUTPUT_QUEUE" defaultValueLiteral="OUTPUT.QUEUE">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.OUTPUT_QUEUE" name="OUTPUT_QUEUE" defaultValueLiteral="{OUTPUT_QUEUE_NAME}">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
 
@@ -123,57 +123,80 @@
     </eStructuralFeatures>
 
     <!-- Branding and Graphics -->
-    <translation xmi:type="utility:TranslatableString" key="SuccessFactors_CSV_IGA_P2P" bundleName="SuccessFactors_CSV_IGA_P2P" pluginId="EPIS_SuccessFactors_IGA_SAT_App_Developer"/>
-    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_SuccessFactors_IGA_SAT_App_Developer/icons/full/obj16/SuccessFactors_CSV_IGA_P2P.gif"/>
-    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_SuccessFactors_IGA_SAT_App_Developer/icons/full/obj30/SuccessFactors_CSV_IGA_P2P.gif"/>
+    <translation xmi:type="utility:TranslatableString" key="{FLOW_NAME}" bundleName="{FLOW_NAME}" pluginId="{APP_NAME}_Developer"/>
+    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/{APP_NAME}_Developer/icons/full/obj16/{FLOW_NAME}.gif"/>
+    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/{APP_NAME}_Developer/icons/full/obj30/{FLOW_NAME}.gif"/>
     
     <composition>
-      <nodes xmi:type="ComIbmMQInput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_1" location="50,150" queueName="ftp://qa.ftp4.dmz.dsv.com:21/DataFolder/test/SF_Export/SourceFileName.csv">
-        <translation xmi:type="utility:ConstantString" string="MQInput"/>
-    </nodes>
-<nodes xmi:type="eflow:FCMComposite" xmi:id="FCMComposite_1_2" location="250,150">
-        <translation xmi:type="utility:ConstantString" string="InputEventMessage"/>
-    </nodes>
-<nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_3" location="300,150" dataLocation="Compute.esql" computeExpression="esql://Compute#Compute.Main">
-        <translation xmi:type="utility:TranslatableString" key="Compute" bundleName="Compute" pluginId="EPIS_SuccessFactors_IGA_SAT_App"/>
-    </nodes>
-<nodes xmi:type="eflow:FCMComposite" xmi:id="FCMComposite_1_4" location="200,150">
-        <translation xmi:type="utility:ConstantString" string="BeforeEnrichment"/>
-    </nodes>
-<nodes xmi:type="ComIbmXSLMQSI.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_5" location="450,150" xslFile="successfactors_csv_iga_p2p_successfactors_to_cdm_message.xsl">
-        <translation xmi:type="utility:ConstantString" string="XSLTransform"/>
-    </nodes>
-<nodes xmi:type="ComIbmXSLMQSI.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_6" location="450,150" xslFile="lat_file.xsl">
-        <translation xmi:type="utility:ConstantString" string="XSLTransform"/>
-    </nodes>
-<nodes xmi:type="ComIbmXSLMQSI.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_7" location="450,150" xslFile="successfactors_csv_iga_p2p_cdm_message_to_iga_flat_file.xsl">
-        <translation xmi:type="utility:ConstantString" string="XSLTransform"/>
-    </nodes>
-<nodes xmi:type="eflow:FCMComposite" xmi:id="FCMComposite_1_8" location="200,150">
-        <translation xmi:type="utility:ConstantString" string="AfterEnrichment"/>
-    </nodes>
-<nodes xmi:type="eflow:FCMComposite" xmi:id="FCMComposite_1_10" location="250,150">
-        <translation xmi:type="utility:ConstantString" string="AfterEventMessage"/>
-    </nodes>
-<nodes xmi:type="ComIbmMQOutput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_11" location="700,150" queueName="OUTPUT.QUEUE">
-        <translation xmi:type="utility:ConstantString" string="MQOutput"/>
-    </nodes>
-<nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_12" location="500,300" computeExpression="esql://Failure#Main">
-        <translation xmi:type="utility:ConstantString" string="FailureHandler"/>
-    </nodes>
-      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_1" targetNode="FCMComposite_1_2" sourceNode="FCMComposite_1_1" sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.in"/>
-<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_2" targetNode="FCMComposite_1_3" sourceNode="FCMComposite_1_2" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
-<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_3" targetNode="FCMComposite_1_4" sourceNode="FCMComposite_1_3" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
-<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_4" targetNode="FCMComposite_1_5" sourceNode="FCMComposite_1_4" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
-<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_5" targetNode="FCMComposite_1_8" sourceNode="FCMComposite_1_5" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
-<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_6" targetNode="FCMComposite_1_9" sourceNode="FCMComposite_1_8" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
-<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_7" targetNode="FCMComposite_1_10" sourceNode="FCMComposite_1_9" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
-<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_8" targetNode="FCMComposite_1_11" sourceNode="FCMComposite_1_10" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.Input"/>
-<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_9" targetNode="FCMComposite_1_12" sourceNode="FCMComposite_1_3" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
-<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_10" targetNode="FCMComposite_1_12" sourceNode="FCMComposite_1_5" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
-<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_11" targetNode="FCMComposite_1_12" sourceNode="FCMComposite_1_4" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
-<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_12" targetNode="FCMComposite_1_12" sourceNode="FCMComposite_1_8" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
-      </composition>
+      <!-- ================================================== -->
+      <!-- DYNAMIC NODES SECTION - GENERATED BY CODE -->
+      <!-- ================================================== -->
+      <!-- 
+      THIS SECTION WILL BE REPLACED BY PYTHON CODE BASED ON:
+      - Input Type: HTTP or MQ or FILE (pattern['input_type'])
+      - Routing: Multi-method or single path (pattern['has_method_routing'])
+      - Enrichment: Before/After (pattern['has_enrichment'])
+      - Transform: XSL present (pattern['has_xsl_transform'])
+      - SOAP: Service call required (pattern['has_soap_request'])
+      - Sync: RTS pattern with events (pattern['is_synchronous'])
+      
+      NODE GENERATION PATTERNS:
+      
+      1. HTTP INPUT PATTERN:
+         HTTPInput â†’ InputEventMessage â†’ Compute â†’ ...
+         
+      2. MQ INPUT PATTERN:
+         MQInput â†’ InputEventMessage â†’ BeforeEnrichment â†’ Compute â†’ ...
+         
+      3. FILE INPUT PATTERN:
+         FileInput → InputEventMessage → Compute → ...
+         
+      3. MULTI-METHOD ROUTING PATTERN:
+         ... â†’ RouteSelector (Compute) â†’ Route â†’ [Label_Method1, Label_Method2, ...] â†’ [RouteToLabel_Method1, ...]
+         
+      4. SOAP CALL PATTERN:
+         ... â†’ GZipCompression â†’ SOAPRequest â†’ AfterEventMessage â†’ ...
+         
+      5. RTS SYNC PATTERN:
+         ... â†’ HTTPReply (or MQOutput) â†’ OutputEventMessage â†’ End
+      
+      6. STANDARD ESQL COMPUTE NODES (added based on pattern):
+         - InputEventMessage (if has_event_nodes)
+         - Compute (always)
+         - AfterEnrichment (if has_enrichment)
+         - OutputEventMessage (if has_event_nodes)
+         - AfterEventMessage (if is_synchronous)
+         - FailureHandler (always)
+      -->
+      
+      <!-- PLACEHOLDER: Input Node will be injected here -->
+      {DYNAMIC_INPUT_NODE}
+      
+      <!-- PLACEHOLDER: Event Processing Nodes -->
+      {DYNAMIC_EVENT_NODES}
+      
+      <!-- PLACEHOLDER: Enrichment Nodes -->
+      {DYNAMIC_ENRICHMENT_NODES}
+      
+      <!-- PLACEHOLDER: Compute Nodes -->
+      {DYNAMIC_COMPUTE_NODES}
+      
+      <!-- PLACEHOLDER: Routing Nodes (if multi-method) -->
+      {DYNAMIC_ROUTING_NODES}
+      
+      <!-- PLACEHOLDER: Transform Nodes -->
+      {DYNAMIC_TRANSFORM_NODES}
+      
+      <!-- PLACEHOLDER: SOAP Nodes -->
+      {DYNAMIC_SOAP_NODES}
+      
+      <!-- PLACEHOLDER: Output Nodes -->
+      {DYNAMIC_OUTPUT_NODES}
+      
+      <!-- PLACEHOLDER: Error Handling -->
+      {DYNAMIC_ERROR_NODES}
+      
+    </composition>
 
     <!-- ================================================== -->
     <!-- PROPERTY ORGANIZATION - COMPLETE & UNCHANGED -->
@@ -200,7 +223,7 @@
                         <propertyDescriptor groupName="Group.XSL" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.XSLNamePropertyEditor" compiler="com.ibm.etools.mft.ibmnodes.compilers.XSLTNamePropertyCompiler" configurable="true" describedAttribute="Property.stylesheetName">
                           <propertyName xmi:type="utility:TranslatableString" key="Property.stylesheetName" bundleName="ComIbmXslMqsi" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
                           <propertyDescriptor groupName="Group.InternalRuntimeGroup" readOnly="true" hidden="true" userDefined="true" describedAttribute="Property.stylesheetName.internal_npcompiler">
-                            <propertyName xmi:type="utility:TranslatableString" key="Property.stylesheetName.internal_npcompiler" bundleName="SuccessFactors_CSV_IGA_P2P" pluginId="EPIS_SuccessFactors_IGA_SAT_App_Developer"/>
+                            <propertyName xmi:type="utility:TranslatableString" key="Property.stylesheetName.internal_npcompiler" bundleName="{FLOW_NAME}" pluginId="{APP_NAME}_Developer"/>
                             <propertyDescriptor groupName="Group.SOAP" configurable="true" describedAttribute="Property.SOAP_SERVICE_URL">
                               <propertyName xmi:type="utility:TranslatableString" key="Property.SOAP_SERVICE_URL" bundleName="ComIbmSOAPRequest" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
                               <propertyDescriptor groupName="Group.SOAP" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileReadNodeFilePropertyEditor" configurable="true" describedAttribute="Property.WSDL_FILE_NAME">
