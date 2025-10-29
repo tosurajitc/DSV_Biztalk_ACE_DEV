@@ -11,12 +11,17 @@
     xmlns:ComIbmXslMqsi.msgnode="ComIbmXslMqsi.msgnode" 
     xmlns:ComIbmFileInput.msgnode="ComIbmFileInput.msgnode"
     xmlns:ComIbmFileOutput.msgnode="ComIbmFileOutput.msgnode"
+    xmlns:ComIbmHTTPRequest.msgnode="ComIbmHTTPRequest.msgnode"
+    xmlns:ComIbmMQInput.msgnode="ComIbmMQInput.msgnode"
+    xmlns:ComIbmMQOutput.msgnode="ComIbmMQOutput.msgnode"
     xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" 
     xmlns:eflow="http://www.ibm.com/wbi/2005/eflow" 
     xmlns:epis_common_flows_lib_MQInput.subflow="epis/common/flows/lib/MQInput.subflow" 
     xmlns:epis_common_flows_lib_MQOutput.subflow="epis/common/flows/lib/MQOutput.subflow"
     xmlns:epis_compression_lib_GZipCompressAndB64EncodeElement.subflow="epis/compression/lib/GZipCompressAndB64EncodeElement.subflow" 
-    xmlns:epis_enrichment_lib_EPIS_MessageEnrichment.subflow="epis/enrichment/lib/EPIS_MessageEnrichment.subflow" 
+    xmlns:epis_enrichment_lib_EPIS_MessageEnrichment.subflow="epis/enrichment/lib/EPIS_MessageEnrichment.subflow"
+    xmlns:epis_encoding_lib_Base64Encoder.subflow="epis/encoding/lib/Base64Encoder.subflow"
+    xmlns:epis_storage_lib_BlobStorage.subflow="epis/storage/lib/BlobStorage.subflow"
     xmlns:utility="http://www.ibm.com/wbi/2005/eflow_utility" 
     nsURI="SAP_Data_Edicom_RTS.msgflow" 
     nsPrefix="SAP_Data_Edicom_RTS.msgflow">
@@ -29,7 +34,7 @@
     <!-- ================================================== -->
     
     <!-- HTTP INPUT PROPERTIES -->
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.HTTP_URL_SPECIFIER" name="HTTP_URL_SPECIFIER" defaultValueLiteral="/api/service">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.HTTP_URL_SPECIFIER" name="HTTP_URL_SPECIFIER" defaultValueLiteral="http://service.endpoint">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -38,14 +43,13 @@
     </eStructuralFeatures>
     
     <!-- MQ INPUT PROPERTIES -->
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.INPUT_QUEUE" name="INPUT_QUEUE" lowerBound="1" defaultValueLiteral="INPUT.QUEUE">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.INPUT_QUEUE" name="INPUT_QUEUE" lowerBound="1" defaultValueLiteral="MQ Name">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
     <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.INPUT_MSG_PARSING" name="INPUT_MSG_PARSING" defaultValueLiteral="XMLNSC">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
-    
     
     <!-- FILE INPUT PROPERTIES -->
     <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.FILE_INPUT_DIRECTORY" name="FILE_INPUT_DIRECTORY" defaultValueLiteral="/var/mqsi/input">
@@ -55,9 +59,15 @@
     <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.FILE_INPUT_PATTERN" name="FILE_INPUT_PATTERN" defaultValueLiteral="*.xml">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
+    
     <!-- COMPRESSION PROPERTIES -->
     <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.COMPRESS_MSG_SIZE" name="COMPRESS_MSG_SIZE" lowerBound="1" defaultValueLiteral="103809024">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+    </eStructuralFeatures>
+    
+    <!-- BLOB STORAGE PROPERTIES -->
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.BLOB_STORAGE_ACCOUNT" name="BLOB_STORAGE_ACCOUNT" defaultValueLiteral="BLOB_STORAGE_ACCOUNT">
+      <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
     <!-- XSL TRANSFORM PROPERTIES -->
@@ -78,7 +88,7 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
     </eStructuralFeatures>
     
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.BEFORE_INPUT_DIR" name="BEFORE_INPUT_DIR" defaultValueLiteral="EPIS_SAP_Edicom_App\SAP_Data_Edicom_RTS\enrichment">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.BEFORE_INPUT_DIR" name="BEFORE_INPUT_DIR" defaultValueLiteral="EPIS/SAP_Data_Edicom_RTS/enrichment">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -91,7 +101,7 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
     </eStructuralFeatures>
     
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AFTER_INPUT_DIR" name="AFTER_INPUT_DIR" defaultValueLiteral="EPIS_SAP_Edicom_App\SAP_Data_Edicom_RTS\enrichment">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AFTER_INPUT_DIR" name="AFTER_INPUT_DIR" defaultValueLiteral="EPIS/SAP_Data_Edicom_RTS/enrichment">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -104,7 +114,12 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
 
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.WSDL_FILE_NAME" name="WSDL_FILE_NAME" defaultValueLiteral="service.wsdl">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.WSDL_FILE_NAME" name="WSDL_FILE_NAME" defaultValueLiteral="/var/mqsi/data">
+      <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eStructuralFeatures>
+
+    <!-- HTTP REQUEST PROPERTIES -->
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.HTTP_REQUEST_URL" name="HTTP_REQUEST_URL" defaultValueLiteral="http://service.endpoint">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
 
@@ -122,161 +137,337 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
 
+    <!-- ROUTING PROPERTIES -->
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.HAS_METHOD_ROUTING" name="HAS_METHOD_ROUTING" defaultValueLiteral="false">
+      <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
+    </eStructuralFeatures>
+
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.ROUTING_METHODS" name="ROUTING_METHODS" defaultValueLiteral="method1,method2,method3">
+      <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eStructuralFeatures>
+
     <!-- Branding and Graphics -->
-    <translation xmi:type="utility:TranslatableString" key="SAP_Data_Edicom_RTS" bundleName="SAP_Data_Edicom_RTS" pluginId="EPIS_SAP_Edicom_App_Developer"/>
-    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_SAP_Edicom_App_Developer/icons/full/obj16/SAP_Data_Edicom_RTS.gif"/>
-    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_SAP_Edicom_App_Developer/icons/full/obj30/SAP_Data_Edicom_RTS.gif"/>
+    <translation xmi:type="utility:TranslatableString" key="SAP_Data_Edicom_RTS" bundleName="SAP_Data_Edicom_RTS" pluginId="EPIS_Developer"/>
+    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_Developer/icons/full/obj16/SAP_Data_Edicom_RTS.gif"/>
+    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_Developer/icons/full/obj30/SAP_Data_Edicom_RTS.gif"/>
     
     <composition>
-      <nodes xmi:type="eflow:FCMComposite" xmi:id="FCMComposite_1_2" location="250,150">
+      
+      <!-- ================================================== -->
+      <!-- SECTION 1: INPUT NODES (Dynamic - one of three) -->
+      <!-- ================================================== -->
+      
+        <!-- HTTP Input Node -->
+        <nodes xmi:type="ComIbmWSInput.msgnode:FCMComposite_1" 
+                xmi:id="FCMComposite_1_7" 
+                location="-201,103"
+                URLSpecifier="/api/service"
+                messageDomainProperty="XMLNSC">
+            <translation xmi:type="utility:ConstantString" string="HTTPInput"/>
+        </nodes>
+                
+      
+      
+      <!-- ================================================== -->
+      <!-- SECTION 2: EVENT PROCESSING NODES -->
+      <!-- ================================================== -->
+      
+      <!-- 1. INPUT EVENT MESSAGE - ALWAYS REQUIRED -->
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" 
+            xmi:id="FCMComposite_1_2" 
+            location="-221,338" 
+            rotation="RIGHT_TO_LEFT" 
+            computeExpression="esql://routine/SAP_Data_Edicom_RTS#SAP_Data_Edicom_RTS_InputEventMessage.Main">
         <translation xmi:type="utility:ConstantString" string="InputEventMessage"/>
-    </nodes>
-<nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_3" location="300,150" dataLocation="Compute.esql" computeExpression="esql://Compute#Compute.Main">
-        <translation xmi:type="utility:TranslatableString" key="Compute" bundleName="Compute" pluginId="EPIS_SAP_Edicom_App"/>
-    </nodes>
-<nodes xmi:type="ComIbmXSLMQSI.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_4" location="450,150" xslFile="Transform.xsl">
-        <translation xmi:type="utility:ConstantString" string="XSLTransform"/>
-    </nodes>
-<nodes xmi:type="eflow:FCMComposite" xmi:id="FCMComposite_1_5" location="200,150">
+      </nodes>
+
+      <!-- ================================================== -->
+      <!-- SECTION 3: BLOB STORAGE NODES (Conditional) -->
+      <!-- ================================================== -->
+      
+      <!--
+      BlobStorage subflow - Only if has_blob_storage=True
+      -->
+
+      <!-- ================================================== -->
+      <!-- SECTION 4: ENRICHMENT NODES (Conditional) -->
+      <!-- ================================================== -->
+      
+      
+      <!--
+      BeforeEnrichment subflow - Only if has_before_enrichment=True
+      -->
+      
+      <!-- ================================================== -->
+      <!-- SECTION 5: MAIN COMPUTE NODE (Always required) -->
+      <!-- ================================================== -->
+      
+      <!-- 2. MAIN COMPUTE - ALWAYS REQUIRED -->
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" 
+            xmi:id="FCMComposite_1_1" 
+            location="376,68" 
+            computeExpression="esql://routine/SAP_Data_Edicom_RTS#SAP_Data_Edicom_RTS_Compute.Main">
+        <translation xmi:type="utility:ConstantString" string="Compute"/>
+      </nodes>
+      
+      <!-- ================================================== -->
+      <!-- SECTION 6: ROUTING NODES (Conditional) -->
+      <!-- ================================================== -->
+      <!-- No Method Routing required -->
+      <!--
+      Route, Label, RouteToLabel nodes - Only if has_method_routing=True
+      -->
+      
+      <!-- ================================================== -->
+      <!-- SECTION 7: TRANSFORM NODES (Conditional) -->
+      <!-- ================================================== -->
+      
+      
+        <!-- XSL Transform Node -->
+        <nodes xmi:type="ComIbmXslMqsi.msgnode:FCMComposite_1" 
+                xmi:id="FCMComposite_1_5" 
+                location="596,45" 
+                stylesheetName="Transform.xsl" 
+                messageDomainProperty="XMLNSC">
+            <translation xmi:type="utility:ConstantString" string="XSLTransform"/>
+        </nodes>
+                
+      <!--
+      XSL Transform node - Only if has_xsl_transform=True
+      -->
+      
+      <!-- 3. AFTER ENRICHMENT - ALWAYS REQUIRED -->
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" 
+            xmi:id="FCMComposite_1_12" 
+            location="796,45" 
+            computeExpression="esql://routine/SAP_Data_Edicom_RTS#SAP_Data_Edicom_RTS_AfterEnrichment.Main">
         <translation xmi:type="utility:ConstantString" string="AfterEnrichment"/>
-    </nodes>
-<nodes xmi:type="eflow:FCMComposite" xmi:id="FCMComposite_1_7" location="250,150">
+      </nodes>
+      
+      <!-- ================================================== -->
+      <!-- SECTION 8: ENCODING NODES (Conditional) -->
+      <!-- ================================================== -->
+      
+      <!-- DYNAMIC_BASE64_ENCODER not required -->
+      <!--
+      Base64Encoder - Only if has_base64_encoding=True
+      -->
+      
+      
+      <!--
+      GZip Compression - Only if has_gzip_compression=True
+      -->
+      
+      <!-- ================================================== -->
+      <!-- SECTION 9: SERVICE REQUEST NODES (Conditional) -->
+      <!-- ================================================== -->
+      
+      <!-- No SOAP Request required -->
+      <!--
+      SOAP Request - Only if has_soap_request=True
+      -->
+      
+      
+      <!--
+      HTTP Request - Only if has_http_request=True
+      -->
+      
+      <!-- ================================================== -->
+      <!-- SECTION 10: OUTPUT NODES (Conditional) -->
+      <!-- ================================================== -->
+      
+      
+        <!-- HTTP Reply Node -->
+        <nodes xmi:type="ComIbmWSReply.msgnode:FCMComposite_1" 
+                xmi:id="FCMComposite_1_14" 
+                location="1000,100">
+            <translation xmi:type="utility:ConstantString" string="HTTPReply"/>
+        </nodes>
+                
+      <!--
+      MQOutput or FileOutput or HTTPReply - Based on output_type
+      -->
+      
+      <!-- 4. OUTPUT EVENT MESSAGE - ALWAYS REQUIRED -->
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" 
+            xmi:id="FCMComposite_1_13" 
+            location="1000,300" 
+            rotation="RIGHT_TO_LEFT" 
+            computeExpression="esql://routine/SAP_Data_Edicom_RTS#SAP_Data_Edicom_RTS_OutputEventMessage.Main">
+        <translation xmi:type="utility:ConstantString" string="OutputEventMessage"/>
+      </nodes>
+
+      <!-- 5. AFTER EVENT MESSAGE - ALWAYS REQUIRED -->
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" 
+            xmi:id="FCMComposite_1_15" 
+            location="1600,100" 
+            computeExpression="esql://routine/SAP_Data_Edicom_RTS#SAP_Data_Edicom_RTS_AfterEventMsg.Main">
         <translation xmi:type="utility:ConstantString" string="AfterEventMessage"/>
-    </nodes>
-<nodes xmi:type="ComIbmWSReply.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_8" location="700,150">
-        <translation xmi:type="utility:ConstantString" string="HTTPReply"/>
-    </nodes>
-<nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_9" location="500,300" computeExpression="esql://Failure#Main">
+      </nodes>
+
+      <!-- 6. FAILURE HANDLER - ALWAYS REQUIRED -->
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" 
+            xmi:id="FCMComposite_1_11" 
+            location="1600,300" 
+            computeExpression="esql://routine/SAP_Data_Edicom_RTS#SAP_Data_Edicom_RTS_Failure.Main">
         <translation xmi:type="utility:ConstantString" string="FailureHandler"/>
-    </nodes>
-      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_1" targetNode="FCMComposite_1_2" sourceNode="FCMComposite_1_1" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
-<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_2" targetNode="FCMComposite_1_3" sourceNode="FCMComposite_1_2" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
-<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_3" targetNode="FCMComposite_1_4" sourceNode="FCMComposite_1_3" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
-<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_4" targetNode="FCMComposite_1_5" sourceNode="FCMComposite_1_4" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
-<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_5" targetNode="FCMComposite_1_6" sourceNode="FCMComposite_1_5" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
-<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_6" targetNode="FCMComposite_1_7" sourceNode="FCMComposite_1_6" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
-<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_7" targetNode="FCMComposite_1_8" sourceNode="FCMComposite_1_7" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
-<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_8" targetNode="FCMComposite_1_9" sourceNode="FCMComposite_1_3" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
-<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_9" targetNode="FCMComposite_1_9" sourceNode="FCMComposite_1_4" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
-<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_10" targetNode="FCMComposite_1_9" sourceNode="FCMComposite_1_5" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
-      </composition>
+      </nodes>
+
+      <!-- ================================================== -->
+      <!-- SECTION 11: CONNECTIONS -->
+      <!-- ================================================== -->
+      
+        <!-- PRIMARY FLOW PATH -->
+        
+        <!-- Connection 1: MQInput → InputEventMessage -->
+        <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_1" 
+                    targetNode="FCMComposite_1_2" sourceNode="FCMComposite_1_7" 
+                    sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.in"/>
+
+        <!-- Connection 2: InputEventMessage → Compute -->
+        <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_2" 
+                    targetNode="FCMComposite_1_1" sourceNode="FCMComposite_1_2" 
+                    sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+
+        <!-- Connection 3: Compute → OutputEventMessage -->
+        <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_3" 
+                    targetNode="FCMComposite_1_13" sourceNode="FCMComposite_1_1" 
+                    sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+                    
+        <!-- Connection 4: OutputEventMessage → MQOutput -->
+        <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_4" 
+                    targetNode="FCMComposite_1_14" sourceNode="FCMComposite_1_13" 
+                    sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.Input"/>
+                    
+        <!-- ERROR HANDLING -->
+                    
+        <!-- Connection 5: Compute failure → FailureHandler -->
+        <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_5" 
+                    targetNode="FCMComposite_1_11" sourceNode="FCMComposite_1_1" 
+                    sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
+            
+      
+    </composition>
 
     <!-- ================================================== -->
     <!-- PROPERTY ORGANIZATION - COMPLETE & UNCHANGED -->
     <!-- ================================================== -->
     <propertyOrganizer>
+      
+      <!-- ============================================ -->
+      <!-- HTTP INPUT PROPERTIES (Include if input_type=HTTP) -->
+      <!-- ============================================ -->
+      
       <propertyDescriptor groupName="Group.HTTP" configurable="true" describedAttribute="Property.HTTP_URL_SPECIFIER">
         <propertyName xmi:type="utility:TranslatableString" key="Property.HTTP_URL_SPECIFIER" bundleName="ComIbmWSInput" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
+        
         <propertyDescriptor groupName="Group.HTTP" configurable="true" describedAttribute="Property.HTTP_METHOD">
           <propertyName xmi:type="utility:TranslatableString" key="Property.HTTP_METHOD" bundleName="ComIbmWSInput" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
-          <propertyDescriptor groupName="Group.COMPRESSION" configurable="true" userDefined="true" describedAttribute="Property.COMPRESS_MSG_SIZE">
-            <propertyName xmi:type="utility:TranslatableString" key="Property.COMPRESS_MSG_SIZE" bundleName="epis/common/flows/lib/MQInput" pluginId="EPIS_CommonFlows_Lib"/>
-            <propertyDescriptor groupName="Group.INPUT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.MRMessageDomainPropertyEditor" describedAttribute="Property.INPUT_MSG_PARSING">
-              <propertyName xmi:type="utility:TranslatableString" key="Property.INPUT_MSG_PARSING" bundleName="epis/common/flows/lib/MQInput" pluginId="EPIS_CommonFlows_Lib"/>
-              <propertyDescriptor groupName="Group.INPUT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.mq.MQQueueNameEditor" configurable="true" describedAttribute="Property.INPUT_QUEUE">
-                <propertyName xmi:type="utility:TranslatableString" key="Property.INPUT_QUEUE" bundleName="epis/common/flows/lib/MQInput" pluginId="EPIS_CommonFlows_Lib"/>
-                <propertyDescriptor groupName="Group.BEFORE_ENRICHMENT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileReadNodeFilePropertyEditor" configurable="true" describedAttribute="Property.BEFORE_FILE_NAME">
-                  <propertyName xmi:type="utility:TranslatableString" key="Property.BEFORE_FILE_NAME" bundleName="ComIbmFileRead" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
-                  <propertyDescriptor groupName="Group.BEFORE_ENRICHMENT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileNodesBrowseDirPropertyEditor" configurable="true" describedAttribute="Property.BEFORE_INPUT_DIR">
-                    <propertyName xmi:type="utility:TranslatableString" key="Property.BEFORE_INPUT_DIR" bundleName="ComIbmFileRead" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
-                    <propertyDescriptor groupName="Group.AFTER_ENRICHMENT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileReadNodeFilePropertyEditor" configurable="true" describedAttribute="Property.AFTER_FILE_NAME">
-                      <propertyName xmi:type="utility:TranslatableString" key="Property.AFTER_FILE_NAME" bundleName="ComIbmFileRead" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
-                      <propertyDescriptor groupName="Group.AFTER_ENRICHMENT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileNodesBrowseDirPropertyEditor" configurable="true" describedAttribute="Property.AFTER_INPUT_DIR">
-                        <propertyName xmi:type="utility:TranslatableString" key="Property.AFTER_INPUT_DIR" bundleName="ComIbmFileRead" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
-                        <propertyDescriptor groupName="Group.XSL" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.XSLNamePropertyEditor" compiler="com.ibm.etools.mft.ibmnodes.compilers.XSLTNamePropertyCompiler" configurable="true" describedAttribute="Property.stylesheetName">
-                          <propertyName xmi:type="utility:TranslatableString" key="Property.stylesheetName" bundleName="ComIbmXslMqsi" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
-                          <propertyDescriptor groupName="Group.InternalRuntimeGroup" readOnly="true" hidden="true" userDefined="true" describedAttribute="Property.stylesheetName.internal_npcompiler">
-                            <propertyName xmi:type="utility:TranslatableString" key="Property.stylesheetName.internal_npcompiler" bundleName="SAP_Data_Edicom_RTS" pluginId="EPIS_SAP_Edicom_App_Developer"/>
-                            <propertyDescriptor groupName="Group.SOAP" configurable="true" describedAttribute="Property.SOAP_SERVICE_URL">
-                              <propertyName xmi:type="utility:TranslatableString" key="Property.SOAP_SERVICE_URL" bundleName="ComIbmSOAPRequest" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
-                              <propertyDescriptor groupName="Group.SOAP" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileReadNodeFilePropertyEditor" configurable="true" describedAttribute="Property.WSDL_FILE_NAME">
-                                <propertyName xmi:type="utility:TranslatableString" key="Property.WSDL_FILE_NAME" bundleName="ComIbmSOAPRequest" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
-                                <propertyDescriptor groupName="Group.OUTPUT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.mq.MQQueueNameEditor" configurable="true" describedAttribute="Property.OUTPUT_QUEUE">
-                                  <propertyName xmi:type="utility:TranslatableString" key="Property.OUTPUT_QUEUE" bundleName="epis/common/flows/lib/MQOutput" pluginId="EPIS_CommonFlows_Lib"/>
-                                </propertyDescriptor>
-                              </propertyDescriptor>
-                            </propertyDescriptor>
-                          </propertyDescriptor>
-                        </propertyDescriptor>
-                      </propertyDescriptor>
-                    </propertyDescriptor>
-                  </propertyDescriptor>
-                </propertyDescriptor>
-              </propertyDescriptor>
-            </propertyDescriptor>
-          </propertyDescriptor>
+          
         </propertyDescriptor>
       </propertyDescriptor>
+      
+      
+      <!-- ============================================ -->
+      <!-- MQ INPUT PROPERTIES (Include if input_type=MQ) -->
+      <!-- ============================================ -->
+      
+      
+      <!-- ============================================ -->
+      <!-- FILE INPUT PROPERTIES (Include if input_type=FILE) -->
+      <!-- ============================================ -->
+      
+      
+      <!-- ============================================ -->
+      <!-- BLOB STORAGE PROPERTIES (Include if has_blob_storage=True) -->
+      <!-- ============================================ -->
+      
+      <propertyDescriptor groupName="Group.BLOB_STORAGE" configurable="true" describedAttribute="Property.BLOB_STORAGE_ACCOUNT">
+        <propertyName xmi:type="utility:TranslatableString" key="Property.BLOB_STORAGE_ACCOUNT" bundleName="epis/storage/lib/BlobStorage" pluginId="EPIS_Storage_Lib"/>
+        
+      </propertyDescriptor>
+      
+      
+      <!-- ============================================ -->
+      <!-- ENRICHMENT PROPERTIES (Include if has_enrichment=True) -->
+      <!-- ============================================ -->
+      
+      
+      <!-- ============================================ -->
+      <!-- XSL TRANSFORM PROPERTIES (Include if has_xsl_transform=True) -->
+      <!-- ============================================ -->
+      
+      <propertyDescriptor groupName="Group.XSL" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.XSLNamePropertyEditor" compiler="com.ibm.etools.mft.ibmnodes.compilers.XSLTNamePropertyCompiler" configurable="true" describedAttribute="Property.stylesheetName">
+        <propertyName xmi:type="utility:TranslatableString" key="Property.stylesheetName" bundleName="ComIbmXslMqsi" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
+        
+        <propertyDescriptor groupName="Group.InternalRuntimeGroup" readOnly="true" hidden="true" userDefined="true" describedAttribute="Property.stylesheetName.internal_npcompiler">
+          <propertyName xmi:type="utility:TranslatableString" key="Property.stylesheetName.internal_npcompiler" bundleName="SAP_Data_Edicom_RTS" pluginId="EPIS_Developer"/>
+          
+        </propertyDescriptor>
+      </propertyDescriptor>
+      
+      
+      <!-- ============================================ -->
+      <!-- SOAP PROPERTIES (Include if has_soap_request=True) -->
+      <!-- ============================================ -->
+      
+      
+      <!-- ============================================ -->
+      <!-- HTTP REQUEST PROPERTIES (Include if has_http_request=True) -->
+      <!-- ============================================ -->
+      
+      <propertyDescriptor groupName="Group.HTTP_REQUEST" configurable="true" describedAttribute="Property.HTTP_REQUEST_URL">
+        <propertyName xmi:type="utility:TranslatableString" key="Property.HTTP_REQUEST_URL" bundleName="ComIbmHTTPRequest" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
+        
+      </propertyDescriptor>
+      
+      
+      <!-- ============================================ -->
+      <!-- OUTPUT PROPERTIES (Always present) -->
+      <!-- ============================================ -->
+      
+      <propertyDescriptor groupName="Group.OUTPUT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.mq.MQQueueNameEditor" configurable="true" describedAttribute="Property.OUTPUT_QUEUE">
+        <propertyName xmi:type="utility:TranslatableString" key="Property.OUTPUT_QUEUE" bundleName="epis/common/flows/lib/MQOutput" pluginId="EPIS_CommonFlows_Lib"/>
+      </propertyDescriptor>
+      
+      
+      
+      <propertyDescriptor groupName="Group.FILE_OUTPUT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileNodesBrowseDirPropertyEditor" configurable="true" describedAttribute="Property.FILE_OUTPUT_DIRECTORY">
+        <propertyName xmi:type="utility:TranslatableString" key="Property.FILE_OUTPUT_DIRECTORY" bundleName="ComIbmFileOutput" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
+        
+        <propertyDescriptor groupName="Group.FILE_OUTPUT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileOutputNodeFilePropertyEditor" configurable="true" describedAttribute="Property.FILE_OUTPUT_PATTERN">
+          <propertyName xmi:type="utility:TranslatableString" key="Property.FILE_OUTPUT_PATTERN" bundleName="ComIbmFileOutput" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
+        </propertyDescriptor>
+      </propertyDescriptor>
+      
+      
+      <!-- ============================================ -->
+      <!-- ROUTING PROPERTIES (Include if has_method_routing=True) -->
+      <!-- ============================================ -->
+      
+      
     </propertyOrganizer>
 
     <!-- ================================================== -->
     <!-- ATTRIBUTE LINKS - COMPLETE PROPERTY BINDINGS -->
     <!-- ================================================== -->
     
-    <!-- MQ Input Links -->
-    <attributeLinks promotedAttribute="Property.COMPRESS_MSG_SIZE" overriddenNodes="FCMComposite_1_7">
-      <overriddenAttribute href="epis/common/flows/lib/MQInput.subflow#Property.COMPRESS_MSG_SIZE"/>
-    </attributeLinks>
+    <!-- =================== DYNAMIC ATTRIBUTE LINKS SECTION ================== -->
     
-    <attributeLinks promotedAttribute="Property.INPUT_MSG_PARSING" overriddenNodes="FCMComposite_1_7">
-      <overriddenAttribute href="epis/common/flows/lib/MQInput.subflow#Property.INPUT_MSG_PARSING"/>
-    </attributeLinks>
-    
-    <attributeLinks promotedAttribute="Property.INPUT_QUEUE" overriddenNodes="FCMComposite_1_7">
-      <overriddenAttribute href="epis/common/flows/lib/MQInput.subflow#Property.INPUT_QUEUE"/>
-    </attributeLinks>
-    
-    <!-- HTTP Input Links (conditional - only if HTTP node exists) -->
-    <attributeLinks promotedAttribute="Property.HTTP_URL_SPECIFIER" overriddenNodes="FCMComposite_1_1">
-      <overriddenAttribute href="ComIbmWSInput.msgnode#Property.URLSpecifier"/>
-    </attributeLinks>
-    
-    <!-- Before Enrichment Links -->
-    <attributeLinks promotedAttribute="Property.BEFORE_FILE_NAME" overriddenNodes="FCMComposite_1_4">
-      <overriddenAttribute href="epis/enrichment/lib/EPIS_MessageEnrichment.subflow#Property.filenamePattern"/>
-    </attributeLinks>
-    
-    <attributeLinks promotedAttribute="Property.BEFORE_INPUT_DIR" overriddenNodes="FCMComposite_1_4">
-      <overriddenAttribute href="epis/enrichment/lib/EPIS_MessageEnrichment.subflow#Property.inputDirectory"/>
-    </attributeLinks>
-
-    <!-- XSL Transform Links -->
-    <attributeLinks promotedAttribute="Property.stylesheetName" overriddenNodes="FCMComposite_1_5">
-      <overriddenAttribute href="ComIbmXslMqsi.msgnode#Property.stylesheetName"/>
-    </attributeLinks>
-
-    <!-- SOAP Links -->
-    <attributeLinks promotedAttribute="Property.SOAP_SERVICE_URL" overriddenNodes="FCMComposite_1_10">
-      <overriddenAttribute href="ComIbmSOAPRequest.msgnode#Property.webServiceURL"/>
-    </attributeLinks>
-    
-    <attributeLinks promotedAttribute="Property.WSDL_FILE_NAME" overriddenNodes="FCMComposite_1_10">
-      <overriddenAttribute href="ComIbmSOAPRequest.msgnode#Property.wsdlFileName"/>
-    </attributeLinks>
-
-    <!-- MQ Output Links -->
-    <attributeLinks promotedAttribute="Property.OUTPUT_QUEUE" overriddenNodes="FCMComposite_1_14">
-      <overriddenAttribute href="epis/common/flows/lib/MQOutput.subflow#Property.STATIC_OUTPUT_QUEUE"/>
-    </attributeLinks>
-
-
-    <!-- FILE Input Links (conditional - only if FILE node exists) -->
-    <attributeLinks promotedAttribute="Property.FILE_INPUT_DIRECTORY" overriddenNodes="FCMComposite_1_1">
-      <overriddenAttribute href="ComIbmFileInput.msgnode#Property.inputDirectory"/>
-    </attributeLinks>
-    
-    <attributeLinks promotedAttribute="Property.FILE_INPUT_PATTERN" overriddenNodes="FCMComposite_1_1">
-      <overriddenAttribute href="ComIbmFileInput.msgnode#Property.filenamePattern"/>
-    </attributeLinks>
-
-    <!-- FILE Output Links (conditional - only if FILE node exists) -->
-    <attributeLinks promotedAttribute="Property.FILE_OUTPUT_DIRECTORY" overriddenNodes="FCMComposite_1_15">
-      <overriddenAttribute href="ComIbmFileOutput.msgnode#Property.outputDirectory"/>
-    </attributeLinks>
-    
-    <attributeLinks promotedAttribute="Property.FILE_OUTPUT_PATTERN" overriddenNodes="FCMComposite_1_15">
-      <overriddenAttribute href="ComIbmFileOutput.msgnode#Property.filenamePattern"/>
-    </attributeLinks>
+        <!-- MQ Input Links -->
+        <attributeLinks promotedAttribute="Property.COMPRESS_MSG_SIZE" overriddenNodes="FCMComposite_1_7">
+        <overriddenAttribute href="epis/common/flows/lib/MQInput.subflow#Property.COMPRESS_MSG_SIZE"/>
+        </attributeLinks>
+        
+        <attributeLinks promotedAttribute="Property.INPUT_MSG_PARSING" overriddenNodes="FCMComposite_1_7">
+        <overriddenAttribute href="epis/common/flows/lib/MQInput.subflow#Property.INPUT_MSG_PARSING"/>
+        </attributeLinks>
+        
+        <attributeLinks promotedAttribute="Property.INPUT_QUEUE" overriddenNodes="FCMComposite_1_7">
+        <overriddenAttribute href="epis/common/flows/lib/MQInput.subflow#Property.INPUT_QUEUE"/>
+        </attributeLinks>
+            
+    <!-- =================== END DYNAMIC ATTRIBUTE LINKS ================== -->
 
     <stickyBoard/>
   </eClassifiers>

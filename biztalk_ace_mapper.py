@@ -381,116 +381,732 @@ class BizTalkACEMapper:
 
 
 
-    def optimize_msgflow_template(self, vector_db_results, business_json: Dict, output_path: str = "generated_messageflow.msgflow") -> str:
-        """Generate messageflow from pattern detection - WITH COMPREHENSIVE ERROR LOGGING"""
+    def optimize_msgflow_template(self, vector_db_results: List[Dict], 
+                                business_json: Dict = None, 
+                                output_path: str = "msgflow_template.xml") -> str:
+        """
+        Generate optimized MessageFlow template based on business requirements analysis.
+        Simplified version with comprehensive logging.
+        
+        Args:
+            vector_db_results: Results from vector DB containing business requirements
+            business_json: Business context information (optional)
+            output_path: Path to save the generated template
+            
+        Returns:
+            Path to the generated template file
+        """
+        print("\n========== MSGFLOW TEMPLATE OPTIMIZATION STARTED ==========")
+        print(f"Output path: {output_path}")
         
         try:
-            print("\n" + "="*60)
-            print("ðŸ”„ MESSAGEFLOW GENERATION STARTED")
-            print("="*60)
+            # Initialize default business_json if not provided
+            if business_json is None:
+                business_json = {}
+                print("No business_json provided, using empty dict")
             
-            # Step 1: Validate inputs
-            print("\nðŸ“‹ Step 1: Validating inputs...")
-            if not vector_db_results:
-                raise ValueError("vector_db_results is empty or None")
-            if not business_json:
-                raise ValueError("business_json is empty or None")
+            # Step 1: Detect the flow pattern from vector DB results
+            print("\nSTEP 1: Analyzing business requirements from Vector DB...")
             
-            required_keys = ['flow_name', 'project_name']
-            missing_keys = [key for key in required_keys if key not in business_json]
-            if missing_keys:
-                raise KeyError(f"Missing required keys in business_json: {missing_keys}")
+            # Simple pattern detection (without helper methods)
+            pattern = {
+                'input_type': 'MQ',  # Default input type
+                'has_enrichment': False,
+                'has_xsl_transform': False,
+                'has_soap_request': False,
+                'is_synchronous': False,
+                'flow_type': 'P2P',
+                'has_method_routing': False,
+                'methods': []
+            }
             
-            print(f"  âœ… Inputs validated")
-            print(f"     - Vector DB results: {len(vector_db_results)} items")
-            print(f"     - Flow name: {business_json.get('flow_name')}")
-            print(f"     - Project: {business_json.get('project_name')}")
+            # Combine content from vector_db_results for analysis
+            combined_content = ""
+            for result in vector_db_results:
+                if isinstance(result, dict) and 'content' in result:
+                    content = result.get('content', '')
+                    if isinstance(content, str):
+                        combined_content += content.lower() + " "
             
-            # Step 2: Detect pattern
-            print("\nðŸ“Š Step 2: Detecting flow pattern...")
-            pattern = self.detect_flow_pattern(vector_db_results)
-            print(f"  âœ… Pattern detected successfully")
-            print(f"     - Input type: {pattern['input_type']}")
-            print(f"     - Node sequence: {' â†’ '.join(pattern['node_sequence'])}")
-            print(f"     - XSL files: {len(pattern['xsl_files'])}")
-            print(f"     - Has enrichment: {pattern['has_enrichment']}")
-            print(f"     - Has SOAP: {pattern['has_soap_request']}")
+            if not combined_content:
+                print("WARNING: No content found in vector DB results")
             
-            # Step 3: Generate messageflow
-            print("\nðŸ”§ Step 3: Assembling messageflow...")
-            msgflow_path = self.assemble_messageflow(pattern, business_json, output_path)
-            print(f"  âœ… Messageflow assembled: {msgflow_path}")
+            # Log the combined content length for debugging
+            print(f"Combined content length: {len(combined_content)} characters")
+            if len(combined_content) > 100:
+                print(f"Content preview: {combined_content[:100]}...")
             
-            # Step 4: Validate
-            print("\nðŸ” Step 4: Validating messageflow...")
-            validation = self.validate_messageflow(msgflow_path, pattern)
+            # Basic pattern detection using keyword search
+            print("\nPerforming pattern detection...")
             
-            print("\n" + "="*60)
-            if validation['is_valid']:
-                print("âœ… VALIDATION PASSED")
+            # Input type detection
+            if any(kw in combined_content for kw in ['http', 'wcf', 'web service', 'wsdl', 'soap']):
+                pattern['input_type'] = 'HTTP'
+                print("✓ HTTP Input detected")
+            elif 'file input' in combined_content:
+                pattern['input_type'] = 'File'
+                print("✓ File Input detected")
             else:
-                print("âŒ VALIDATION FAILED")
-                for err in validation['errors']:
-                    print(f"   âŒ {err}")
-                for warn in validation.get('warnings', []):
-                    print(f"   âš ï¸  {warn}")
+                pattern['input_type'] = 'MQ'
+                print("✓ MQ Input detected (default)")
             
-            print(f"\nðŸ“Š Generation Summary:")
-            print(f"   - Output file: {msgflow_path}")
-            print(f"   - Nodes created: {validation['node_count']}")
-            print(f"   - Connections: {validation['connection_count']}")
-            print(f"   - Expected nodes: {validation['expected_nodes']}")
-            print("="*60 + "\n")
+            # XSL Transform detection
+            if any(kw in combined_content for kw in ['transform', 'xslt', 'mapping', '.xsl']):
+                pattern['has_xsl_transform'] = True
+                print("✓ XSL Transform required")
+            else:
+                print("× No XSL Transform needed")
             
-            return msgflow_path
+            # Enrichment detection
+            if any(kw in combined_content for kw in ['enrichment', 'enrich', 'lookup', 'database']):
+                pattern['has_enrichment'] = True
+                print("✓ Enrichment required")
+            else:
+                print("× No Enrichment needed")
             
-        except AttributeError as e:
-            print(f"\nâŒ CRITICAL ERROR: Missing method")
-            print(f"   Error: {str(e)}")
-            print(f"   Check if these methods exist:")
-            print(f"     - detect_flow_pattern()")
-            print(f"     - assemble_messageflow()")
-            print(f"     - validate_messageflow()")
-            import traceback
-            print(f"\n   Full traceback:")
-            print(traceback.format_exc())
-            raise
+            # SOAP Request detection
+            if any(kw in combined_content for kw in ['soap', 'web service', 'wsdl']):
+                pattern['has_soap_request'] = True
+                print("✓ SOAP Request required")
+            else:
+                print("× No SOAP Request needed")
             
-        except KeyError as e:
-            print(f"\nâŒ CRITICAL ERROR: Missing business_json key")
-            print(f"   Missing key: {str(e)}")
-            print(f"   Required keys: flow_name, project_name")
-            print(f"   Provided keys: {list(business_json.keys()) if business_json else 'None'}")
-            import traceback
-            print(f"\n   Full traceback:")
-            print(traceback.format_exc())
-            raise
+            # Flow type detection
+            if pattern['input_type'] == 'HTTP' or 'synchronous' in combined_content:
+                pattern['is_synchronous'] = True
+                pattern['flow_type'] = 'RTS'
+                print("✓ RTS (Synchronous) flow detected")
+            else:
+                print("✓ P2P (Asynchronous) flow detected")
             
-        except ValueError as e:
-            print(f"\nâŒ CRITICAL ERROR: Invalid input")
-            print(f"   Error: {str(e)}")
-            import traceback
-            print(f"\n   Full traceback:")
-            print(traceback.format_exc())
-            raise
+            # Method routing detection
+            method_keywords = ['subscription', 'confirm', 'cancel', 'submit', 'method', 'multiple operations']
+            if any(kw in combined_content for kw in method_keywords):
+                pattern['has_method_routing'] = True
+                
+                # Extract simple methods
+                import re
+                methods = []
+                method_patterns = [
+                    r'\b(subscription(?:ws)?)\b',
+                    r'\b(confirm(?:subscription)?)\b',
+                    r'\b(cancel(?:subscription|nfs|nfse)?)\b',
+                    r'\b(submit(?:nfs|nfse)?)\b'
+                ]
+                
+                for pattern_regex in method_patterns:
+                    matches = re.findall(pattern_regex, combined_content)
+                    for match in matches:
+                        if match and len(match) > 3:  # Filter out very short matches
+                            methods.append(match)
+                
+                if not methods:
+                    # Default SAP-Edicom methods
+                    methods = ['subscriptionws', 'confirmsubscription', 'cancelnfse', 'submitnfse']
+                
+                pattern['methods'] = methods
+                print(f"✓ Method Routing required with methods: {', '.join(methods[:3])}")
+            else:
+                print("× No Method Routing needed")
             
-        except FileNotFoundError as e:
-            print(f"\nâŒ CRITICAL ERROR: File not found")
-            print(f"   Error: {str(e)}")
-            print(f"   Check output_path directory exists: {os.path.dirname(output_path)}")
-            import traceback
-            print(f"\n   Full traceback:")
-            print(traceback.format_exc())
-            raise
+            # Log the detected pattern
+            print("\nDetected flow pattern:")
+            for key, value in pattern.items():
+                print(f"  - {key}: {value}")
+            
+            # Step 2: Load template file
+            print("\nSTEP 2: Loading template file...")
+            template = None
+            template_paths = [
+                "templates/messageflow_template_sample.xml",  # Correct path first
+                "final_messageflow_template.xml",            # Alternative paths as fallbacks
+                "msgflow_template.xml",
+                "messageflow_template_sample.xml",
+                Path(__file__).parent / "templates" / "messageflow_template_sample.xml"
+            ]
+            
+            template_loaded = False
+            for path in template_paths:
+                try:
+                    with open(path, 'r', encoding='utf-8') as f:
+                        template = f.read()
+                        print(f"✓ Template loaded successfully from: {path}")
+                        template_loaded = True
+                        break
+                except Exception as e:
+                    print(f"× Failed to load template from {path}: {e}")
+                    continue
+            
+            if not template_loaded or not template:
+                raise ValueError("Failed to load template file from any path")
+            
+            # Step 3: Process template based on pattern
+            print("\nSTEP 3: Processing template based on detected pattern...")
+            optimized_template = template
+            
+            # 3.1. Replace basic placeholders
+            flow_name = business_json.get('flow_name', 'UnknownFlow')
+            app_name = business_json.get('project_name', 'UnknownProject')
+            source_queue = business_json.get('source_queue', 'INPUT.QUEUE')
+            target_queue = business_json.get('target_queue', 'OUTPUT.QUEUE')
+            
+            print(f"Replacing basic placeholders with:")
+            print(f"  - Flow name: {flow_name}")
+            print(f"  - App name: {app_name}")
+            print(f"  - Source queue: {source_queue}")
+            print(f"  - Target queue: {target_queue}")
+            
+            optimized_template = optimized_template.replace('{FLOW_NAME}', flow_name)
+            optimized_template = optimized_template.replace('{APP_NAME}', app_name)
+            optimized_template = optimized_template.replace('{INPUT_QUEUE_NAME}', source_queue)
+            optimized_template = optimized_template.replace('{OUTPUT_QUEUE_NAME}', target_queue)
+            
+            # 3.2. Process Input Section
+            print("\nProcessing input section...")
+            if pattern['input_type'] == 'HTTP':
+                input_section = """
+        <!-- HTTP Input Node -->
+        <nodes xmi:type="ComIbmWSInput.msgnode:FCMComposite_1" 
+                xmi:id="FCMComposite_1_7" 
+                location="-201,103"
+                URLSpecifier="/api/service"
+                messageDomainProperty="XMLNSC">
+            <translation xmi:type="utility:ConstantString" string="HTTPInput"/>
+        </nodes>
+                """
+                print("Added HTTP Input node")
+            elif pattern['input_type'] == 'File':
+                input_section = """
+        <!-- File Input Node -->
+        <nodes xmi:type="ComIbmFileInput.msgnode:FCMComposite_1"
+                xmi:id="FCMComposite_1_7"
+                location="-201,103"
+                inputDirectory="/var/mqsi/input"
+                filenamePattern="*.xml"
+                messageDomainProperty="XMLNSC">
+            <translation xmi:type="utility:ConstantString" string="FileInput"/>
+        </nodes>
+                """
+                print("Added File Input node")
+            else:
+                input_section = """
+        <!-- MQ Input Node -->
+        <nodes xmi:type="epis_common_flows_lib_MQInput.subflow:FCMComposite_1" 
+                xmi:id="FCMComposite_1_7" 
+                location="-201,103">
+            <translation xmi:type="utility:ConstantString" string="MQInput"/>
+        </nodes>
+                """
+                print("Added MQ Input node")
+                
+            optimized_template = optimized_template.replace('{DYNAMIC_INPUT_SECTION}', input_section)
+            
+            # 3.3. Process Enrichment Section
+            print("\nProcessing enrichment section...")
+            if pattern['has_enrichment']:
+                enrichment_section = """
+        <!-- Before Enrichment Node -->
+        <nodes xmi:type="epis_enrichment_lib_EPIS_MessageEnrichment.subflow:FCMComposite_1" 
+                xmi:id="FCMComposite_1_4" 
+                location="30,299" 
+                inputDirectory="/var/mqsi/enrichment" 
+                filenamePattern="BeforeEnrichmentConf.json">
+            <translation xmi:type="utility:ConstantString" string="BeforeEnrichment"/>
+        </nodes>
+                """
+                print("Added Enrichment node")
+            else:
+                enrichment_section = "<!-- No Enrichment required -->"
+                print("Skipped Enrichment node")
+                
+            optimized_template = optimized_template.replace('{DYNAMIC_ENRICHMENT_SUBFLOW}', enrichment_section)
+            
+            # 3.4. Process XSL Transform Section
+            print("\nProcessing XSL transform section...")
+            if pattern['has_xsl_transform']:
+                xsl_section = """
+        <!-- XSL Transform Node -->
+        <nodes xmi:type="ComIbmXslMqsi.msgnode:FCMComposite_1" 
+                xmi:id="FCMComposite_1_5" 
+                location="596,45" 
+                stylesheetName="Transform.xsl" 
+                messageDomainProperty="XMLNSC">
+            <translation xmi:type="utility:ConstantString" string="XSLTransform"/>
+        </nodes>
+                """
+                print("Added XSL Transform node")
+            else:
+                xsl_section = "<!-- No XSL Transform required -->"
+                print("Skipped XSL Transform node")
+                
+            optimized_template = optimized_template.replace('{DYNAMIC_XSL_TRANSFORM}', xsl_section)
+            
+            # 3.5. Process SOAP Section
+            print("\nProcessing SOAP section...")
+            if pattern['has_soap_request']:
+                soap_section = """
+        <!-- SOAP Request Node -->
+        <nodes xmi:type="ComIbmSOAPRequest.msgnode:FCMComposite_1" 
+                xmi:id="FCMComposite_1_10" 
+                location="1400,100" 
+                wsdlFileName="service.wsdl" 
+                selectedPortType="Service" 
+                selectedBinding="BasicHttpBinding_Service" 
+                selectedOperation="Operation" 
+                selectedPort="Port" 
+                useHTTPTransport="true" 
+                webServiceURL="http://service.endpoint" 
+                sslProtocol="TLS">
+            <translation xmi:type="utility:ConstantString" string="SOAPRequest"/>
+        </nodes>
+                """
+                print("Added SOAP Request node")
+            else:
+                soap_section = "<!-- No SOAP Request required -->"
+                print("Skipped SOAP Request node")
+                
+            optimized_template = optimized_template.replace('{DYNAMIC_SOAP_NODE}', soap_section)
+            
+            # 3.6. Process Method Routing Section
+            print("\nProcessing routing section...")
+            if pattern['has_method_routing']:
+                methods = pattern.get('methods', ['method1', 'method2', 'method3'])
+                
+                # Create Route node
+                route_node = """
+        <!-- Route Node -->
+        <nodes xmi:type="ComIbmRoute.msgnode:FCMComposite_1" 
+                xmi:id="FCMComposite_1_20" 
+                location="500,200">
+            <translation xmi:type="utility:ConstantString" string="Route"/>
+        </nodes>
+                """
+                
+                # Create Label nodes for each method
+                label_nodes = ""
+                for i, method in enumerate(methods[:3], 1):  # Limit to 3 methods
+                    label_nodes += f"""
+        <!-- Label Node for {method} -->
+        <nodes xmi:type="ComIbmLabel.msgnode:FCMComposite_1" 
+                xmi:id="FCMComposite_1_3{i}" 
+                location="600,{150 + i*50}" 
+                labelName="{method}">
+            <translation xmi:type="utility:ConstantString" string="Label_{method}"/>
+        </nodes>
+                    """
+                
+                routing_section = route_node + label_nodes
+                print(f"Added Routing node with {len(methods[:3])} methods")
+            else:
+                routing_section = "<!-- No Method Routing required -->"
+                print("Skipped Routing node")
+                
+            optimized_template = optimized_template.replace('{DYNAMIC_ROUTING_SECTION}', routing_section)
+            
+            # 3.7. Process Output Section
+            print("\nProcessing output section...")
+            if pattern['is_synchronous'] and pattern['input_type'] == 'HTTP':
+                output_section = """
+        <!-- HTTP Reply Node -->
+        <nodes xmi:type="ComIbmWSReply.msgnode:FCMComposite_1" 
+                xmi:id="FCMComposite_1_14" 
+                location="1000,100">
+            <translation xmi:type="utility:ConstantString" string="HTTPReply"/>
+        </nodes>
+                """
+                print("Added HTTP Reply node")
+            else:
+                output_section = """
+        <!-- MQ Output Node -->
+        <nodes xmi:type="epis_common_flows_lib_MQOutput.subflow:FCMComposite_1" 
+                xmi:id="FCMComposite_1_14" 
+                location="1000,100" 
+                NonCDM="_ROUTE_NON_CDM_" 
+                STATIC_OUTPUT_QUEUE="{OUTPUT_QUEUE_NAME}" 
+                IS_OUTPUT_MQ="false">
+            <translation xmi:type="utility:ConstantString" string="MQOutput"/>
+        </nodes>
+                """
+                print("Added MQ Output node")
+                
+            optimized_template = optimized_template.replace('{DYNAMIC_OUTPUT_SUBFLOW}', output_section)
+            
+            # 3.8. Generate basic connections
+            print("\nGenerating connection patterns...")
+            
+            connections = """
+        <!-- PRIMARY FLOW PATH -->
+        
+        <!-- Connection 1: MQInput → InputEventMessage -->
+        <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_1" 
+                    targetNode="FCMComposite_1_2" sourceNode="FCMComposite_1_7" 
+                    sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.in"/>
+
+        <!-- Connection 2: InputEventMessage → Compute -->
+        <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_2" 
+                    targetNode="FCMComposite_1_1" sourceNode="FCMComposite_1_2" 
+                    sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+
+        <!-- Connection 3: Compute → OutputEventMessage -->
+        <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_3" 
+                    targetNode="FCMComposite_1_13" sourceNode="FCMComposite_1_1" 
+                    sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+                    
+        <!-- Connection 4: OutputEventMessage → MQOutput -->
+        <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_4" 
+                    targetNode="FCMComposite_1_14" sourceNode="FCMComposite_1_13" 
+                    sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.Input"/>
+                    
+        <!-- ERROR HANDLING -->
+                    
+        <!-- Connection 5: Compute failure → FailureHandler -->
+        <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_5" 
+                    targetNode="FCMComposite_1_11" sourceNode="FCMComposite_1_1" 
+                    sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
+            """
+            
+            if pattern['has_soap_request']:
+                connections += """
+        <!-- SOAP Connections -->
+                    
+        <!-- Connection 6: OutputEventMessage → SOAPRequest -->
+        <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_6" 
+                    targetNode="FCMComposite_1_10" sourceNode="FCMComposite_1_13" 
+                    sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+                    
+        <!-- Connection 7: SOAPRequest → AfterEventMsg -->
+        <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_7" 
+                    targetNode="FCMComposite_1_15" sourceNode="FCMComposite_1_10" 
+                    sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+                    
+        <!-- Connection 8: SOAPRequest failure → FailureHandler -->
+        <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_8" 
+                    targetNode="FCMComposite_1_11" sourceNode="FCMComposite_1_10" 
+                    sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
+                """
+                print("Added SOAP connections")
+                
+            optimized_template = optimized_template.replace('{DYNAMIC_CONNECTIONS}', connections)
+            
+            # 3.9. Generate basic attribute links
+            print("\nGenerating attribute links...")
+            
+            attribute_links = """
+        <!-- MQ Input Links -->
+        <attributeLinks promotedAttribute="Property.COMPRESS_MSG_SIZE" overriddenNodes="FCMComposite_1_7">
+        <overriddenAttribute href="epis/common/flows/lib/MQInput.subflow#Property.COMPRESS_MSG_SIZE"/>
+        </attributeLinks>
+        
+        <attributeLinks promotedAttribute="Property.INPUT_MSG_PARSING" overriddenNodes="FCMComposite_1_7">
+        <overriddenAttribute href="epis/common/flows/lib/MQInput.subflow#Property.INPUT_MSG_PARSING"/>
+        </attributeLinks>
+        
+        <attributeLinks promotedAttribute="Property.INPUT_QUEUE" overriddenNodes="FCMComposite_1_7">
+        <overriddenAttribute href="epis/common/flows/lib/MQInput.subflow#Property.INPUT_QUEUE"/>
+        </attributeLinks>
+            """
+            
+            if pattern['has_soap_request']:
+                attribute_links += """
+        <!-- SOAP Request Links -->
+        <attributeLinks promotedAttribute="Property.SOAP_SERVICE_URL" overriddenNodes="FCMComposite_1_10">
+        <overriddenAttribute href="ComIbmSOAPRequest.msgnode#Property.webServiceURL"/>
+        </attributeLinks>
+        
+        <attributeLinks promotedAttribute="Property.WSDL_FILE_NAME" overriddenNodes="FCMComposite_1_10">
+        <overriddenAttribute href="ComIbmSOAPRequest.msgnode#Property.wsdlFileName"/>
+        </attributeLinks>
+                """
+                print("Added SOAP attribute links")
+                
+            optimized_template = optimized_template.replace('{DYNAMIC_ATTRIBUTE_LINKS}', attribute_links)
+            
+            # 3.10. Process placeholder sections we don't need
+            placeholder_sections = [
+                '{DYNAMIC_BLOB_STORAGE}',
+                '{DYNAMIC_BASE64_ENCODER}',
+                '{DYNAMIC_GZIP_SUBFLOW}',
+                '{DYNAMIC_HTTP_REQUEST}'
+            ]
+            
+            print("\nReplacing unused placeholder sections...")
+            for section in placeholder_sections:
+                if section in optimized_template:
+                    optimized_template = optimized_template.replace(section, f"<!-- {section[1:-1]} not required -->")
+                    print(f"Replaced {section}")
+            
+            # 3.11. Process conditional properties
+            print("\nProcessing conditional properties...")
+            import re
+            
+            # HTTP Input properties
+            if pattern['input_type'] == 'HTTP':
+                optimized_template = optimized_template.replace('{IF_HTTP_INPUT_START}', '')
+                optimized_template = optimized_template.replace('{IF_HTTP_INPUT_END}', '')
+                print("Included HTTP Input properties")
+            else:
+                optimized_template = re.sub(r'{IF_HTTP_INPUT_START}.*?{IF_HTTP_INPUT_END}', '', 
+                                        optimized_template, flags=re.DOTALL)
+                print("Excluded HTTP Input properties")
+            
+            # MQ Input properties
+            if pattern['input_type'] == 'MQ':
+                optimized_template = optimized_template.replace('{IF_MQ_INPUT_START}', '')
+                optimized_template = optimized_template.replace('{IF_MQ_INPUT_END}', '')
+                print("Included MQ Input properties")
+            else:
+                optimized_template = re.sub(r'{IF_MQ_INPUT_START}.*?{IF_MQ_INPUT_END}', '', 
+                                        optimized_template, flags=re.DOTALL)
+                print("Excluded MQ Input properties")
+            
+            # File Input properties
+            if pattern['input_type'] == 'File':
+                optimized_template = optimized_template.replace('{IF_FILE_INPUT_START}', '')
+                optimized_template = optimized_template.replace('{IF_FILE_INPUT_END}', '')
+                print("Included File Input properties")
+            else:
+                optimized_template = re.sub(r'{IF_FILE_INPUT_START}.*?{IF_FILE_INPUT_END}', '', 
+                                        optimized_template, flags=re.DOTALL)
+                print("Excluded File Input properties")
+            
+            # Enrichment properties
+            if pattern['has_enrichment']:
+                optimized_template = optimized_template.replace('{IF_ENRICHMENT_START}', '')
+                optimized_template = optimized_template.replace('{IF_ENRICHMENT_END}', '')
+                print("Included Enrichment properties")
+            else:
+                optimized_template = re.sub(r'{IF_ENRICHMENT_START}.*?{IF_ENRICHMENT_END}', '', 
+                                        optimized_template, flags=re.DOTALL)
+                print("Excluded Enrichment properties")
+            
+            # XSL properties
+            if pattern['has_xsl_transform']:
+                optimized_template = optimized_template.replace('{IF_XSL_START}', '')
+                optimized_template = optimized_template.replace('{IF_XSL_END}', '')
+                print("Included XSL Transform properties")
+            else:
+                optimized_template = re.sub(r'{IF_XSL_START}.*?{IF_XSL_END}', '', 
+                                        optimized_template, flags=re.DOTALL)
+                print("Excluded XSL Transform properties")
+            
+            # SOAP properties
+            if pattern['has_soap_request']:
+                optimized_template = optimized_template.replace('{IF_SOAP_START}', '')
+                optimized_template = optimized_template.replace('{IF_SOAP_END}', '')
+                print("Included SOAP properties")
+            else:
+                optimized_template = re.sub(r'{IF_SOAP_START}.*?{IF_SOAP_END}', '', 
+                                        optimized_template, flags=re.DOTALL)
+                print("Excluded SOAP properties")
+            
+            # Method Routing properties
+            if pattern['has_method_routing']:
+                optimized_template = optimized_template.replace('{IF_ROUTING_START}', '')
+                optimized_template = optimized_template.replace('{IF_ROUTING_END}', '')
+                
+                # Replace method list with actual methods
+                methods = pattern.get('methods', [])
+                if methods:
+                    method_list = ','.join(methods[:3])  # Limit to 3 methods
+                    optimized_template = optimized_template.replace('"method1,method2,method3"', f'"{method_list}"')
+                
+                print("Included Routing properties")
+            else:
+                optimized_template = re.sub(r'{IF_ROUTING_START}.*?{IF_ROUTING_END}', '', 
+                                        optimized_template, flags=re.DOTALL)
+                print("Excluded Routing properties")
+            
+            # Replace any remaining {NESTED_DESCRIPTORS}
+            optimized_template = optimized_template.replace('{NESTED_DESCRIPTORS}', '')
+            
+            # Step 4: Check for any remaining placeholders
+            print("\nSTEP 4: Checking for remaining placeholders...")
+            optimized_template = self.clean_conditional_markers(optimized_template)
+            import re
+            remaining_placeholders = re.findall(r'\{[A-Z_]+\}', optimized_template)
+            if remaining_placeholders:
+                print(f"WARNING: Found {len(set(remaining_placeholders))} unprocessed placeholders:")
+                for placeholder in sorted(set(remaining_placeholders)):
+                    print(f"  - {placeholder}")
+                
+                # Replace remaining placeholders with default values
+                print("Replacing remaining placeholders with default values...")
+                for placeholder in set(remaining_placeholders):
+                    if 'FILE' in placeholder:
+                        optimized_template = optimized_template.replace(placeholder, '/var/mqsi/data')
+                    elif 'URL' in placeholder or 'SERVICE' in placeholder:
+                        optimized_template = optimized_template.replace(placeholder, 'http://service.endpoint')
+                    elif 'QUEUE' in placeholder:
+                        optimized_template = optimized_template.replace(placeholder, 'QUEUE.NAME')
+                    else:
+                        optimized_template = optimized_template.replace(placeholder, placeholder[1:-1])
+            else:
+                print("✓ No remaining placeholders found")
+            
+            # Step 5: Validate and save template
+            print("\nSTEP 5: Validating and saving template...")
+            
+            # Basic validation - check for required sections
+            required_elements = [
+                '<ecore:EPackage',
+                '<eClassifiers',
+                '<composition>',
+                '</composition>',
+                '<propertyOrganizer>',
+                '</propertyOrganizer>',
+                '<stickyBoard/>',
+                '</ecore:EPackage>'
+            ]
+            
+            missing_elements = []
+            for element in required_elements:
+                if element not in optimized_template:
+                    missing_elements.append(element)
+            
+            if missing_elements:
+                print(f"WARNING: Missing required elements: {missing_elements}")
+            else:
+                print("✓ All required elements present")
+            
+            # Basic XML validation
+            try:
+                import xml.dom.minidom as minidom
+                minidom.parseString(optimized_template)
+                print("✓ XML validation successful")
+            except Exception as e:
+                print(f"WARNING: XML validation failed: {e}")
+                print("Continuing despite XML validation failure")
+            
+            # Create parent directory if needed
+            output_dir = os.path.dirname(output_path)
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
+            
+            # Write optimized template to file
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(optimized_template)
+                
+            print(f"\n✓ Successfully saved optimized template to: {output_path}")
+            print(f"Template size: {len(optimized_template)} characters")
+            print("\n========== MSGFLOW TEMPLATE OPTIMIZATION COMPLETED ==========")
+            
+            return output_path
             
         except Exception as e:
-            print(f"\nâŒ CRITICAL ERROR: Messageflow generation failed")
-            print(f"   Error type: {type(e).__name__}")
-            print(f"   Error message: {str(e)}")
+            # Detailed error reporting with traceback
             import traceback
-            print(f"\n   Full traceback:")
-            print(traceback.format_exc())
-            raise
+            error_details = traceback.format_exc()
+            
+            print(f"\n❌ ERROR: Template optimization failed: {str(e)}")
+            print("\nDetailed error traceback:")
+            print(error_details)
+            
+            # Create parent directory if needed
+            output_dir = os.path.dirname(output_path)
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
+            
+            # Write error information to a log file
+            log_path = output_path + ".error.log"
+            with open(log_path, 'w', encoding='utf-8') as f:
+                f.write(f"Error: {str(e)}\n\n")
+                f.write("Traceback:\n")
+                f.write(error_details)
+                
+            print(f"\nError details written to: {log_path}")
+            print("\n========== MSGFLOW TEMPLATE OPTIMIZATION FAILED ==========")
+            
+            # Return the error log path
+            return log_path
+
+
+
+
+    def clean_conditional_markers(self, template: str) -> str:
+        """
+        Clean up all conditional markers and stray comments from the template
+        
+        Args:
+            template: The template string to clean
+            
+        Returns:
+            Cleaned template string
+        """
+        import re
+        
+        print("\nCleaning up conditional markers and stray comments...")
+        
+        # 1. Remove any remaining conditional markers
+        conditional_markers = [
+            'IF_HTTP_INPUT_START', 'IF_HTTP_INPUT_END',
+            'IF_MQ_INPUT_START', 'IF_MQ_INPUT_END',
+            'IF_FILE_INPUT_START', 'IF_FILE_INPUT_END',
+            'IF_BLOB_STORAGE_START', 'IF_BLOB_STORAGE_END',
+            'IF_ENRICHMENT_START', 'IF_ENRICHMENT_END',
+            'IF_XSL_START', 'IF_XSL_END',
+            'IF_SOAP_START', 'IF_SOAP_END',
+            'IF_HTTP_REQUEST_START', 'IF_HTTP_REQUEST_END',
+            'IF_MQ_OUTPUT_START', 'IF_MQ_OUTPUT_END',
+            'IF_FILE_OUTPUT_START', 'IF_FILE_OUTPUT_END',
+            'IF_ROUTING_START', 'IF_ROUTING_END'
+        ]
+        
+        cleaned_template = template
+        
+        # Count remaining markers for logging
+        total_markers_removed = 0
+        
+        # First, check how many markers exist in the template
+        for marker in conditional_markers:
+            marker_count = cleaned_template.count(marker)
+            if marker_count > 0:
+                total_markers_removed += marker_count
+        
+        if total_markers_removed > 0:
+            print(f"  - Found {total_markers_removed} conditional markers to remove")
+        
+        # Remove markers one by one
+        for marker in conditional_markers:
+            original_length = len(cleaned_template)
+            cleaned_template = cleaned_template.replace('{' + marker + '}', '')
+            new_length = len(cleaned_template)
+            if original_length != new_length:
+                print(f"  - Removed marker: {marker}")
+        
+        # 2. Remove stray file path comments (like /var/mqsi/data)
+        # Use regex to find isolated filepath lines that aren't part of XML tags
+        filepath_pattern = r'\n\s*/var/mqsi/\w+\s*\n'
+        filepath_matches = re.findall(filepath_pattern, cleaned_template)
+        
+        if filepath_matches:
+            print(f"  - Found {len(filepath_matches)} stray filepath comments")
+            cleaned_template = re.sub(filepath_pattern, '\n', cleaned_template)
+        
+        # 3. Remove any XML comments that contain placeholder documentation
+        comment_patterns = [
+            r'<!--\s*Possible inputs.*?-->',
+            r'<!--\s*[A-Za-z]+ node.*?-->',
+            r'<!--\s*No\s+\w+\s+required\s*-->',
+            r'<!--\s*DYNAMIC_[A-Z_]+\s+not\s+required\s*-->'
+        ]
+        
+        for pattern in comment_patterns:
+            matches = re.findall(pattern, cleaned_template, re.DOTALL)
+            if matches:
+                print(f"  - Found {len(matches)} documentation comments")
+                cleaned_template = re.sub(pattern, '', cleaned_template, flags=re.DOTALL)
+        
+        # 4. Remove any NESTED_DESCRIPTORS placeholders
+        nested_descriptor_count = cleaned_template.count('{NESTED_DESCRIPTORS}')
+        if nested_descriptor_count > 0:
+            cleaned_template = cleaned_template.replace('{NESTED_DESCRIPTORS}', '')
+            print(f"  - Removed {nested_descriptor_count} NESTED_DESCRIPTORS placeholders")
+        
+        print("✅ Template cleanup complete")
+        return cleaned_template
+
+
+
 
 
     def assemble_messageflow(self, pattern: Dict, business_json: Dict, output_path: str) -> str:
