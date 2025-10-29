@@ -2,7 +2,7 @@
 """
 Enrichment Generator Module v2.0 - ACE Module Creator with Content Chunking
 Purpose: Analyze enrichment requirements with intelligent content chunking to avoid rate limits
-Input: Confluence PDF + component mapping JSON + .msgflow + LLM → Analyze enrichment requirements and generate JSON configs
+Input: Confluence PDF + component mapping JSON + .msgflow + LLM â†’ Analyze enrichment requirements and generate JSON configs
 Output: Creates before_enrichment.json and after_enrichment.json files for data enrichment patterns
 Key Improvement: Intelligent content chunking to handle large documents within API limits
 """
@@ -56,8 +56,85 @@ class EnrichmentGenerator:
             'total_chunks_processed': 0
         }
     
+    def _detect_enrichment_flags(self, msgflow_path: str) -> tuple:
+        """
+        Detect enrichment flags from messageflow XML comments
+        
+        Returns:
+            tuple: (has_before_enrichment: bool, has_after_enrichment: bool)
+        """
+        try:
+            with open(msgflow_path, 'r', encoding='utf-8') as f:
+                msgflow_content = f.read()
+            
+            # Look for Node Configuration Applied section
+            before_pattern = r'<!--\s*Before Enrichment:\s*(True|False)\s*-->'
+            after_pattern = r'<!--\s*After Enrichment:\s*(True|False)\s*-->'
+            
+            before_match = re.search(before_pattern, msgflow_content, re.IGNORECASE)
+            after_match = re.search(after_pattern, msgflow_content, re.IGNORECASE)
+            
+            has_before = before_match and before_match.group(1).lower() == 'true'
+            has_after = after_match and after_match.group(1).lower() == 'true'
+            
+            print(f"  🔍 Enrichment Detection: Before={has_before}, After={has_after}")
+            return (has_before, has_after)
+            
+        except Exception as e:
+            raise Exception(f"Failed to detect enrichment flags in messageflow: {str(e)}")
+    
+    def _cleanup_enrichment_folder(self, output_dir: str):
+        """Delete enrichment folder if it exists"""
+        import shutil
+        enrichment_dir = os.path.join(output_dir, 'enrichment')
+        
+        if os.path.exists(enrichment_dir):
+            try:
+                shutil.rmtree(enrichment_dir)
+                print(f"  🗑️  Cleaned up existing enrichment folder: {enrichment_dir}")
+            except Exception as e:
+                print(f"  ⚠️  Warning: Could not delete enrichment folder: {str(e)}")
+    
+    def _load_enrichment_template(self, template_type: str) -> Dict:
+        """
+        Load enrichment template from templates directory
+        
+        Args:
+            template_type: 'before' or 'after'
+            
+        Returns:
+            Dict: Template structure
+        """
+        template_files = {
+            'before': 'BeforeEnrichmentConf.json',
+            'after': 'AfterEnrichmentConf.json'
+        }
+        
+        if template_type not in template_files:
+            raise ValueError(f"Invalid template type: {template_type}. Must be 'before' or 'after'")
+        
+        # Try multiple possible paths
+        possible_paths = [
+            os.path.join('templates', template_files[template_type]),
+            os.path.join(os.path.dirname(__file__), 'templates', template_files[template_type]),
+            template_files[template_type],  # Current directory
+            os.path.join('/mnt/project', template_files[template_type])  # Absolute path
+        ]
+        
+        for template_path in possible_paths:
+            if os.path.exists(template_path):
+                try:
+                    with open(template_path, 'r', encoding='utf-8') as f:
+                        template = json.load(f)
+                    print(f"  ✅ Loaded {template_type} enrichment template from: {template_path}")
+                    return template
+                except Exception as e:
+                    continue
+        
+        raise Exception(f"Failed to load {template_type} enrichment template. Searched paths: {possible_paths}")
+    
     def generate_enrichment_files(self, 
-                                vector_content,  # ← Vector DB content instead of PDF path
+                                vector_content,  # â† Vector DB content instead of PDF path
                                 business_requirements_json_path: str,
                                 msgflow_path: str,
                                 output_dir: str) -> Dict[str, Any]:
@@ -74,7 +151,34 @@ class EnrichmentGenerator:
             Dict with generation results and metadata
         """
         print("🎯 Starting Enrichment Configuration Generation - Vector DB Mode")
-        print("🔋 VECTOR DB INTEGRATION - Processing business requirements from Vector knowledge base")
+        print("📋 VECTOR DB INTEGRATION - Processing business requirements from Vector knowledge base")
+        
+        # Step 0: Detect if enrichment is needed from messageflow
+        print("\n🔍 Step 0: Detecting enrichment requirements in messageflow...")
+        has_before, has_after = self._detect_enrichment_flags(msgflow_path)
+        
+        # Early return if no enrichment needed
+        if not has_before and not has_after:
+            print("  ℹ️  No enrichment detected in messageflow - skipping generation")
+            self._cleanup_enrichment_folder(output_dir)
+            return {
+                'status': 'skipped',
+                'reason': 'No enrichment nodes found in messageflow',
+                'enrichment_configs_generated': 0,
+                'config_files': [],
+                'output_directory': output_dir,
+            'enrichment_flags': {
+                'before': self.has_before_enrichment,
+                'after': self.has_after_enrichment
+            },
+                'enrichment_flags': {'before': has_before, 'after': has_after}
+            }
+        
+        print(f"  ✅ Enrichment required: Before={has_before}, After={has_after}")
+        
+        # Store flags for later use
+        self.has_before_enrichment = has_before
+        self.has_after_enrichment = has_after
         
         # Step 1: Process inputs for Vector DB analysis
         print("\n📄 Step 1: Processing inputs for Vector DB enrichment analysis...")
@@ -83,15 +187,15 @@ class EnrichmentGenerator:
         msgflow_content = self._extract_complete_msgflow_content(msgflow_path)
         
         # Step 2: LLM Analysis of enrichment patterns using Vector DB content
-        print("\n🧠 Step 2: LLM analysis of enrichment patterns with Vector DB content...")
+        print("\nðŸ§  Step 2: LLM analysis of enrichment patterns with Vector DB content...")
         enrichment_analysis = self._chunked_analyze_enrichment_patterns(vector_content, json_mappings, msgflow_content)
         
         # Step 3: LLM Generation of before/after enrichment JSON configurations
-        print("\n⚡ Step 3: LLM generating before/after enrichment JSON configurations...")
+        print("\nâš¡ Step 3: LLM generating before/after enrichment JSON configurations...")
         enrichment_configs = self._llm_generate_enrichment_configurations(enrichment_analysis)
         
         # Step 4: Write transco configuration files
-        print("\n💾 Step 4: Writing ACE transco files for database operations...")
+        print("\nðŸ’¾ Step 4: Writing ACE transco files for database operations...")
         config_files = self._write_enrichment_configuration_files(enrichment_configs, output_dir)
         
         return {
@@ -103,7 +207,7 @@ class EnrichmentGenerator:
             'llm_generation_calls': self.llm_generation_calls,
             'chunking_stats': self.chunk_processing_stats,
             'processing_metadata': {
-                'vector_content_processed': len(str(vector_content)) if vector_content else 0,  # ← Updated from PDF pages
+                'vector_content_processed': len(str(vector_content)) if vector_content else 0,  # â† Updated from PDF pages
                 'json_components_processed': len(json_mappings.get('enrichment_components', [])),
                 'msgflow_nodes_processed': len(msgflow_content.get('enrichment_nodes', [])),
                 'timestamp': datetime.now().isoformat()
@@ -146,7 +250,7 @@ class EnrichmentGenerator:
             # Default: simple character-based chunking with overlap
             chunks = self._chunk_by_characters(text, chunk_size)
         
-        print(f"  📊 Content chunked: {len(text):,} chars → {len(chunks)} chunks")
+        print(f"  ðŸ“Š Content chunked: {len(text):,} chars â†’ {len(chunks)} chunks")
         return chunks
     
     def _chunk_by_paragraphs(self, text: str, max_size: int) -> List[str]:
@@ -266,17 +370,17 @@ class EnrichmentGenerator:
 
     
     def _chunked_analyze_enrichment_patterns(self, 
-                                        vector_content,  # ← Vector DB content instead of pdf_content
+                                        vector_content,  # â† Vector DB content instead of pdf_content
                                         json_mappings: Dict,
                                         msgflow_content: Dict) -> Dict[str, Any]:
         """
         Analyze enrichment patterns using Vector DB content with LLM integration
         Single LLM call to extract enrichment requirements from Vector business content
         """
-        print("  🧠 Starting Vector DB LLM analysis of enrichment patterns...")
+        print("  ðŸ§  Starting Vector DB LLM analysis of enrichment patterns...")
         
         # Step 1: LLM Analysis of Vector DB content for enrichment requirements
-        print("  🔋 LLM Analysis: Extracting enrichment requirements from Vector DB content...")
+        print("  ðŸ”‹ LLM Analysis: Extracting enrichment requirements from Vector DB content...")
         
         analysis_prompt = f"""Analyze Vector DB business requirements to extract enrichment module specifications:
 
@@ -327,14 +431,14 @@ class EnrichmentGenerator:
             json_match = re.search(r'\{.*\}', analysis_content, re.DOTALL)
             if json_match:
                 enrichment_requirements = json.loads(json_match.group())
-                print(f"  ✅ Vector DB enrichment analysis complete via LLM")
-                print(f"  📊 Found: {len(enrichment_requirements.get('enrichment_patterns', []))} patterns, {len(enrichment_requirements.get('lookup_configurations', []))} lookups")
+                print(f"  âœ… Vector DB enrichment analysis complete via LLM")
+                print(f"  ðŸ“Š Found: {len(enrichment_requirements.get('enrichment_patterns', []))} patterns, {len(enrichment_requirements.get('lookup_configurations', []))} lookups")
                 return enrichment_requirements
             else:
                 raise Exception("LLM did not return valid JSON analysis")
                 
         except Exception as e:
-            print(f"  ❌ LLM enrichment analysis failed: {str(e)}")
+            print(f"  âŒ LLM enrichment analysis failed: {str(e)}")
             # Return default structure instead of failing
             return {
                 'enrichment_patterns': [],
@@ -432,11 +536,11 @@ Extract all enrichment patterns, lookup requirements, and data flow specificatio
                     chunk_analysis = json.loads(json_match.group())
                     return chunk_analysis
                 else:
-                    print(f"    ⚠️ Warning: Could not parse JSON from chunk {chunk_name}")
+                    print(f"    âš ï¸ Warning: Could not parse JSON from chunk {chunk_name}")
                     return {}
                     
         except Exception as e:
-            print(f"    ❌ Error analyzing chunk {chunk_name}: {str(e)}")
+            print(f"    âŒ Error analyzing chunk {chunk_name}: {str(e)}")
             return {}
     
     def _merge_analysis_results(self, aggregated: Dict[str, Any], chunk_result: Dict[str, Any]):
@@ -472,7 +576,7 @@ Extract all enrichment patterns, lookup requirements, and data flow specificatio
         Synthesize and deduplicate results from all chunks
         Remove duplicates and consolidate similar patterns
         """
-        print("    🔄 Removing duplicates and consolidating patterns...")
+        print("    ðŸ”„ Removing duplicates and consolidating patterns...")
         
         # Deduplicate enrichment patterns
         unique_patterns = []
@@ -508,7 +612,7 @@ Extract all enrichment patterns, lookup requirements, and data flow specificatio
                 seen_flows.add(flow_key)
         aggregated_analysis['data_flow_points'] = unique_flows
         
-        print(f"    ✅ Synthesis complete: {len(unique_patterns)} patterns, {len(unique_lookups)} lookups, {len(unique_rules)} rules")
+        print(f"    âœ… Synthesis complete: {len(unique_patterns)} patterns, {len(unique_lookups)} lookups, {len(unique_rules)} rules")
         
         return aggregated_analysis
     
@@ -519,7 +623,7 @@ Extract all enrichment patterns, lookup requirements, and data flow specificatio
         Extract COMPLETE JSON mapping content for enrichment pattern analysis
         NO filtering - all component mapping data goes to LLM for enrichment analysis
         """
-        print(f"  🗂️ Extracting complete JSON component mappings for enrichment analysis from: {json_path}")
+        print(f"  ðŸ—‚ï¸ Extracting complete JSON component mappings for enrichment analysis from: {json_path}")
         
         if not os.path.exists(json_path):
             raise FileNotFoundError(f"Component mapping JSON not found: {json_path}")
@@ -540,7 +644,7 @@ Extract all enrichment patterns, lookup requirements, and data flow specificatio
                 'data_enhancement_rules': self._extract_data_enhancement_rules(json_data)
             }
             
-            print(f"  ✅ JSON processed: {len(str(json_data))} characters, {len(enhanced_json['enrichment_components'])} enrichment components identified")
+            print(f"  âœ… JSON processed: {len(str(json_data))} characters, {len(enhanced_json['enrichment_components'])} enrichment components identified")
             self.processed_json_mappings = enhanced_json
             return enhanced_json
             
@@ -642,7 +746,7 @@ Extract all enrichment patterns, lookup requirements, and data flow specificatio
         Extract COMPLETE .msgflow content for enrichment point analysis
         NO filtering - entire MessageFlow structure goes to LLM for enrichment analysis
         """
-        print(f"  📄 Extracting complete .msgflow content for enrichment analysis from: {msgflow_path}")
+        print(f"  ðŸ“„ Extracting complete .msgflow content for enrichment analysis from: {msgflow_path}")
         
         if not os.path.exists(msgflow_path):
             raise FileNotFoundError(f"MessageFlow file not found: {msgflow_path}")
@@ -665,7 +769,7 @@ Extract all enrichment patterns, lookup requirements, and data flow specificatio
                 'flow_metadata': self._extract_msgflow_metadata(root)
             }
             
-            print(f"  ✅ MessageFlow processed: {len(msgflow_xml)} characters, {len(msgflow_data['enrichment_nodes'])} enrichment nodes identified")
+            print(f"  âœ… MessageFlow processed: {len(msgflow_xml)} characters, {len(msgflow_data['enrichment_nodes'])} enrichment nodes identified")
             self.processed_msgflow_content = msgflow_data
             return msgflow_data
             
@@ -774,80 +878,98 @@ Extract all enrichment patterns, lookup requirements, and data flow specificatio
     
     def _llm_generate_enrichment_configurations(self, enrichment_analysis: Dict) -> Dict[str, Any]:
         """
-        LLM generates CW1-specific before/after enrichment JSON configurations
-        Pure LLM generation based on Vector DB analysis results for CW1 document processing
+        LLM generates enrichment configurations by filling templates with business data
+        Uses BeforeEnrichmentConf.json and AfterEnrichmentConf.json templates
         """
-        print("  ⚡ LLM generating CW1 before/after enrichment JSON configurations...")
+        print("  ⚡ LLM generating enrichment configurations from templates...")
         
-        system_prompt = """You are an expert IBM ACE data enrichment architect specializing in transco file generation for database operations.
-
-        Generate separate IBM ACE transco files for database enrichment operations using EnrichConfigs.MsgEnrich format.
-
-        TRANSCO FILE REQUIREMENTS:
-        - Generate separate transco JSON configurations for EACH database operation found in the requirements
-        - Use EnrichConfigs.MsgEnrich structure with DBAlias, SQLCommand, Source, Dest
-        - Include proper XPath mappings and database parameter binding
-        - Each operation should be a separate configuration file
-        - Follow IBM ACE enrichment subflow standards
-
-        OUTPUT: Return JSON object with one key per database operation found, containing complete ACE transco configurations in EnrichConfigs.MsgEnrich format."""
+        configs = {}
         
+        # Generate Before Enrichment if needed
+        if self.has_before_enrichment:
+            try:
+                print("    📝 Generating Before Enrichment configuration...")
+                before_template = self._load_enrichment_template('before')
+                before_config = self._llm_fill_enrichment_template(
+                    template=before_template,
+                    enrichment_analysis=enrichment_analysis,
+                    template_type='before'
+                )
+                configs['before_enrichment'] = before_config
+                print("    ✅ Before Enrichment configuration generated")
+            except Exception as e:
+                raise Exception(f"Failed to generate Before Enrichment configuration: {str(e)}")
         
-        user_prompt = f"""Generate IBM ACE transco files based on database operations found in business requirements:
-
-        ## VECTOR DB ANALYSIS CONTEXT:
-        {json.dumps(enrichment_analysis.get('lookup_configurations', []), indent=2)[:1000]}
-
-        ## TASK:
-        Analyze the lookup_configurations to identify all database operations and generate separate transco files for each operation using EnrichConfigs.MsgEnrich format.
-
-        ## TRANSCO FORMAT EXAMPLE:
-        Each operation should follow this EnrichConfigs.MsgEnrich structure:
-
-        {{
-        "EnrichConfigs": {{
-            "MsgEnrich": [{{
-            "DBAlias": "database-alias-from-analysis",
-            "Table": "",
-            "Mandatory": false,
-            "Active": true,
-            "DisableCaching": false,
-            "SQLCommand": "stored_procedure_name @param1='{{0}}',@param2='{{1}}'",
-            "Scope_prefix": "",
-            "Scope_xmlns": "",
-            "Scope": "//DBparameters",
-            "Source": [
-                {{"FieldName": "param1", 
-                "xPathValue": "//DBparameters/param1",
-                "FieldValue": "",
-                "Optional": true,
-                "Source": "Message"}},
-                {{"FieldName": "param2", 
-                "xPathValue": "//DBparameters/param2",
-                "FieldValue": "",
-                "Optional": true,
-                "Source": "Message"}}
-            ],
-            "Dest": [
-                {{"FieldName": "//DBparameters/ResultField", 
-                "xPathValue": "", 
-                "Optional": true, 
-                "DefaultValue": ""}}
-            ]
-            }}]
-        }}
-        }}
-
-        CRITICAL STRUCTURE RULES:
-        - "Table": Always empty string ""
-        - "Mandatory": Always false
-        - "Active": Always true
-        - "DisableCaching": Always false
-        - In Source array: Each entry must have "FieldValue": "" (empty string)
-        - All field names, database aliases, XPaths must be extracted from the analysis - NO hardcoded values
-
-        Return JSON with operation names as keys (e.g., "sp_GetMainCompanyInCountry") and their transco configurations as values."""
+        # Generate After Enrichment if needed
+        if self.has_after_enrichment:
+            try:
+                print("    📝 Generating After Enrichment configuration...")
+                after_template = self._load_enrichment_template('after')
+                after_config = self._llm_fill_enrichment_template(
+                    template=after_template,
+                    enrichment_analysis=enrichment_analysis,
+                    template_type='after'
+                )
+                configs['after_enrichment'] = after_config
+                print("    ✅ After Enrichment configuration generated")
+            except Exception as e:
+                raise Exception(f"Failed to generate After Enrichment configuration: {str(e)}")
         
+        if not configs:
+            raise Exception("No enrichment configurations generated - both before and after are disabled")
+        
+        return configs
+    
+    def _llm_fill_enrichment_template(self, template: Dict, enrichment_analysis: Dict, template_type: str) -> Dict:
+        """
+        Use LLM to fill enrichment template with business data from vector DB analysis
+        
+        Args:
+            template: Template structure to fill
+            enrichment_analysis: Business requirements analysis from vector DB
+            template_type: 'before' or 'after'
+            
+        Returns:
+            Dict: Filled template with actual business values
+        """
+        print(f"      🤖 Using LLM to populate {template_type} enrichment template with business data...")
+        
+        system_prompt = f"""You are an IBM ACE enrichment configuration expert. Your task is to fill an enrichment template with REAL business data extracted from requirements.
+
+CRITICAL RULES:
+1. ONLY use data found in the business requirements - NO assumptions or defaults
+2. Extract: DBAlias, SQLCommand (stored procedures), field names, XPath expressions, namespaces
+3. Maintain template structure exactly (Table="", Mandatory=false, Active=true, etc.)
+4. If multiple database operations exist, include all in MsgEnrich array
+5. Return ONLY valid JSON - no explanations or markdown
+
+TEMPLATE TYPE: {template_type.upper()} ENRICHMENT
+
+This is {template_type} enrichment - data lookup happens {'before' if template_type == 'before' else 'after'} main processing."""
+
+        user_prompt = f"""Fill this enrichment template with REAL data from business requirements:
+
+## TEMPLATE TO FILL:
+{json.dumps(template, indent=2)}
+
+## BUSINESS REQUIREMENTS ANALYSIS:
+{json.dumps(enrichment_analysis, indent=2)[:8000]}
+
+## YOUR TASK:
+1. Find database operations from the analysis (stored procedures, database aliases, parameters)
+2. Extract field mappings and XPath expressions
+3. Fill the template's MsgEnrich array with REAL values from requirements
+4. If multiple operations found, add multiple entries to MsgEnrich array
+5. Keep structural fields unchanged: Table="", Mandatory=false, Active=true, DisableCaching=false
+
+## EXTRACTION CHECKLIST:
+- DBAlias: Extract from requirements (database connection names)
+- SQLCommand: Find stored procedure calls with parameter syntax
+- Scope/Scope_xmlns/Scope_prefix: Extract XML namespaces and paths
+- Source array: Input parameters with their XPath expressions
+- Dest array: Output fields to populate
+
+Return the complete filled template as valid JSON."""
 
         try:
             response = self.llm.chat.completions.create(
@@ -856,73 +978,54 @@ Extract all enrichment patterns, lookup requirements, and data flow specificatio
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.1,  # Lower temperature for consistent configuration generation
+                temperature=0.1,
                 max_tokens=4000
             )
-
-            # Token tracking for Streamlit if available
+            
+            # Token tracking
             if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
                 st.session_state.token_tracker.manual_track(
                     agent="enrichment_generator",
-                    operation="cw1_enrichment_generation",
+                    operation=f"{template_type}_enrichment_fill",
                     model=self.groq_model,
                     input_tokens=response.usage.prompt_tokens,
                     output_tokens=response.usage.completion_tokens,
-                    flow_name="cw1_enrichment_config"
+                    flow_name=f"{template_type}_enrichment"
                 )
             
             config_content = response.choices[0].message.content.strip()
             self.llm_generation_calls += 1
             
-            # Clean up any markdown formatting if present
+            # Clean markdown formatting
             config_content = re.sub(r'^```json\s*\n?', '', config_content)
             config_content = re.sub(r'\n?```\s*$', '', config_content)
             
-            # Parse JSON response
-            try:
-                enrichment_configs = json.loads(config_content)
-                
-                # Validate structure
-                if not isinstance(enrichment_configs, dict):
-                    raise ValueError("LLM must return a JSON object")
-                
-                if len(enrichment_configs) == 0:
-                    raise ValueError("LLM must return at least one configuration")
-                
-                print(f"  ✅ CW1 enrichment configuration generation complete")
-                print(f"  📊 Generated {len(enrichment_configs)} separate transco configurations for CW1 processing")  # ← Updated
-                return enrichment_configs
-                
-            except json.JSONDecodeError:
-                # Try to extract JSON from response using regex
-                json_match = re.search(r'\{.*\}', config_content, re.DOTALL)
-                if json_match:
-                    enrichment_configs = json.loads(json_match.group())
-                    print(f"  ✅ CW1 configuration generation complete (extracted from response)")
-                    return enrichment_configs
-                else:
-                    raise Exception("LLM did not return valid JSON configuration")
-                    
+            # Parse JSON
+            filled_template = json.loads(config_content)
+            
+            # Validate structure
+            if not isinstance(filled_template, dict):
+                raise ValueError("LLM must return a JSON object")
+            
+            if 'EnrichConfigs' not in filled_template:
+                raise ValueError("Missing EnrichConfigs key in response")
+            
+            if 'MsgEnrich' not in filled_template['EnrichConfigs']:
+                raise ValueError("Missing MsgEnrich array in EnrichConfigs")
+            
+            msg_enrich = filled_template['EnrichConfigs']['MsgEnrich']
+            if not isinstance(msg_enrich, list) or len(msg_enrich) == 0:
+                raise ValueError("MsgEnrich must be a non-empty array")
+            
+            print(f"      ✅ Template filled: {len(msg_enrich)} database operations configured")
+            return filled_template
+            
+        except json.JSONDecodeError as e:
+            raise Exception(f"LLM returned invalid JSON for {template_type} enrichment: {str(e)}")
         except Exception as e:
-            print(f"  ❌ CW1 enrichment configuration generation failed: {str(e)}")
-            # Return default CW1 structure instead of failing
-            return {
-                'before_enrichment': {
-                    'document_structure': 'CDM Document',
-                    'required_fields': ['CompanyCode', 'CountryCode', 'EntityReferenceType'],
-                    'validation_rules': [],
-                    'database_connections': ['MH.ESB.EDIEnterprise', 'DSV.ESB.Integration']
-                },
-                'after_enrichment': {
-                    'document_structure': 'Enriched CDM Document',
-                    'enriched_fields': ['CompanyCode', 'EE_ShipmentId_by_SSN', 'IsPublished', 'eAdapterRecipientID'],
-                    'validation_rules': [],
-                    'output_format': 'UniversalEvent'
-                }
-            }
-    
+            raise Exception(f"Failed to fill {template_type} enrichment template: {str(e)}")
 
-    
+
     def _safe_enrichment_data(self, data: Dict) -> Dict:
         """Convert any Ellipsis values to safe strings"""
         safe_data = {}
@@ -946,23 +1049,35 @@ Extract all enrichment patterns, lookup requirements, and data flow specificatio
         """Write enrichment configuration files to output directory"""
         print("  💾 Writing enrichment configuration files...")
         
-        os.makedirs(output_dir, exist_ok=True)
+        # Create enrichment subdirectory
+        enrichment_dir = os.path.join(output_dir, 'enrichment')
+        os.makedirs(enrichment_dir, exist_ok=True)
         config_files = []
         
         try:
-            # ✅ FIXED: Apply safe data handling
+            # Apply safe data handling
             safe_configs = self._safe_enrichment_data(enrichment_configs)
             
-
-            # Write separate transco file for each database operation
-            for operation_name, transco_config in safe_configs.items():
-                filename = f"{operation_name}.json"
-                file_path = os.path.join(output_dir, filename)
-                
+            # Write before_enrichment.json if present
+            if 'before_enrichment' in safe_configs:
+                filename = "BeforeEnrichmentConf.json"
+                file_path = os.path.join(enrichment_dir, filename)
                 with open(file_path, 'w', encoding='utf-8') as f:
-                    json.dump(transco_config, f, indent=2)
+                    json.dump(safe_configs['before_enrichment'], f, indent=2)
                 config_files.append(file_path)
                 print(f"    ✅ Generated: {filename}")
+            
+            # Write after_enrichment.json if present
+            if 'after_enrichment' in safe_configs:
+                filename = "AfterEnrichmentConf.json"
+                file_path = os.path.join(enrichment_dir, filename)
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(safe_configs['after_enrichment'], f, indent=2)
+                config_files.append(file_path)
+                print(f"    ✅ Generated: {filename}")
+            
+            if not config_files:
+                raise Exception("No enrichment configuration files were written")
             
             return config_files
             
@@ -982,12 +1097,12 @@ def main():
         output_dir="test_output"
     )
     
-    print(f"\n🎯 Enrichment Generation Results:")
-    print(f"✅ Status: {result['status']}")
-    print(f"📊 Configs Generated: {result['enrichment_configs_generated']}")
-    print(f"🧠 LLM Analysis Calls: {result['llm_analysis_calls']}")
-    print(f"⚡ LLM Generation Calls: {result['llm_generation_calls']}")
-    print(f"📦 Chunking Stats: {result['chunking_stats']}")
+    print(f"\n Enrichment Generation Results:")
+    print(f"Status: {result['status']}")
+    print(f"Configs Generated: {result['enrichment_configs_generated']}")
+    print(f"LLM Analysis Calls: {result['llm_analysis_calls']}")
+    print(f"LLM Generation Calls: {result['llm_generation_calls']}")
+    print(f"Chunking Stats: {result['chunking_stats']}")
 
 
 if __name__ == "__main__":

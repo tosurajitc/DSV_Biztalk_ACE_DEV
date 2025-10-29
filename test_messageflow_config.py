@@ -1,267 +1,168 @@
 #!/usr/bin/env python3
 """
-Test script for verifying _extract_node_configuration functionality
+Test Script for Enrichment Generator v2.0
+Validates detection, template loading, and conditional generation
 """
 
-from typing import Dict, Optional
-import json
 import sys
+import os
+sys.path.insert(0, '/mnt/project')
 
-def test_extract_node_configuration(business_reqs: Dict, flow_name: str) -> Dict:
-    """
-    Test version of _extract_node_configuration to verify it works correctly
+from enrichment_generator import EnrichmentGenerator
+
+def test_enrichment_detection():
+    """Test 1: Enrichment flag detection"""
+    print("\n" + "="*60)
+    print("TEST 1: Enrichment Flag Detection")
+    print("="*60)
     
-    Args:
-        business_reqs: Business requirements data
-        flow_name: Name of the flow
-        
-    Returns:
-        Node configuration dictionary
-    """
-    # Initialize with all nodes disabled
-    node_config = {
-        'needs_http_input': False,
-        'needs_http_reply': False,
-        'needs_mq_input': False,
-        'needs_mq_output': False,
-        'needs_file_input': False,
-        'needs_file_output': False,
-        'needs_soap_request': False,
-        'needs_xsl_transform': False,
-        'needs_before_enrichment': False,
-        'needs_after_enrichment': False,
-        'needs_gzip_compression': False,
-        'needs_routing': False,
-        'http_config': {},
-        'soap_config': {}
-    }
+    generator = EnrichmentGenerator(groq_api_key="test_key")
     
+    # Test with sample messageflow
+    msgflow_path = "/mnt/project/messageflow_template_sample.xml"
+    
+    if os.path.exists(msgflow_path):
+        try:
+            has_before, has_after = generator._detect_enrichment_flags(msgflow_path)
+            print(f"✅ Detection successful:")
+            print(f"   Before Enrichment: {has_before}")
+            print(f"   After Enrichment: {has_after}")
+            return True
+        except Exception as e:
+            print(f"❌ Detection failed: {str(e)}")
+            return False
+    else:
+        print(f"⚠️  Messageflow file not found: {msgflow_path}")
+        return False
+
+def test_template_loading():
+    """Test 2: Template loading"""
+    print("\n" + "="*60)
+    print("TEST 2: Template Loading")
+    print("="*60)
+    
+    generator = EnrichmentGenerator(groq_api_key="test_key")
+    
+    templates_found = []
+    
+    # Test Before template
     try:
-        print(f"Analyzing business requirements for flow: {flow_name}")
-        
-        # 1. Determine input method from business requirements
-        input_methods = business_reqs.get('integration_flows', {}).get('input_methods', [])
-        input_protocol = None
-        
-        print(f"Input methods found: {input_methods}")
-        
-        # Check for specific input protocols in input_methods
-        for input_method in input_methods:
-            if isinstance(input_method, dict):
-                method = input_method.get('method', '').upper()
-                protocol = input_method.get('protocol', '').upper()
-                
-                print(f"Checking input method: method={method}, protocol={protocol}")
-                
-                if protocol == 'HTTP' or method == 'HTTP' or method == 'REST':
-                    node_config['needs_http_input'] = True
-                    node_config['needs_http_reply'] = True
-                    input_protocol = 'HTTP'
-                    print("  - Detected HTTP input protocol")
-                elif protocol == 'MQ' or method == 'MQ' or method == 'QUEUE':
-                    node_config['needs_mq_input'] = True
-                    input_protocol = 'MQ'
-                    print("  - Detected MQ input protocol")
-                elif protocol == 'FILE' or method == 'FILE':
-                    node_config['needs_file_input'] = True
-                    input_protocol = 'FILE'
-                    print("  - Detected File input protocol")
-        
-        # 2. Check flow patterns for additional protocol hints
-        flow_patterns = business_reqs.get('technical_specs', {}).get('message_flow_patterns', [])
-        print(f"Flow patterns found: {flow_patterns}")
-        
-        for pattern in flow_patterns:
-            if isinstance(pattern, str):
-                if 'HTTP' in pattern.upper() or 'REST' in pattern.upper() or 'WEB' in pattern.upper():
-                    node_config['needs_http_input'] = True
-                    node_config['needs_http_reply'] = True
-                    input_protocol = 'HTTP'
-                    print("  - Detected HTTP input from flow pattern")
-                elif 'MQ' in pattern.upper() or 'QUEUE' in pattern.upper() or 'JMS' in pattern.upper():
-                    node_config['needs_mq_input'] = True 
-                    input_protocol = 'MQ'
-                    print("  - Detected MQ input from flow pattern")
-                elif 'FILE' in pattern.upper() or 'DIRECTORY' in pattern.upper():
-                    node_config['needs_file_input'] = True
-                    input_protocol = 'FILE'
-                    print("  - Detected File input from flow pattern")
-        
-        # 3. Check for XSL Transform indicators
-        for section in ['technical_specs', 'integration_flows']:
-            section_data = business_reqs.get(section, {})
-            print(f"Checking section '{section}' for transformation indicators")
-            
-            # Convert to string for pattern matching
-            section_str = str(section_data).lower()
-            
-            if 'transform' in section_str or 'xslt' in section_str or 'stylesheet' in section_str or 'mapping' in section_str:
-                node_config['needs_xsl_transform'] = True
-                print("  - Detected XSL Transform requirement")
-        
-        # 4. Check for Enrichment indicators
-        enrichment_str = str(business_reqs).lower()
-        if 'enrich before' in enrichment_str or 'before enrich' in enrichment_str:
-            node_config['needs_before_enrichment'] = True
-            print("  - Detected Before Enrichment requirement")
-        
-        if 'enrich after' in enrichment_str or 'after enrich' in enrichment_str:
-            node_config['needs_after_enrichment'] = True
-            print("  - Detected After Enrichment requirement")
-        
-        # 5. Check for SOAP indicators
-        soap_str = str(business_reqs).lower()
-        if 'soap' in soap_str or 'web service' in soap_str:
-            node_config['needs_soap_request'] = True
-            print("  - Detected SOAP Request requirement")
-        
-        # 6. Check for Compression indicators
-        compression_str = str(business_reqs).lower()
-        if 'compress' in compression_str or 'gzip' in compression_str:
-            node_config['needs_gzip_compression'] = True
-            print("  - Detected GZip Compression requirement")
-        
-        # 7. Check for Routing indicators
-        routing_str = str(business_reqs).lower()
-        if 'route' in routing_str or 'branch' in routing_str or 'decision' in routing_str:
-            node_config['needs_routing'] = True
-            print("  - Detected Routing requirement")
-        
-        # 8. Determine output method based on input method and explicit requirements
-        output_methods = business_reqs.get('integration_flows', {}).get('output_systems', [])
-        output_protocol = None
-        
-        print(f"Output methods found: {output_methods}")
-        
-        # Check for explicit output protocol specifications
-        for output in output_methods:
-            if isinstance(output, dict):
-                method = output.get('method', '').upper()
-                protocol = output.get('protocol', '').upper()
-                
-                print(f"Checking output method: method={method}, protocol={protocol}")
-                
-                if protocol == 'HTTP' or method == 'HTTP' or method == 'REST':
-                    output_protocol = 'HTTP'
-                    print("  - Detected HTTP output protocol")
-                elif protocol == 'MQ' or method == 'MQ' or method == 'QUEUE':
-                    output_protocol = 'MQ'
-                    print("  - Detected MQ output protocol")
-                elif protocol == 'FILE' or method == 'FILE':
-                    output_protocol = 'FILE'
-                    print("  - Detected File output protocol")
-        
-        # If no explicit output protocol, use the same as input for consistency
-        if not output_protocol and input_protocol:
-            output_protocol = input_protocol
-            print(f"  - Using input protocol '{input_protocol}' for output")
-        
-        # Set output nodes based on determined output protocol
-        if output_protocol == 'HTTP':
-            node_config['needs_http_reply'] = True
-            node_config['needs_mq_output'] = False
-            node_config['needs_file_output'] = False
-        elif output_protocol == 'MQ':
-            node_config['needs_mq_output'] = True
-            node_config['needs_http_reply'] = False
-            node_config['needs_file_output'] = False
-        elif output_protocol == 'FILE':
-            node_config['needs_file_output'] = True
-            node_config['needs_mq_output'] = False
-            node_config['needs_http_reply'] = False
-        
-        # 9. Configure HTTP URL if needed
-        if node_config['needs_http_input']:
-            node_config['http_config'] = {
-                'url_path': f'/services/{flow_name}',
-                'http_method': 'POST'
-            }
-        
-        # 10. Verify at least one input method is set
-        if not (node_config['needs_http_input'] or node_config['needs_mq_input'] or node_config['needs_file_input']):
-            print("⚠️ WARNING: No input method detected! Defaulting to MQ input.")
-            node_config['needs_mq_input'] = True
-            node_config['needs_mq_output'] = True
-        
-        return node_config
-        
+        before_template = generator._load_enrichment_template('before')
+        print(f"✅ Before template loaded successfully")
+        print(f"   Structure: {list(before_template.keys())}")
+        templates_found.append('before')
     except Exception as e:
-        print(f"❌ ERROR in extraction: {str(e)}")
-        # Return default configuration with basic nodes enabled
-        return {
-            'needs_http_input': False,
-            'needs_http_reply': False,
-            'needs_mq_input': True,  # Default to MQ
-            'needs_mq_output': True,
-            'needs_file_input': False,
-            'needs_file_output': False,
-            'needs_soap_request': False,
-            'needs_xsl_transform': False,
-            'needs_before_enrichment': False,
-            'needs_after_enrichment': False,
-            'needs_gzip_compression': False,
-            'needs_routing': False
-        }
+        print(f"❌ Before template loading failed: {str(e)}")
+    
+    # Test After template
+    try:
+        after_template = generator._load_enrichment_template('after')
+        print(f"✅ After template loaded successfully")
+        print(f"   Structure: {list(after_template.keys())}")
+        templates_found.append('after')
+    except Exception as e:
+        print(f"❌ After template loading failed: {str(e)}")
+    
+    return len(templates_found) == 2
+
+def test_cleanup():
+    """Test 3: Cleanup functionality"""
+    print("\n" + "="*60)
+    print("TEST 3: Cleanup Functionality")
+    print("="*60)
+    
+    import tempfile
+    import shutil
+    
+    generator = EnrichmentGenerator(groq_api_key="test_key")
+    
+    # Create temporary test directory
+    test_dir = tempfile.mkdtemp()
+    enrichment_dir = os.path.join(test_dir, 'enrichment')
+    os.makedirs(enrichment_dir, exist_ok=True)
+    
+    # Create dummy file
+    dummy_file = os.path.join(enrichment_dir, 'test.json')
+    with open(dummy_file, 'w') as f:
+        f.write('{"test": "data"}')
+    
+    print(f"   Created test enrichment folder: {enrichment_dir}")
+    
+    # Test cleanup
+    try:
+        generator._cleanup_enrichment_folder(test_dir)
+        
+        if not os.path.exists(enrichment_dir):
+            print(f"✅ Cleanup successful - enrichment folder removed")
+            shutil.rmtree(test_dir)
+            return True
+        else:
+            print(f"❌ Cleanup failed - enrichment folder still exists")
+            shutil.rmtree(test_dir)
+            return False
+    except Exception as e:
+        print(f"❌ Cleanup error: {str(e)}")
+        shutil.rmtree(test_dir)
+        return False
+
+def validate_implementation():
+    """Validate key implementation aspects"""
+    print("\n" + "="*60)
+    print("VALIDATION: Implementation Check")
+    print("="*60)
+    
+    generator = EnrichmentGenerator(groq_api_key="test_key")
+    
+    # Check required methods exist
+    required_methods = [
+        '_detect_enrichment_flags',
+        '_cleanup_enrichment_folder',
+        '_load_enrichment_template',
+        '_llm_fill_enrichment_template',
+        'generate_enrichment_files'
+    ]
+    
+    all_present = True
+    for method_name in required_methods:
+        if hasattr(generator, method_name):
+            print(f"✅ Method exists: {method_name}")
+        else:
+            print(f"❌ Method missing: {method_name}")
+            all_present = False
+    
+    return all_present
 
 def main():
-    # Test with sample business requirements
-    sample_business_reqs = {
-        "technical_specs": {
-            "message_flow_patterns": [
-                "HTTP REST API with transformation",
-                "MQ queue processing with SOAP integration"
-            ],
-            "routing_logic": ["Method-based routing for different service operations"],
-            "data_transformation_points": ["XML to JSON transformation using XSLT"],
-            "error_handling_patterns": ["Standard error flow with message logging"],
-            "performance_requirements": ["Low latency processing"]
-        },
-        "integration_flows": {
-            "input_systems": ["SAP ECC", "CRM"],
-            "input_methods": [
-                {"method": "MQ", "protocol": "MQ", "details": "IBM MQ queue input"},
-                {"method": "HTTP", "protocol": "HTTP", "details": "REST API endpoint"}
-            ],
-            "output_systems": [
-                {"system": "Edicom", "protocol": "SOAP", "details": "Web Service integration"}
-            ],
-            "integration_patterns": ["Transform and Enrich before sending to service"]
-        }
+    """Run all tests"""
+    print("\n" + "="*60)
+    print("ENRICHMENT GENERATOR v2.0 - TEST SUITE")
+    print("="*60)
+    
+    results = {
+        'Detection': test_enrichment_detection(),
+        'Template Loading': test_template_loading(),
+        'Cleanup': test_cleanup(),
+        'Implementation': validate_implementation()
     }
     
-    # Test with different flow names
-    test_flows = ["HTTPFlow", "MQFlow", "FileFlow", "SAP_Data_Edicom_RTS"]
+    print("\n" + "="*60)
+    print("TEST RESULTS SUMMARY")
+    print("="*60)
     
-    for flow in test_flows:
-        print("\n" + "="*50)
-        print(f"TESTING FLOW: {flow}")
-        print("="*50)
-        
-        config = test_extract_node_configuration(sample_business_reqs, flow)
-        
-        print("\nEXTRACTED CONFIGURATION:")
-        print("-"*30)
-        for key, value in config.items():
-            print(f"  {key}: {value}")
+    for test_name, passed in results.items():
+        status = "✅ PASS" if passed else "❌ FAIL"
+        print(f"{status} - {test_name}")
     
-    # Test with minimal business requirements
-    minimal_reqs = {
-        "technical_specs": {
-            "message_flow_patterns": []
-        },
-        "integration_flows": {}
-    }
+    all_passed = all(results.values())
     
-    print("\n" + "="*50)
-    print(f"TESTING WITH MINIMAL REQUIREMENTS")
-    print("="*50)
+    print("\n" + "="*60)
+    if all_passed:
+        print("🎉 ALL TESTS PASSED")
+    else:
+        print("⚠️  SOME TESTS FAILED - Review output above")
+    print("="*60)
     
-    config = test_extract_node_configuration(minimal_reqs, "MinimalFlow")
-    
-    print("\nEXTRACTED CONFIGURATION:")
-    print("-"*30)
-    for key, value in config.items():
-        print(f"  {key}: {value}")
+    return 0 if all_passed else 1
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
