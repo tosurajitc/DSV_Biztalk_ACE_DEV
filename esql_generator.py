@@ -1,781 +1,158 @@
+#!/usr/bin/env python3
 """
-Generates IBM ACE ESQL modules from:
-1. Vector DB business requirements (business context)
-2. MessageFlow XML (source of truth for module names)
-3. ESQL Template (structural foundation)
-4. Component mappings (transformation patterns)
+Enhanced ESQL Generator and MessageFlow Updater v2.1
 
-Key Optimizations:
-- MessageFlow-driven requirements (eliminates generic placeholders)
-- Template-first generation (LLM fills business logic only)
-- Integrated validation pipeline (auto-fix before write)
-- Unified LLM integration with llm_json_parser
+This module:
+1. Extracts required ESQL nodes from Vector DB business requirements
+2. Updates existing messageflow files with required nodes
+3. Creates ESQL files based on business patterns from Vector DB
+4. Ensures proper node connections based on business flow
 
+Key features:
+- Dynamic ESQL node detection (no hardcoded modules)
+- MessageFlow file updating with required ESQL nodes
+- Business-driven ESQL file generation from templates
+- Flexible for 1000+ different flow patterns
+- Preserves comments in messageflow files
+- Uses proper naming convention from naming_convention.json
 """
 
 import os
-import json
 import re
-import xml.etree.ElementTree as ET
-from typing import Dict, List, Any, Optional, Tuple
+import json
+import glob
+import shutil
+from typing import Dict, List, Any, Optional, Tuple, Set
 from pathlib import Path
+import xml.etree.ElementTree as ET
+import xml.dom.minidom as minidom
 from groq import Groq
 from llm_json_parser import LLMJSONParser, parse_llm_json
 
 
 class ESQLGenerator:
     """
-    Optimized ESQL Generator with MessageFlow-driven requirements extraction
-    and template-first generation approach.
+    Enhanced ESQL Generator with dynamic node detection and messageflow updating
     """
     
     def __init__(self, groq_api_key: Optional[str] = None, groq_model: str = "llama-3.3-70b-versatile"):
         """
-        Initialize ESQL Generator with LLM configuration.
+        Initialize enhanced ESQL Generator with LLM configuration.
         
         Args:
             groq_api_key: Groq API key (optional, can use environment variable)
-            groq_model: LLM model to use (no hardcoding, configurable)
+            groq_model: LLM model to use (configurable)
         """
         self.groq_api_key = groq_api_key or os.getenv('GROQ_API_KEY')
         if not self.groq_api_key:
             raise ValueError("GROQ_API_KEY must be provided or set in environment")
         
         self.groq_client = Groq(api_key=self.groq_api_key)
-        self.groq_model = groq_model
+        self.groq_model = groq_model or os.getenv('GROQ_MODEL', 'llama-3.1-70b-versatile')
         self.json_parser = LLMJSONParser(debug=False)
         
-        # Generation tracking
+        # Store extracted business information
+        self.business_requirements = {}
+        self.required_nodes = []
+        self.database_operations = []
+        self.transformations = []
+        
+        # Tracking for generation
         self.generation_stats = {
             'llm_calls': 0,
             'successful_generations': 0,
             'failed_generations': 0,
-            'auto_fixes_applied': 0
+            'auto_fixes_applied': 0,
+            'messageflows_updated': 0
         }
         
-        print(f"✅ ESQLGenerator initialized with model: {self.groq_model}")
-    
-    
-    def _load_inputs(self, esql_template: Dict, msgflow_content: Dict, 
-                 json_mappings: Dict, output_dir: str) -> Tuple[str, str, Dict, Dict]:
-        """
-        Load all input files needed for ESQL generation.
-        
-        Args:
-            esql_template: Dict with 'path' key pointing to ESQL_Template_Updated.ESQL
-            msgflow_content: Dict with 'path' key pointing to .msgflow file
-            json_mappings: Dict with 'path' key pointing to component_mapping.json
-        
-        Returns:
-            Tuple of (template_content, msgflow_xml, mappings_data, naming_data)
-        """
-        print("📂 Loading input files...")
-        
-        # Load ESQL Template
-        template_path = esql_template.get('path')
-        if not template_path or not os.path.exists(template_path):
-            raise FileNotFoundError(f"ESQL template not found: {template_path}")
-        
-        with open(template_path, 'r', encoding='utf-8') as f:
-            template_content = f.read()
-        print(f"  ✅ Template loaded: {len(template_content)} chars")
-        
-        # Load MessageFlow XML
-        msgflow_path = msgflow_content.get('path')
-        if not msgflow_path:
-            # Auto-discover from output directory
-            import glob
-            msgflow_files = glob.glob("output/**/*.msgflow", recursive=True)
-            if msgflow_files:
-                msgflow_path = msgflow_files[0]
-                print(f"  🔍 Auto-discovered: {msgflow_path}")
-            else:
-                raise FileNotFoundError("No .msgflow file found")
-        
-        if not os.path.exists(msgflow_path):
-            raise FileNotFoundError(f"MessageFlow not found: {msgflow_path}")
-        
-        with open(msgflow_path, 'r', encoding='utf-8') as f:
-            msgflow_xml = f.read()
-        print(f"  ✅ MessageFlow loaded: {len(msgflow_xml)} chars")
-        
-        # Load Component Mappings
-        mappings_path = json_mappings.get('path')
-        if not mappings_path or not os.path.exists(mappings_path):
-            raise FileNotFoundError(f"Component mappings not found: {mappings_path}")
-        
-        with open(mappings_path, 'r', encoding='utf-8') as f:
-            mappings_data = json.load(f)
-        print(f"  ✅ Mappings loaded: {len(mappings_data)} items")
-        
-        # Load Naming Convention
-        naming_data = self._load_naming_convention(output_dir)
-        
-        return template_content, msgflow_xml, mappings_data, naming_data
-    
-    
-    
-    def _load_naming_convention(self, output_dir: str) -> Dict:
-        """Load naming convention from parent directory of output_dir"""
-        # Get parent directory (go one level up from esql folder)
-        parent_dir = os.path.dirname(output_dir)
-        naming_path = os.path.join(parent_dir, "naming_convention.json")
-        
-        if not os.path.exists(naming_path):
-            raise FileNotFoundError(f"Naming convention not found: {naming_path}")
-        
-        with open(naming_path, 'r', encoding='utf-8') as f:
-            naming_data = json.load(f)
-        
-        print(f"  ✅ Naming convention loaded")
-        return naming_data
-    
-    
-    def _extract_requirements_from_sources(self, vector_content: str, msgflow_xml: str, 
-                                          mappings_data: Dict, naming_data: Dict) -> List[Dict]:
-        """
-        Extract ESQL module requirements using MessageFlow-first approach.
-        
-        This is the KEY optimization: MessageFlow compute nodes are the source of truth.
-        Vector DB and mappings provide business context only.
-        
-        Args:
-            vector_content: Business requirements from Vector DB
-            msgflow_xml: MessageFlow XML content
-            mappings_data: Component mappings
-            naming_data: Flow naming convention
-        
-        Returns:
-            List of module requirements with structure:
-            [
-                {
-                    'name': 'CW1_IN_Document_SND_Compute',
-                    'type': 'compute',
-                    'purpose': 'Business logic processing',
-                    'business_logic': {...},
-                    'source': 'messageflow'
-                },
-                ...
-            ]
-        """
-        print("🔍 Extracting ESQL requirements (MessageFlow-first approach)...")
-        
-        # STEP 1: Extract compute nodes from MessageFlow (SOURCE OF TRUTH)
-        msgflow_modules = self._parse_msgflow_compute_nodes(msgflow_xml, naming_data)
-        print(f"  📋 Found {len(msgflow_modules)} compute nodes in MessageFlow")
-        
-        if not msgflow_modules:
-            raise Exception("No compute nodes found in MessageFlow XML")
-        
-        # STEP 2: Enrich with business context from Vector DB via LLM
-        print("  🧠 Enriching modules with Vector DB business context...")
-        
-        enrichment_prompt = f"""Analyze business requirements and enrich ESQL module specifications.
-
-MESSAGEFLOW MODULES (SOURCE OF TRUTH - DO NOT ADD OR REMOVE):
-{json.dumps(msgflow_modules, indent=2)}
-
-VECTOR DB BUSINESS REQUIREMENTS:
-{vector_content[:4000]}
-
-COMPONENT MAPPINGS CONTEXT:
-{json.dumps(mappings_data.get('component_mappings', [])[:5], indent=2)}
-
-TASK:
-For EACH module in the MessageFlow list, extract relevant business logic from Vector DB.
-Return the SAME modules with enriched business_logic.
-
-CRITICAL RULES:
-1. Return EXACTLY {len(msgflow_modules)} modules - no more, no less
-2. Keep ALL module names exactly as provided from MessageFlow
-3. DO NOT create generic names like "ESQLModule_1" or "Module_1"
-4. Only ADD business context to existing modules
-5. Match business requirements to module purposes
-
-Return JSON format:
-{{
-    "esql_modules": [
-        {{
-            "name": "exact_name_from_messageflow",
-            "type": "compute|input_event|output_event|failure",
-            "purpose": "description from business requirements",
-            "business_logic": {{
-                "database_operations": ["list of DB operations from Vector DB"],
-                "transformations": ["list of transformations needed"],
-                "validation_rules": ["business validation rules"],
-                "error_handling": ["error scenarios to handle"]
-            }},
-            "source": "messageflow"
-        }}
-    ],
-    "database_operations": ["global list of all stored procedures mentioned"],
-    "transformations": ["global transformation patterns"]
-}}
-
-Return ONLY valid JSON."""
-
-        # Call LLM with integrated JSON parsing
-        enriched_data = self._call_llm_with_parsing(enrichment_prompt, "requirements_enrichment")
-        
-        # Validate structure
-        if not enriched_data or 'esql_modules' not in enriched_data:
-            print("  ⚠️ LLM enrichment returned invalid structure, using MessageFlow modules as-is")
-            return msgflow_modules
-        
-        enriched_modules = enriched_data['esql_modules']
-        
-        # STEP 3: Validate and clean enriched modules
-        validated_modules = []
-        for module in enriched_modules:
-            # Ensure it's a dict
-            if isinstance(module, str):
-                # Skip if it's a generic placeholder
-                if module.startswith('ESQLModule_') or module.startswith('Module_'):
-                    print(f"  ⚠️ Skipping generic placeholder: {module}")
-                    continue
-                # Convert to dict
-                module = {'name': module, 'type': 'compute', 'purpose': 'Processing', 'business_logic': {}}
-            
-            # Skip generic placeholders
-            if module.get('name', '').startswith('ESQLModule_') or module.get('name', '').startswith('Module_'):
-                print(f"  ⚠️ Skipping generic placeholder: {module.get('name')}")
-                continue
-            
-            # Ensure required keys
-            module.setdefault('name', 'UnknownModule')
-            module.setdefault('type', 'compute')
-            module.setdefault('purpose', 'Processing')
-            module.setdefault('business_logic', {})
-            module.setdefault('source', 'messageflow')
-            
-            validated_modules.append(module)
-        
-        print(f"  ✅ Requirements extracted: {len(validated_modules)} modules validated")
-        
-        # Store global context
-        self.database_operations = enriched_data.get('database_operations', [])
-        self.transformations = enriched_data.get('transformations', [])
-        
-        return validated_modules
-    
-    
-    def _parse_msgflow_compute_nodes(self, msgflow_xml: str, naming_data: Dict) -> List[Dict]:
-        """
-        Parse MessageFlow XML to extract compute node expressions.
-        These are the ONLY modules we should generate.
-        
-        Args:
-            msgflow_xml: MessageFlow XML content
-            naming_data: Naming convention for flow name
-        
-        Returns:
-            List of module dictionaries with names from MessageFlow
-        """
-        print("  🔍 Parsing MessageFlow compute nodes...")
-        
-        try:
-            root = ET.fromstring(msgflow_xml)
-        except ET.ParseError as e:
-            raise Exception(f"Failed to parse MessageFlow XML: {e}")
-        
-        # Extract flow name
-        flow_name = self._extract_flow_name(naming_data)
-        
-        # Find all compute nodes with namespaces
-        namespaces = {
-            'eflow': 'http://www.ibm.com/wbi/2005/eflow',
-            'xmi': 'http://www.omg.org/XMI'
-        }
-        
-        compute_nodes = []
-        
-        # Find compute nodes (handle both with and without namespace)
-        for node in root.findall(".//{http://www.ibm.com/wbi/2005/eflow}nodes", namespaces):
-            compute_expr = node.get('computeExpression', '')
-            if compute_expr and 'esql://routine/' in compute_expr:
-                # Extract module name from expression
-                # Format: esql://routine/{flow_name}#{module_name}.Main
-                match = re.search(r'esql://routine/[^#]+#([^.]+)\.Main', compute_expr)
-                if match:
-                    module_name = match.group(1)
-                    
-                    # Determine module type from name suffix
-                    module_type = self._determine_module_type(module_name)
-                    
-                    # Get node label for purpose
-                    translation = node.find('.//{http://www.ibm.com/wbi/2005/eflow_utility}ConstantString')
-                    purpose = translation.get('string', 'Processing') if translation is not None else 'Processing'
-                    
-                    compute_nodes.append({
-                        'name': module_name,
-                        'type': module_type,
-                        'purpose': purpose,
-                        'business_logic': {},
-                        'source': 'messageflow',
-                        'compute_expression': compute_expr
-                    })
-        
-        # Fallback: try without namespace
-        if not compute_nodes:
-            for node in root.findall('.//nodes'):
-                compute_expr = node.get('computeExpression', '')
-                if compute_expr and 'esql://routine/' in compute_expr:
-                    match = re.search(r'esql://routine/[^#]+#([^.]+)\.Main', compute_expr)
-                    if match:
-                        module_name = match.group(1)
-                        module_type = self._determine_module_type(module_name)
-                        
-                        compute_nodes.append({
-                            'name': module_name,
-                            'type': module_type,
-                            'purpose': 'Processing',
-                            'business_logic': {},
-                            'source': 'messageflow',
-                            'compute_expression': compute_expr
-                        })
-        
-        print(f"    Found {len(compute_nodes)} compute expressions")
-        for node in compute_nodes:
-            print(f"      • {node['name']} ({node['type']})")
-        
-        return compute_nodes
-    
-    
-    def _extract_flow_name(self, naming_data: Dict) -> str:
-        """
-        Extract flow name from naming convention.
-        Supports both old and new formats.
-        
-        Args:
-            naming_data: Naming convention dictionary
-        
-        Returns:
-            Flow name string
-        """
-        # Try new format first
-        project_naming = naming_data.get('project_naming', {})
-        if project_naming:
-            flow_name = project_naming.get('message_flow_name') or project_naming.get('flow_name')
-            if flow_name:
-                return flow_name
-        
-        # Try old format
-        flow_name = naming_data.get('message_flow_name') or naming_data.get('flow_name')
-        if flow_name:
-            return flow_name
-        
-        raise Exception("Could not extract flow_name from naming_convention.json")
-    
-    
-    def _determine_module_type(self, module_name: str) -> str:
-        """
-        Determine module type from module name suffix.
-        
-        Args:
-            module_name: Full module name (e.g., "CW1_IN_Document_SND_Compute")
-        
-        Returns:
-            Module type: 'input_event', 'output_event', 'compute', 'failure', 'processing'
-        """
-        if module_name.endswith('_InputEventMessage'):
-            return 'input_event'
-        elif module_name.endswith('_OutputEventMessage'):
-            return 'output_event'
-        elif module_name.endswith('_AfterEventMsg'):
-            return 'output_event'
-        elif module_name.endswith('_Failure'):
-            return 'failure'
-        elif module_name.endswith('_Compute'):
-            return 'compute'
-        elif module_name.endswith('_AfterEnrichment') or module_name.endswith('_Processing'):
-            return 'processing'
-        else:
-            return 'compute'  # Default
-    
-    
-    def _call_llm_with_parsing(self, prompt: str, call_type: str = "generation") -> Dict:
-        """
-        Unified LLM call with integrated JSON parsing using llm_json_parser.
-        
-        Args:
-            prompt: Full prompt to send to LLM
-            call_type: Type of call for tracking (e.g., "requirements", "generation")
-        
-        Returns:
-            Parsed JSON dictionary
-        """
-        self.generation_stats['llm_calls'] += 1
-        
-        try:
-            response = self.groq_client.chat.completions.create(
-                model=self.groq_model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert IBM ACE ESQL developer. Return ONLY valid JSON, no markdown, no explanations."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                temperature=0.3,
-                max_tokens=4000
-            )
-            
-            llm_response = response.choices[0].message.content
-            
-            # Parse using llm_json_parser
-            parse_result = parse_llm_json(llm_response)
-            
-            if parse_result.success:
-                return parse_result.data
-            else:
-                print(f"  ⚠️ JSON parsing failed ({call_type}): {parse_result.error_message}")
-                print(f"  📄 Raw response preview: {llm_response[:200]}...")
-                raise Exception(f"Failed to parse LLM JSON response: {parse_result.error_message}")
-        
-        except Exception as e:
-            print(f"  ❌ LLM call failed ({call_type}): {str(e)}")
-            raise
-
-
-
-
-    # ============================================================================
-    # PART 2: GENERATION METHODS
-    # ============================================================================
-    
-    def _is_event_message_module(self, module_name: str) -> bool:
-        """
-        Check if module is an event message type (metadata capture only).
-        Event messages use template copying, no LLM generation needed.
-        
-        Args:
-            module_name: Full module name
-        
-        Returns:
-            True if InputEventMessage or OutputEventMessage type
-        """
-        return (module_name.endswith('_InputEventMessage') or 
-                module_name.endswith('_OutputEventMessage') or
-                module_name.endswith('_AfterEventMsg'))
-    
-    
-    def _generate_event_message_esql(self, module_name: str, naming_data: Dict, 
-                                    template_content: str) -> str:
-        """
-        Generate event message ESQL using template copying (Tier 1 - No LLM).
-        Event messages contain only metadata capture logic from template.
-        
-        Args:
-            module_name: Full module name (e.g., "CW1_IN_Document_SND_InputEventMessage")
-            naming_data: Naming convention dictionary
-            template_content: Full ESQL template content
-        
-        Returns:
-            Complete ESQL code ready to write
-        """
-        print(f"    📋 Template copy for event message: {module_name}")
-        
-        # Extract flow name
-        flow_name = self._extract_flow_name(naming_data)
-        
-        # Extract base flow name (without suffix)
-        base_flow_name = self._extract_base_flow_name(module_name)
-        
-        # Load INPUT EVENT MESSAGE template section
-        template_section = self._load_template_section(template_content, 'input_event')
-        
-        # Apply naming to template
-        esql_content = self._apply_event_naming(template_section, base_flow_name, module_name)
-        
-        # Validate and auto-fix
-        esql_content, fixes = self._validate_and_fix_esql_structure(
-            esql_content, module_name, base_flow_name
-        )
-        
-        if fixes:
-            print(f"      🔧 Applied {len(fixes)} auto-fixes")
-            self.generation_stats['auto_fixes_applied'] += len(fixes)
-        
-        return esql_content
-    
-    
-    def _apply_event_naming(self, template_content: str, flow_name: str, 
-                           full_module_name: str) -> str:
-        """
-        Replace placeholders in event message template with actual names.
-        
-        Args:
-            template_content: Raw template section from ESQL_Template_Updated.ESQL
-            flow_name: Base flow name (e.g., "CW1_IN_Document_SND")
-            full_module_name: Complete module name with suffix
-        
-        Returns:
-            Complete ESQL code with names applied
-        """
-        lines = template_content.split('\n')
-        
-        for i, line in enumerate(lines):
-            stripped = line.strip()
-            
-            # Replace BROKER SCHEMA line (uses base flow_name without suffix)
-            if stripped.startswith('BROKER SCHEMA'):
-                lines[i] = f'BROKER SCHEMA {flow_name}'
-            
-            # Replace CREATE COMPUTE MODULE line (uses full_module_name with suffix)
-            elif stripped.startswith('CREATE COMPUTE MODULE'):
-                lines[i] = f'CREATE COMPUTE MODULE {full_module_name}'
-        
-        return '\n'.join(lines)
-    
-    
-    def _generate_business_logic_esql(self, module_req: Dict, naming_data: Dict, 
-                                     template_content: str, vector_context: str = "") -> str:
-        """
-        Generate business logic ESQL using template-first approach with LLM injection.
-        
-        This is the KEY generation method:
-        1. Load template section as foundation
-        2. Prepare structure (set BROKER SCHEMA and MODULE names upfront)
-        3. LLM injects business logic into marker
-        4. Validate and auto-fix structure
-        
-        Args:
-            module_req: Module requirements with business_logic
-            naming_data: Naming convention
-            template_content: Full ESQL template
-            vector_context: Vector DB context for business logic
-        
-        Returns:
-            Complete ESQL code ready to write
-        """
-        module_name = module_req['name']
-        module_type = module_req.get('type', 'compute')
-        
-        print(f"    🧠 LLM generation for: {module_name} ({module_type})")
-        
-        # STEP 1: Load appropriate template section
-        template_section = self._load_template_section(template_content, module_type)
-        
-        # STEP 2: Prepare template structure (set names BEFORE LLM)
-        flow_name = self._extract_flow_name(naming_data)
-        base_flow_name = self._extract_base_flow_name(module_name)
-        
-        prepared_template = self._prepare_template_structure(
-            template_section, base_flow_name, module_name
-        )
-        
-        # STEP 3: LLM injects business logic into prepared template
-        esql_content = self._llm_inject_business_logic(
-            prepared_template, module_req, flow_name, vector_context
-        )
-        
-        # STEP 4: Validate and auto-fix structure
-        esql_content, fixes = self._validate_and_fix_esql_structure(
-            esql_content, module_name, base_flow_name
-        )
-        
-        if fixes:
-            print(f"      🔧 Applied {len(fixes)} auto-fixes")
-            self.generation_stats['auto_fixes_applied'] += len(fixes)
-        
-        return esql_content
-    
-    
-    def _load_template_section(self, template_content: str, template_type: str) -> str:
-        """
-        Extract specific template section from ESQL_Template_Updated.ESQL.
-        
-        Template sections:
-        - 'input_event': INPUT AND OUTPUT EVENT MESSAGE TEMPLATE
-        - 'compute': COMPUTE TEMPLATE - FULL BUSINESS LOGIC
-        - 'processing': PROCESSING TEMPLATE - VALIDATION AND ROUTING
-        - 'failure': FAILURE/ERROR HANDLING TEMPLATE
-        
-        Args:
-            template_content: Full ESQL template file content
-            template_type: Type of template section to extract
-        
-        Returns:
-            Extracted template section from BROKER SCHEMA to END MODULE;
-        """
-        # Section markers in template
-        section_markers = {
+        # Template section markers in ESQL template
+        self.template_sections = {
             'input_event': ['INPUT AND OUTPUT EVENT MESSAGE TEMPLATE - METADATA ONLY', 'COMPUTE TEMPLATE - FULL BUSINESS LOGIC'],
+            'output_event': ['INPUT AND OUTPUT EVENT MESSAGE TEMPLATE - METADATA ONLY', 'COMPUTE TEMPLATE - FULL BUSINESS LOGIC'],
             'compute': ['COMPUTE TEMPLATE - FULL BUSINESS LOGIC', 'PROCESSING TEMPLATE'],
             'processing': ['PROCESSING TEMPLATE - VALIDATION AND ROUTING ONLY', 'FAILURE/ERROR HANDLING TEMPLATE'],
             'failure': ['FAILURE/ERROR HANDLING TEMPLATE', None]  # Last section
         }
         
-        # Map generic to compute
-        if template_type == 'generic':
-            template_type = 'compute'
+        # Module type suffixes for detection
+        self.module_type_suffixes = {
+            'input_event': ['_InputEventMessage', '_InputEvent'],
+            'output_event': ['_OutputEventMessage', '_OutputEvent', '_AfterEventMsg'],
+            'compute': ['_Compute', '_Transform', '_Mapper'],
+            'processing': ['_Processing', '_Validation', '_Router', '_AfterEnrichment'],
+            'failure': ['_Failure', '_Error', '_Exception', '_ErrorHandler']
+        }
         
-        if template_type not in section_markers:
-            raise Exception(f"Invalid template_type: {template_type}. Valid: input_event, compute, processing, failure")
-        
-        start_marker, end_marker = section_markers[template_type]
-        lines = template_content.split('\n')
-        
-        # Find section boundaries
-        section_start = None
-        section_end = len(lines)
-        
-        for i, line in enumerate(lines):
-            if start_marker in line:
-                section_start = i
-            if end_marker and end_marker in line and section_start is not None:
-                section_end = i
-                break
-        
-        if section_start is None:
-            raise Exception(f"Template section marker not found: '{start_marker}'")
-        
-        # Find first BROKER SCHEMA or CREATE COMPUTE MODULE line (actual ESQL start)
-        esql_start_line = None
-        for i in range(section_start, section_end):
-            line = lines[i].strip()
-            if line.startswith('BROKER SCHEMA') or line.startswith('CREATE COMPUTE MODULE'):
-                esql_start_line = i
-                break
-        
-        if esql_start_line is None:
-            raise Exception(f"No ESQL structure found in template section: {template_type}")
-        
-        # Extract section
-        selected_template = '\n'.join(lines[esql_start_line:section_end]).strip()
-        
-        return selected_template
+        print(f"✅ Enhanced ESQL Generator initialized with model: {self.groq_model}")
     
+    # ============================================================================
+    # PART 1: BUSINESS REQUIREMENTS ANALYSIS
+    # ============================================================================
     
-    def _prepare_template_structure(self, template_section: str, base_flow_name: str, 
-                                    module_name: str) -> str:
+    def analyze_vector_content(self, vector_content: str) -> Dict:
         """
-        Prepare template structure by setting BROKER SCHEMA and CREATE COMPUTE MODULE BEFORE LLM.
-        This ensures correct naming regardless of LLM output.
+        Extract business requirements from Vector DB content using LLM.
+        This is the foundational step that identifies required nodes.
         
         Args:
-            template_section: Template section from _load_template_section
-            base_flow_name: Base flow name for BROKER SCHEMA (e.g., "CW1_IN_Document_SND")
-            module_name: Full module name for CREATE COMPUTE MODULE
-        
+            vector_content: Raw business requirements from Vector DB
+            
         Returns:
-            Template with correct BROKER SCHEMA and MODULE names set
+            Structured business requirements with node information
         """
-        lines = template_section.split('\n')
+        print("\n" + "="*70)
+        print("🧠 ANALYZING BUSINESS REQUIREMENTS FROM VECTOR DB")
+        print("="*70)
         
-        # Update BROKER SCHEMA (line 1)
-        for i, line in enumerate(lines):
-            if line.strip().startswith('BROKER SCHEMA'):
-                lines[i] = f'BROKER SCHEMA {base_flow_name}'
-                break
+        # Build comprehensive analysis prompt
+        analysis_prompt = f"""Analyze this business flow description from Vector DB and extract:
+1. Required ESQL node types for IBM ACE MessageFlow
+2. Processing sequence and dependencies
+3. Database operations and transformations
+
+VECTOR DB BUSINESS CONTENT:
+{vector_content}
+
+Identify ONLY the ESQL nodes that are EXPLICITLY required based on the business description.
+DO NOT include generic placeholders or nodes not supported by the requirements.
+
+Return a structured JSON with:
+1. Flow name/type
+2. Required ESQL nodes in sequence (input_event, compute, processing, output_event)
+3. Node purposes and dependencies
+4. Database operations and transformations
+
+CRITICAL: Analysis must be based ONLY on actual business requirements, not assumptions.
+
+Return JSON format:
+{{
+  "flow_name": "extracted flow name",
+  "flow_pattern": "MQ-to-MQ|HTTP-to-MQ|FILE-to-SOAP|etc",
+  "required_nodes": [
+    {{
+      "name": "meaningful_name_based_on_function",
+      "type": "input_event|compute|processing|output_event|failure",
+      "purpose": "Specific function in flow",
+      "sequence_order": 1,
+      "required": true|false,
+      "business_logic": {{
+        "database_operations": ["List DB operations"],
+        "transformations": ["List transformations"],
+        "routing_logic": ["List routing conditions"]
+      }}
+    }}
+  ],
+  "database_operations": ["All DB ops mentioned"],
+  "transformations": ["All transformations mentioned"],
+  "integration_pattern": "description of overall pattern"
+}}
+
+Return ONLY valid JSON. Do not include generic placeholders like "Node1" or "ESQLModule1".
+Each node name should reflect its actual function in the flow.
+"""
         
-        # Update CREATE COMPUTE MODULE (line 2)
-        for i, line in enumerate(lines):
-            if line.strip().startswith('CREATE COMPUTE MODULE'):
-                lines[i] = f'CREATE COMPUTE MODULE {module_name}'
-                break
-        
-        # Replace placeholder in template
-        placeholder = "_SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE"
-        prepared = '\n'.join(lines)
-        prepared = prepared.replace(placeholder, module_name)
-        
-        return prepared
-    
-    
-    def _llm_inject_business_logic(self, prepared_template: str, module_req: Dict, 
-                                   flow_name: str, vector_context: str) -> str:
-        """
-        LLM injects business logic into the prepared template at marker location.
-        LLM does NOT generate full module - only fills business logic section.
-        
-        Args:
-            prepared_template: Template with BROKER SCHEMA and MODULE names already set
-            module_req: Module requirements with business_logic
-            flow_name: Flow name for context
-            vector_context: Vector DB business requirements
-        
-        Returns:
-            Complete ESQL with business logic injected
-        """
-        module_name = module_req['name']
-        business_logic = module_req.get('business_logic', {})
-        purpose = module_req.get('purpose', 'Processing')
-        
-        # Build business logic context
-        db_operations = business_logic.get('database_operations', [])
-        transformations = business_logic.get('transformations', [])
-        validation_rules = business_logic.get('validation_rules', [])
-        
-        # Add global context
-        db_operations.extend(self.database_operations[:5])
-        transformations.extend(self.transformations[:5])
-        
-        # Build focused business logic prompt
-        business_logic_prompt = f"""You are injecting business logic into an ESQL template.
-
-PREPARED TEMPLATE (DO NOT MODIFY STRUCTURE):
-{prepared_template}
-
-MODULE SPECIFICATION:
-- Name: {module_name}
-- Purpose: {purpose}
-- Flow: {flow_name}
-
-BUSINESS LOGIC TO INJECT:
-Database Operations:
-{json.dumps(db_operations[:6], indent=2)}
-
-Transformations:
-{transformations[:5]}
-
-Validation Rules:
-{validation_rules[:5]}
-
-VECTOR DB CONTEXT:
-{vector_context[:2000]}
-
-CRITICAL INSTRUCTIONS:
-1. Find the marker: -- [[[INSERT_BUSINESS_LOGIC_HERE]]]
-2. Replace ONLY that marker with business logic code
-3. PRESERVE all template structure exactly:
-   - Keep BROKER SCHEMA line (line 1)
-   - Keep CREATE COMPUTE MODULE line (line 2)
-   - Keep CREATE FUNCTION Main() RETURNS BOOLEAN
-   - Keep all DECLARE statements
-   - Keep RETURN TRUE; at end of Main()
-   - Keep CopyMessageHeaders() procedure
-   - Keep CopyEntireMessage() procedure
-   - Keep END MODULE; as LAST LINE
-
-4. Business logic must use:
-   - SET statements for data manipulation
-   - OutputRoot for output (InputRoot is READ-ONLY)
-   - Environment.variables for shared data
-   - PASSTHRU for database calls
-   - Proper ESQL syntax (no @ symbols, no "esql" prefix)
-
-5. FORBIDDEN DATA TYPES:
-   - NEVER use: VARCHAR, XML, RECORD, STRING, JSON, Database
-   - ONLY use: BOOLEAN, INTEGER, DECIMAL, FLOAT, CHARACTER, BIT, BLOB, DATE, TIME, TIMESTAMP, REFERENCE, ROW
-
-6. Database operation pattern:
-DECLARE result CHARACTER;
-SET result = PASSTHRU('CALL sp_GetCompany(?, ?)',
-InputRoot.XMLNSC.:Header.:CompanyCode,
-InputRoot.XMLNSC.:Header.:CountryCode
-);
-SET OutputRoot.XMLNSC.*:CompanyData = result;
-
-7. The LAST line MUST be: END MODULE;
-
-Return the COMPLETE template with business logic injected.
-NO markdown, NO code blocks, just pure ESQL."""
-
-        # Call LLM
+        # Call LLM to analyze requirements
         self.generation_stats['llm_calls'] += 1
         
         try:
@@ -784,440 +161,997 @@ NO markdown, NO code blocks, just pure ESQL."""
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an ESQL code injector. Replace ONLY the business logic marker in the template. Preserve ALL template structure. Return pure ESQL code only."
+                        "content": "You are an expert IBM ACE integration developer. Extract precise node requirements from business specifications. Return only valid JSON with realistic ACE node types."
                     },
                     {
                         "role": "user",
-                        "content": business_logic_prompt
+                        "content": analysis_prompt
                     }
                 ],
-                temperature=0.3,
-                max_tokens=3500
+                temperature=0.2,
+                max_tokens=3000
             )
             
-            esql_content = response.choices[0].message.content.strip()
+            llm_response = response.choices[0].message.content
             
-            # Clean common LLM artifacts
-            if esql_content.startswith('```esql'):
-                esql_content = esql_content[7:]
-            if esql_content.startswith('```'):
-                esql_content = esql_content[3:]
-            if esql_content.endswith('```'):
-                esql_content = esql_content[:-3]
+            # Parse JSON using llm_json_parser
+            parse_result = parse_llm_json(llm_response)
             
-            esql_content = esql_content.strip()
-            
-            return esql_content
-        
+            if parse_result.success:
+                business_requirements = parse_result.data
+                
+                # Validate structure
+                if not business_requirements or not isinstance(business_requirements, dict):
+                    raise ValueError("Invalid business requirements structure")
+                
+                if 'required_nodes' not in business_requirements:
+                    raise ValueError("Missing required_nodes in business requirements")
+                
+                # Store for later use
+                self.business_requirements = business_requirements
+                self.required_nodes = business_requirements.get('required_nodes', [])
+                self.database_operations = business_requirements.get('database_operations', [])
+                self.transformations = business_requirements.get('transformations', [])
+                
+                # Log results
+                print(f"✅ Successfully extracted business requirements")
+                print(f"🔄 Flow Pattern: {business_requirements.get('flow_pattern', 'Unknown')}")
+                print(f"🧩 Required Nodes: {len(self.required_nodes)}")
+                print(f"💾 Database Operations: {len(self.database_operations)}")
+                
+                return business_requirements
+            else:
+                print(f"❌ Failed to parse LLM response: {parse_result.error}")
+                return {}
+                
         except Exception as e:
-            print(f"      ❌ LLM injection failed: {str(e)}")
-            # Fallback: return prepared template as-is
-            print(f"      📋 Using template without business logic injection")
-            return prepared_template
-    
-    
-    def _extract_base_flow_name(self, module_name: str) -> str:
-        """
-        Extract base flow name from module name by removing standard suffixes.
-        
-        Args:
-            module_name: Full module name (e.g., "CW1_IN_Document_SND_Compute")
-        
-        Returns:
-            Base flow name (e.g., "CW1_IN_Document_SND")
-        """
-        suffixes = [
-            '_InputEventMessage',
-            '_OutputEventMessage',
-            '_AfterEventMsg',
-            '_Compute',
-            '_AfterEnrichment',
-            '_Processing',
-            '_Failure'
-        ]
-        
-        base_name = module_name
-        for suffix in suffixes:
-            if module_name.endswith(suffix):
-                base_name = module_name[:-len(suffix)]
-                break
-        
-        return base_name
-    
+            print(f"❌ Error analyzing business requirements: {str(e)}")
+            return {}
 
-# ============================================================================
-    # PART 3: VALIDATION & AUTO-FIX
+    # ============================================================================
+    # PART 2: ESQL FILES GENERATION
     # ============================================================================
     
-    def _validate_and_fix_esql_structure(self, esql_content: str, module_name: str, 
-                                        flow_name: str) -> Tuple[str, List[str]]:
+    def _locate_naming_convention_file(self, base_dir: str) -> Optional[str]:
         """
-        Validate ESQL structure and automatically fix common issues.
-        This is the CRITICAL method that ensures all ESQL files are production-ready.
-        
-        Validates and fixes:
-        1. BROKER SCHEMA line (must be line 1)
-        2. CREATE COMPUTE MODULE line (must match module_name)
-        3. CopyMessageHeaders procedure (required)
-        4. CopyEntireMessage procedure (required)
-        5. END MODULE; statement (must be last line)
+        Locate the naming_convention.json file in output/single or output/multiple directories.
         
         Args:
-            esql_content: Generated ESQL content
-            module_name: Expected module name
-            flow_name: Base flow name for BROKER SCHEMA
-        
+            base_dir: Base directory to start search
+            
         Returns:
-            Tuple of (fixed_content, list_of_fixes_applied)
+            Path to naming convention file or None if not found
         """
-        fixes_applied = []
-        fixed_content = esql_content.strip()
+        # First check if there's a naming_convention.json in the current directory
+        if os.path.exists(os.path.join(base_dir, "naming_convention.json")):
+            return os.path.join(base_dir, "naming_convention.json")
         
-        # ============================================================
-        # PART 1: Fix Header Structure
-        # ============================================================
+        # Check in output/single
+        single_dir = os.path.join(base_dir, "output", "single")
+        if os.path.exists(single_dir):
+            for root, _, files in os.walk(single_dir):
+                if "naming_convention.json" in files:
+                    return os.path.join(root, "naming_convention.json")
         
-        lines = fixed_content.split('\n')
+        # Check in output/multiple
+        multiple_dir = os.path.join(base_dir, "output", "multiple")
+        if os.path.exists(multiple_dir):
+            for root, _, files in os.walk(multiple_dir):
+                if "naming_convention.json" in files:
+                    return os.path.join(root, "naming_convention.json")
         
-        # Check/Fix BROKER SCHEMA (must be line 1)
-        if not lines[0].strip().startswith('BROKER SCHEMA'):
-            # Missing BROKER SCHEMA - prepend it
-            lines.insert(0, f'BROKER SCHEMA {flow_name}')
-            fixed_content = '\n'.join(lines)
-            fixes_applied.append(f"Added BROKER SCHEMA {flow_name}")
-        else:
-            # Verify BROKER SCHEMA name
-            current_schema = lines[0].strip().replace('BROKER SCHEMA ', '')
-            if current_schema != flow_name:
-                lines[0] = f'BROKER SCHEMA {flow_name}'
-                fixed_content = '\n'.join(lines)
-                fixes_applied.append(f"Fixed BROKER SCHEMA name to {flow_name}")
-        
-        # Check/Fix CREATE COMPUTE MODULE
-        if 'CREATE COMPUTE MODULE' not in fixed_content:
-            # Missing CREATE COMPUTE MODULE - insert after BROKER SCHEMA
-            lines = fixed_content.split('\n')
-            if lines[0].startswith('BROKER SCHEMA'):
-                lines.insert(1, f'CREATE COMPUTE MODULE {module_name}')
-                fixed_content = '\n'.join(lines)
-                fixes_applied.append("Added CREATE COMPUTE MODULE")
-        else:
-            # Verify module name is correct
-            module_pattern = r'CREATE COMPUTE MODULE\s+(\S+)'
-            match = re.search(module_pattern, fixed_content)
-            if match:
-                current_module_name = match.group(1)
-                # Check if it's a placeholder or incorrect
-                if '_SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE' in current_module_name or current_module_name != module_name:
-                    fixed_content = re.sub(
-                        r'CREATE COMPUTE MODULE\s+\S+',
-                        f'CREATE COMPUTE MODULE {module_name}',
-                        fixed_content
-                    )
-                    fixes_applied.append(f"Fixed module name to {module_name}")
-        
-        # ============================================================
-        # PART 2: Fix Required Procedures
-        # ============================================================
-        
-        # Required procedure templates
-        required_copy_headers = """CREATE PROCEDURE CopyMessageHeaders() BEGIN
-\t\tDECLARE I INTEGER 1;
-\t\tDECLARE J INTEGER;
-\t\tSET J = CARDINALITY(InputRoot.*[]);
-\t\tWHILE I < J DO
-\t\t\tSET OutputRoot.*[I] = InputRoot.*[I];
-\t\t\tSET I = I + 1;
-\t\tEND WHILE;
-\tEND;"""
-        
-        required_copy_entire = """CREATE PROCEDURE CopyEntireMessage() BEGIN
-\t\tSET OutputRoot = InputRoot;
-\tEND;"""
-        
-        # Check for CopyMessageHeaders procedure
-        if 'CREATE PROCEDURE CopyMessageHeaders()' not in fixed_content:
-            # Add before END MODULE; if it exists, or at the end
-            if 'END MODULE;' in fixed_content:
-                fixed_content = fixed_content.replace('END MODULE;', f'\n\n\t{required_copy_headers}\n\nEND MODULE;')
-            else:
-                fixed_content = fixed_content + f'\n\n\t{required_copy_headers}\n'
-            fixes_applied.append("Added CopyMessageHeaders procedure")
-        
-        # Check for CopyEntireMessage procedure
-        if 'CREATE PROCEDURE CopyEntireMessage()' not in fixed_content:
-            # Add before END MODULE; if it exists, or at the end
-            if 'END MODULE;' in fixed_content:
-                fixed_content = fixed_content.replace('END MODULE;', f'\n\t{required_copy_entire}\n\nEND MODULE;')
-            else:
-                fixed_content = fixed_content + f'\n\n\t{required_copy_entire}\n'
-            fixes_applied.append("Added CopyEntireMessage procedure")
-        
-        # ============================================================
-        # PART 3: Fix END MODULE
-        # ============================================================
-        
-        # Check for END MODULE; at the end
-        if not fixed_content.strip().endswith('END MODULE;'):
-            fixed_content = fixed_content.strip() + '\n\nEND MODULE;'
-            fixes_applied.append("Added END MODULE;")
-        
-        # ============================================================
-        # PART 4: Final Validation
-        # ============================================================
-        
-        validation_errors = []
-        
-        # Check 1: Has BROKER SCHEMA
-        if 'BROKER SCHEMA' not in fixed_content:
-            validation_errors.append("Missing BROKER SCHEMA (auto-fix failed)")
-        
-        # Check 2: Has CREATE COMPUTE MODULE
-        if 'CREATE COMPUTE MODULE' not in fixed_content:
-            validation_errors.append("Missing CREATE COMPUTE MODULE (auto-fix failed)")
-        
-        # Check 3: Has CopyMessageHeaders
-        if 'CREATE PROCEDURE CopyMessageHeaders()' not in fixed_content:
-            validation_errors.append("Missing CopyMessageHeaders procedure (auto-fix failed)")
-        
-        # Check 4: Has CopyEntireMessage
-        if 'CREATE PROCEDURE CopyEntireMessage()' not in fixed_content:
-            validation_errors.append("Missing CopyEntireMessage procedure (auto-fix failed)")
-        
-        # Check 5: Ends with END MODULE;
-        if not fixed_content.strip().endswith('END MODULE;'):
-            validation_errors.append("Missing END MODULE; (auto-fix failed)")
-        
-        if validation_errors:
-            print(f"      ⚠️ Validation errors after auto-fix: {validation_errors}")
-        
-        return fixed_content, fixes_applied
+        # If not found, check in parent directory
+        parent_dir = os.path.dirname(base_dir)
+        if os.path.exists(os.path.join(parent_dir, "naming_convention.json")):
+            return os.path.join(parent_dir, "naming_convention.json")
+            
+        # Finally, check in any directory under base_dir
+        for root, _, files in os.walk(base_dir):
+            if "naming_convention.json" in files:
+                return os.path.join(root, "naming_convention.json")
+                
+        return None
     
-    
-    # ============================================================================
-    # PART 4: MAIN GENERATION LOOP
-    # ============================================================================
-    
-    def generate_esql_files(self, vector_content: str, esql_template: Dict, 
-                           msgflow_content: Dict, json_mappings: Dict,
-                           output_dir: str = "output") -> Dict:
+    def _load_naming_convention(self, base_dir: str) -> Dict:
         """
-        Main method to generate all ESQL files for a MessageFlow.
+        Load naming convention from naming_convention.json
         
-        Workflow:
-        1. Load all inputs (template, msgflow, mappings, naming)
-        2. Extract requirements (MessageFlow-first approach)
-        3. For each module:
-           - If event message: template copy
-           - If business logic: template + LLM injection
-           - Validate and auto-fix structure
-           - Write to file
-        4. Return generation results
+        Args:
+            base_dir: Base directory to start search
+            
+        Returns:
+            Naming convention data or empty dict if not found
+        """
+        naming_file = self._locate_naming_convention_file(base_dir)
+        if naming_file:
+            try:
+                with open(naming_file, 'r') as f:
+                    naming_data = json.load(f)
+                print(f"✅ Loaded naming convention from {naming_file}")
+                return naming_data
+            except Exception as e:
+                print(f"❌ Error loading naming convention: {str(e)}")
+                return {}
+        else:
+            print("⚠️ Naming convention file not found")
+            return {}
+    
+    def _load_esql_template(self, template_path: str) -> Optional[str]:
+        """
+        Load ESQL template from file.
+        
+        Args:
+            template_path: Path to ESQL template file
+            
+        Returns:
+            Template content or None if not found
+        """
+        try:
+            # Handle case where template_path is a dict - extract the 'path' key
+            if isinstance(template_path, dict) and 'path' in template_path:
+                template_path = template_path['path']
+                
+            # Ensure template_path is a string
+            template_path = str(template_path)
+            
+            # First try the exact path
+            if os.path.exists(template_path):
+                with open(template_path, 'r') as f:
+                    template_content = f.read()
+                print(f"✅ Loaded ESQL template from {template_path}")
+                return template_content
+            
+            # Try to locate the file in some common directories
+            possible_paths = [
+                os.path.join(os.path.dirname(template_path), "ESQL_Template_Updated.ESQL"),
+                os.path.join("templates", "ESQL_Template_Updated.ESQL"),
+                "ESQL_Template_Updated.ESQL"
+            ]
+            
+            for path in possible_paths:
+                if os.path.exists(path):
+                    with open(path, 'r') as f:
+                        template_content = f.read()
+                    print(f"✅ Loaded ESQL template from {path}")
+                    return template_content
+            
+            print(f"❌ ESQL template not found at {template_path} or common locations")
+            # Create a minimal template if not found
+            return self._create_minimal_template()
+            
+        except Exception as e:
+            print(f"❌ Error loading ESQL template: {str(e)}")
+            return None
+    
+    def _create_minimal_template(self) -> str:
+        """Create a minimal ESQL template if the template file is not found"""
+        print("⚠️ Creating minimal ESQL template")
+        return """
+-- INPUT AND OUTPUT EVENT MESSAGE TEMPLATE - METADATA ONLY
+CREATE COMPUTE MODULE {MODULE_NAME}_InputEventMessage
+ CREATE FUNCTION Main() RETURNS BOOLEAN
+ BEGIN
+    -- Input event processing logic
+    CALL CopyEntireMessage();
+    RETURN TRUE;
+ END;
+ CREATE PROCEDURE CopyMessageHeaders() BEGIN
+    DECLARE I INTEGER 1;
+    DECLARE J INTEGER;
+    SET J = CARDINALITY(InputRoot.*[]);
+    WHILE I < J DO
+        SET OutputRoot.*[I] = InputRoot.*[I];
+        SET I = I + 1;
+    END WHILE;
+ END;
+ CREATE PROCEDURE CopyEntireMessage() BEGIN
+    SET OutputRoot = InputRoot;
+ END;
+END MODULE;
+
+-- COMPUTE TEMPLATE - FULL BUSINESS LOGIC
+CREATE COMPUTE MODULE {MODULE_NAME}_Compute
+ CREATE FUNCTION Main() RETURNS BOOLEAN
+ BEGIN
+    -- Compute node processing logic
+    CALL CopyMessageHeaders();
+    -- Add business logic here
+    RETURN TRUE;
+ END;
+ CREATE PROCEDURE CopyMessageHeaders() BEGIN
+    DECLARE I INTEGER 1;
+    DECLARE J INTEGER;
+    SET J = CARDINALITY(InputRoot.*[]);
+    WHILE I < J DO
+        SET OutputRoot.*[I] = InputRoot.*[I];
+        SET I = I + 1;
+    END WHILE;
+ END;
+END MODULE;
+
+-- PROCESSING TEMPLATE - VALIDATION AND ROUTING ONLY
+CREATE COMPUTE MODULE {MODULE_NAME}_AfterEnrichment
+ CREATE FUNCTION Main() RETURNS BOOLEAN
+ BEGIN
+    -- After Enrichment processing
+    CALL CopyEntireMessage();
+    -- Add enrichment logic here
+    RETURN TRUE;
+ END;
+ CREATE PROCEDURE CopyMessageHeaders() BEGIN
+    DECLARE I INTEGER 1;
+    DECLARE J INTEGER;
+    SET J = CARDINALITY(InputRoot.*[]);
+    WHILE I < J DO
+        SET OutputRoot.*[I] = InputRoot.*[I];
+        SET I = I + 1;
+    END WHILE;
+ END;
+ CREATE PROCEDURE CopyEntireMessage() BEGIN
+    SET OutputRoot = InputRoot;
+ END;
+END MODULE;
+
+-- FAILURE/ERROR HANDLING TEMPLATE
+CREATE COMPUTE MODULE {MODULE_NAME}_ErrorHandler
+ CREATE FUNCTION Main() RETURNS BOOLEAN
+ BEGIN
+    -- Error handling logic
+    CALL CopyMessageHeaders();
+    -- Add error handling logic here
+    RETURN TRUE;
+ END;
+ CREATE PROCEDURE CopyMessageHeaders() BEGIN
+    DECLARE I INTEGER 1;
+    DECLARE J INTEGER;
+    SET J = CARDINALITY(InputRoot.*[]);
+    WHILE I < J DO
+        SET OutputRoot.*[I] = InputRoot.*[I];
+        SET I = I + 1;
+    END WHILE;
+ END;
+END MODULE;
+"""
+    
+    def _extract_flow_name_from_msgflow(self, msgflow_path: str) -> str:
+        """
+        Extract flow name from messageflow file path
+        
+        Args:
+            msgflow_path: Path to messageflow XML file
+            
+        Returns:
+            Flow name
+        """
+        try:
+            # First try to extract from filename
+            filename = os.path.basename(msgflow_path)
+            if filename.endswith('.msgflow'):
+                flow_name = filename[:-8]  # Remove '.msgflow'
+                return flow_name
+            
+            # If that fails, try to extract from XML content
+            try:
+                tree = ET.parse(msgflow_path)
+                root = tree.getroot()
+                
+                # Check nsURI attribute
+                ns_uri = root.get('nsURI', '')
+                if '{FLOW_NAME}' not in ns_uri:  # If it's not a template
+                    match = re.search(r'([^/]+)\.msgflow', ns_uri)
+                    if match:
+                        return match.group(1)
+            except:
+                pass
+            
+            # Fallback to directory name
+            dir_name = os.path.basename(os.path.dirname(msgflow_path))
+            return dir_name
+            
+        except Exception as e:
+            print(f"❌ Error extracting flow name: {str(e)}")
+            return "Unknown_Flow"
+    
+    def update_messageflow(self, msgflow_path: str, preserve_comments: bool = True) -> bool:
+        """
+        Update messageflow with required ESQL nodes.
+        
+        Args:
+            msgflow_path: Path to messageflow XML file
+            preserve_comments: Whether to preserve XML comments
+            
+        Returns:
+            True if updated successfully
+        """
+        try:
+            print(f"\n🔄 Updating messageflow: {msgflow_path}")
+            
+            if not os.path.exists(msgflow_path):
+                print(f"❌ Messageflow file not found: {msgflow_path}")
+                return False
+            
+            # Extract flow name for node naming
+            flow_name = self._extract_flow_name_from_msgflow(msgflow_path)
+            print(f"🔍 Detected flow name: {flow_name}")
+            
+            # Read the original XML content to preserve formatting and comments
+            with open(msgflow_path, 'r') as f:
+                xml_content = f.read()
+            
+            if preserve_comments:
+                # Parse XML while preserving comments
+                dom = minidom.parse(msgflow_path)
+                
+                # Check if we have the required nodes in the business requirements
+                nodes_to_add = []
+                node_names = set()
+                
+                for node_req in self.required_nodes:
+                    node_type = node_req.get('type', '')
+                    if node_type in ['input_event', 'compute', 'processing', 'output_event', 'failure']:
+                        node_name = node_req.get('name', '')
+                        node_names.add(node_name)
+                        
+                        # Format the ESQL node reference properly
+                        if node_type == 'processing':  # For AfterEnrichment
+                            esql_node_ref = f"esql://routine/{flow_name}#{flow_name}_AfterEnrichment.Main"
+                            nodes_to_add.append((node_name, esql_node_ref))
+                        else:
+                            suffix = self._get_suffix_for_node_type(node_type)
+                            esql_node_ref = f"esql://routine/{flow_name}#{flow_name}{suffix}.Main"
+                            nodes_to_add.append((node_name, esql_node_ref))
+                
+                # Now find where to inject the ESQL node references
+                # Usually in the DYNAMIC_ESQL_NODES section or similar placeholder
+                if '{DYNAMIC_ESQL_NODES}' in xml_content:
+                    nodes_xml = '\n      '.join(f'<!-- {name} ESQL Node -->\n      <node dynamic="true" id="{name}" value="{ref}" />' 
+                                              for name, ref in nodes_to_add)
+                    xml_content = xml_content.replace('{DYNAMIC_ESQL_NODES}', nodes_xml)
+                else:
+                    # Try to find composition section to add nodes
+                    match = re.search(r'<composition.*?>(.*?)</composition>', xml_content, re.DOTALL)
+                    if match:
+                        composition = match.group(1)
+                        nodes_xml = '\n      '.join(f'<!-- {name} ESQL Node -->\n      <node dynamic="true" id="{name}" value="{ref}" />' 
+                                                  for name, ref in nodes_to_add)
+                        new_composition = composition + '\n      ' + nodes_xml
+                        xml_content = xml_content.replace(composition, new_composition)
+                
+                # Save the updated XML
+                with open(msgflow_path, 'w') as f:
+                    f.write(xml_content)
+                
+                print(f"✅ Updated messageflow with {len(nodes_to_add)} ESQL nodes")
+                self.generation_stats['messageflows_updated'] += 1
+                return True
+            
+            else:
+                # Standard XML parsing approach (without comment preservation)
+                tree = ET.parse(msgflow_path)
+                root = tree.getroot()
+                
+                # Find the composition element
+                namespaces = {'eflow': 'http://www.ibm.com/wbi/2005/eflow'}
+                classifiers = root.findall(".//eClassifiers", namespaces)
+                
+                if classifiers:
+                    composition = None
+                    for classifier in classifiers:
+                        comp = classifier.find(".//composition", namespaces)
+                        if comp is not None:
+                            composition = comp
+                            break
+                    
+                    if composition is not None:
+                        # Add required ESQL nodes
+                        for node_req in self.required_nodes:
+                            node_type = node_req.get('type', '')
+                            if node_type in ['input_event', 'compute', 'processing', 'output_event', 'failure']:
+                                node_name = node_req.get('name', '')
+                                
+                                # Create the ESQL node
+                                node = ET.SubElement(composition, "node")
+                                node.set("dynamic", "true")
+                                node.set("id", node_name)
+                                
+                                # Format the ESQL node reference properly
+                                if node_type == 'processing':  # For AfterEnrichment
+                                    esql_node_ref = f"esql://routine/{flow_name}#{flow_name}_AfterEnrichment.Main"
+                                else:
+                                    suffix = self._get_suffix_for_node_type(node_type)
+                                    esql_node_ref = f"esql://routine/{flow_name}#{flow_name}{suffix}.Main"
+                                    
+                                node.set("value", esql_node_ref)
+                        
+                        # Save the updated XML
+                        tree.write(msgflow_path, encoding="UTF-8", xml_declaration=True)
+                        print(f"✅ Updated messageflow with {len(self.required_nodes)} ESQL nodes")
+                        self.generation_stats['messageflows_updated'] += 1
+                        return True
+                    else:
+                        print("❌ Composition element not found in messageflow")
+                else:
+                    print("❌ No eClassifiers found in messageflow")
+            
+            return False
+                
+        except Exception as e:
+            print(f"❌ Error updating messageflow: {str(e)}")
+            return False
+    
+    def _get_suffix_for_node_type(self, node_type: str) -> str:
+        """
+        Get the appropriate suffix for a node type
+        
+        Args:
+            node_type: Node type (input_event, compute, processing, etc.)
+            
+        Returns:
+            Suffix for the node type
+        """
+        if node_type == 'input_event':
+            return '_InputEventMessage'
+        elif node_type == 'output_event':
+            return '_OutputEventMessage'
+        elif node_type == 'compute':
+            return '_Compute'
+        elif node_type == 'processing':
+            return '_AfterEnrichment'
+        elif node_type == 'failure':
+            return '_ErrorHandler'
+        else:
+            return ''
+    
+    def _extract_template_section(self, template_content: str, section_type: str) -> str:
+        """
+        Extract a specific section from the ESQL template
+        
+        Args:
+            template_content: Full template content
+            section_type: Section type (input_event, compute, etc.)
+            
+        Returns:
+            Section content
+        """
+        section_markers = self.template_sections.get(section_type)
+        if not section_markers:
+            print(f"❌ Unknown section type: {section_type}")
+            return ""
+        
+        start_marker, end_marker = section_markers
+        
+        if start_marker not in template_content:
+            print(f"⚠️ Start marker not found for {section_type} section")
+            return ""
+        
+        start_idx = template_content.find(start_marker)
+        
+        if end_marker:
+            if end_marker not in template_content:
+                print(f"⚠️ End marker not found for {section_type} section")
+                return template_content[start_idx:]
+                
+            end_idx = template_content.find(end_marker)
+            return template_content[start_idx:end_idx].strip()
+        else:
+            return template_content[start_idx:].strip()
+        
+
+    
+    # Modified method signature to accept both template_dict and esql_template
+    def generate_esql_files(self, vector_content: str, template_dict: Dict = None, msgflow_content: Dict = None, 
+                           json_mappings: Dict = None, output_dir: str = None, esql_template: str = None) -> Dict:
+        """
+        Generate ESQL files for a message flow based on vector content and template.
         
         Args:
             vector_content: Business requirements from Vector DB
-            esql_template: Dict with 'path' to ESQL_Template_Updated.ESQL
-            msgflow_content: Dict with 'path' to .msgflow file
-            json_mappings: Dict with 'path' to component_mapping.json
-            output_dir: Output directory for ESQL files
-        
+            template_dict: ESQL template information (dict with 'path' key)
+            msgflow_content: Message flow information (dict with 'path' key)
+            json_mappings: JSON mappings information
+            output_dir: Output directory
+            esql_template: ESQL template path (backward compatibility)
+            
         Returns:
-            Dict with generation results and statistics
+            Generation results
         """
-        print("\n" + "="*70)
-        print("🚀 ESQL GENERATION STARTED")
-        print("="*70)
-        
-        # Reset statistics
-        self.generation_stats = {
-            'llm_calls': 0,
-            'successful_generations': 0,
-            'failed_generations': 0,
-            'auto_fixes_applied': 0
+        # Initialize results
+        results = {
+            'status': 'initialized',
+            'successful': 0,
+            'failed': 0,
+            'total_modules': 0,
+            'esql_files': []
         }
         
         try:
-            # STEP 1: Load all inputs
-            template_content, msgflow_xml, mappings_data, naming_data = self._load_inputs(
-                esql_template, msgflow_content, json_mappings, output_dir
-            )
+            print("\n" + "="*70)
+            print("🔧 GENERATING ESQL FILES")
+            print("="*70)
             
-            # STEP 2: Extract requirements (MessageFlow-first)
-            module_requirements = self._extract_requirements_from_sources(
-                vector_content, msgflow_xml, mappings_data, naming_data
-            )
-            
-            if not module_requirements:
-                raise Exception("No ESQL modules found in requirements extraction")
-            
-            print(f"\n📋 Generating {len(module_requirements)} ESQL modules...")
-            
-            # Ensure output directory exists
-            os.makedirs(output_dir, exist_ok=True)
-            
-            # Track results
-            successful_modules = []
-            failed_modules = []
-            
-            # STEP 3: Generate each module
-            for idx, module_req in enumerate(module_requirements, 1):
-                module_name = module_req['name']
-                module_type = module_req.get('type', 'compute')
+            # Handle backward compatibility
+            if esql_template and template_dict is None:
+                template_dict = {'path': esql_template}
                 
-                print(f"\n  [{idx}/{len(module_requirements)}] Processing: {module_name}")
-                print(f"      Type: {module_type}")
+            # Ensure we have all required parameters
+            if template_dict is None:
+                template_dict = {'path': 'templates/ESQL_Template_Updated.ESQL'}
+            
+            if msgflow_content is None and output_dir:
+                # Create a default msgflow content
+                flow_name = "Default_Flow"
+                if self.business_requirements:
+                    flow_name = self.business_requirements.get('flow_name', "Default_Flow")
+                msgflow_content = {'path': os.path.join(output_dir, f"{flow_name}.msgflow")}
+                
+            if output_dir is None and msgflow_content and 'path' in msgflow_content:
+                output_dir = os.path.dirname(msgflow_content['path'])
+                
+            if not output_dir:
+                output_dir = '.'
+            
+            if json_mappings is None:
+                json_mappings = {'path': os.path.join(output_dir, 'component_mapping.json')}
+            
+            # Step 1: Extract flow name and load naming convention
+            flow_name = None
+            if msgflow_content and 'path' in msgflow_content and os.path.exists(msgflow_content['path']):
+                flow_name = self._extract_flow_name_from_msgflow(msgflow_content['path'])
+            elif self.business_requirements:
+                flow_name = self.business_requirements.get('flow_name', "Default_Flow")
+            else:
+                # Try to extract from business requirements
+                business_reqs = self.analyze_vector_content(vector_content)
+                flow_name = business_reqs.get('flow_name', "Default_Flow")
+                
+            naming_convention = self._load_naming_convention(output_dir)
+            
+            # Step 2: Load ESQL template - pass the path directly, not the dictionary
+            template_path = template_dict['path'] if isinstance(template_dict, dict) and 'path' in template_dict else template_dict
+            template_content = self._load_esql_template(template_path)
+            
+            if not template_content:
+                raise ValueError("Failed to load ESQL template")
+            
+            # Step 3: Analyze vector content if not already done
+            if not self.required_nodes:
+                self.analyze_vector_content(vector_content)
+            
+            # Step 4: Generate ESQL files for each required node
+            for node_req in self.required_nodes:
+                node_name = node_req.get('name', '')
+                node_type = node_req.get('type', '')
+                
+                if not node_type or not node_name:
+                    print(f"⚠️ Skipping node with missing name or type: {node_req}")
+                    continue
+                
+                results['total_modules'] += 1
                 
                 try:
-                    # Determine generation method
-                    if self._is_event_message_module(module_name):
-                        # Template copy for event messages
-                        esql_content = self._generate_event_message_esql(
-                            module_name, naming_data, template_content
-                        )
-                        generation_method = "TEMPLATE_COPY"
-                    else:
-                        # Template + LLM for business logic
-                        esql_content = self._generate_business_logic_esql(
-                            module_req, naming_data, template_content, vector_content
-                        )
-                        generation_method = "LLM_GENERATION"
+                    # Get the appropriate suffix for this node type
+                    suffix = self._get_suffix_for_node_type(node_type)
+                    module_name = f"{flow_name}{suffix}"
                     
-                    # Final structure check
-                    if not esql_content.strip().endswith('END MODULE;'):
-                        print(f"      ❌ FAILED: Structure incomplete after generation")
-                        failed_modules.append({
-                            'name': module_name,
-                            'error': 'Incomplete structure (missing END MODULE;)',
-                            'type': module_type
-                        })
-                        self.generation_stats['failed_generations'] += 1
-                        continue
+                    # Extract the appropriate section from the template
+                    section_content = self._extract_template_section(template_content, node_type)
                     
-                    # Write to file
-                    file_path = self._write_esql_file(module_name, esql_content, output_dir)
+                    if not section_content:
+                        print(f"⚠️ Empty template section for {node_type}, using minimal template")
+                        # Create a minimal template section
+                        section_content = self._create_minimal_template_section(node_type)
                     
-                    # Record success
-                    successful_modules.append({
-                        'name': module_name,
-                        'type': module_type,
-                        'file_path': file_path,
-                        'generation_method': generation_method,
-                        'content_length': len(esql_content)
-                    })
+                    # Replace module name in template
+                    esql_content = section_content.replace('{MODULE_NAME}', flow_name)
                     
-                    self.generation_stats['successful_generations'] += 1
-                    print(f"      ✅ SUCCESS: Written to {file_path}")
-                
+                    # Create the ESQL file
+                    esql_filename = f"{module_name}.esql"
+                    esql_path = os.path.join(output_dir, esql_filename)
+                    
+                    with open(esql_path, 'w') as f:
+                        f.write(esql_content)
+                    
+                    print(f"✅ Generated ESQL file: {esql_filename}")
+                    results['successful'] += 1
+                    results['esql_files'].append(esql_path)
+                    
                 except Exception as e:
-                    print(f"      ❌ FAILED: {str(e)}")
-                    failed_modules.append({
-                        'name': module_name,
-                        'error': str(e),
-                        'type': module_type
-                    })
-                    self.generation_stats['failed_generations'] += 1
+                    print(f"❌ Failed to generate ESQL for {node_name}: {str(e)}")
+                    results['failed'] += 1
             
-            # STEP 4: Generate results summary
-            results = {
-                'status': 'completed',
-                'total_modules': len(module_requirements),
-                'successful': len(successful_modules),
-                'failed': len(failed_modules),
-                'success_rate': f"{(len(successful_modules) / len(module_requirements) * 100):.1f}%",
-                'successful_modules': successful_modules,
-                'failed_modules': failed_modules,
-                'output_directory': output_dir,
-                'statistics': self.generation_stats,
-                    # UI-compatible keys (add these)
-                'llm_calls': self.generation_stats['llm_calls'],
-                'llm_calls_made': self.generation_stats['llm_calls'],
-                'files_generated': len(successful_modules),
-                'total_files': len(successful_modules),
-                'esql_files_generated': len(successful_modules),
-                'generation_method': 'Hybrid: Template Copy + LLM Generation'
-
-            }
-            
-            # Print summary
-            print("\n" + "="*70)
-            print("📊 GENERATION SUMMARY")
-            print("="*70)
-            print(f"✅ Successful: {results['successful']}/{results['total_modules']} ({results['success_rate']})")
-            print(f"❌ Failed: {results['failed']}/{results['total_modules']}")
-            print(f"🧠 LLM Calls: {self.generation_stats['llm_calls']}")
-            print(f"🔧 Auto-fixes Applied: {self.generation_stats['auto_fixes_applied']}")
-            print(f"📁 Output Directory: {output_dir}")
-            
-            if failed_modules:
-                print("\n⚠️  Failed Modules:")
-                for module in failed_modules:
-                    print(f"   • {module['name']}: {module['error']}")
-            
-            print("="*70 + "\n")
+            # Update status based on results
+            if results['successful'] > 0:
+                if results['failed'] == 0:
+                    results['status'] = 'completed'
+                else:
+                    results['status'] = 'partially_completed'
+            else:
+                results['status'] = 'failed'
             
             return results
+            
+        except Exception as e:
+            print(f"❌ Error generating ESQL files: {str(e)}")
+            results['status'] = 'failed'
+            results['error'] = str(e)
+            return results
+    
+
+
+    def _create_minimal_template_section(self, section_type: str) -> str:
+        """
+        Create a minimal template section if the template doesn't have it
+        
+        Args:
+            section_type: Section type (input_event, compute, etc.)
+            
+        Returns:
+            Minimal template section
+        """
+        if section_type == 'input_event':
+            return """
+    CREATE COMPUTE MODULE {MODULE_NAME}_InputEventMessage
+    CREATE FUNCTION Main() RETURNS BOOLEAN
+    BEGIN
+        -- Input event processing logic
+        DECLARE episInfo REFERENCE TO Environment.variables.EventData.episInfo;
+        DECLARE sourceInfo REFERENCE TO Environment.variables.EventData.sourceInfo;
+        DECLARE targetInfo REFERENCE TO Environment.variables.EventData.targetInfo;
+        DECLARE integrationInfo REFERENCE TO Environment.variables.EventData.integrationInfo;
+        DECLARE dataInfo REFERENCE TO Environment.variables.EventData.dataInfo;
+        
+        -- Extract source information
+        SET sourceInfo.srcAppIdentifier = InputRoot.XMLNSC.[<].*:Header.*:Source.*:Identifier;
+        SET sourceInfo.srcEnterpriseCode = InputRoot.XMLNSC.[<].*:Header.*:Source.*:EnterpriseCode;
+        SET sourceInfo.srcCountryCode = InputRoot.XMLNSC.[<].*:Header.*:Source.*:CountryCode;
+        SET sourceInfo.srcCompanyCode = InputRoot.XMLNSC.[<].*:Header.*:Source.*:CompanyCode;
+        
+        -- Extract target information
+        SET targetInfo.tgtAppIdentifier = InputRoot.XMLNSC.[<].*:Header.*:Target.*:Identifier;
+        SET targetInfo.tgtEnterpriseCode = InputRoot.XMLNSC.[<].*:Header.*:Target.*:EnterpriseCode;
+        SET targetInfo.tgtCountryCode = InputRoot.XMLNSC.[<].*:Header.*:Target.*:CountryCode;
+        SET targetInfo.tgtCompanyCode = InputRoot.XMLNSC.[<].*:Header.*:Target.*:CompanyCode;
+        
+        -- Extract data information
+        SET dataInfo.messageType = InputRoot.XMLNSC.[<].*:Header.*:MessageType;
+        SET dataInfo.dataFormat = 'XML';
+        
+        CALL CopyEntireMessage();
+        RETURN TRUE;
+    END;
+    CREATE PROCEDURE CopyMessageHeaders() BEGIN
+        DECLARE I INTEGER 1;
+        DECLARE J INTEGER;
+        SET J = CARDINALITY(InputRoot.*[]);
+        WHILE I < J DO
+            SET OutputRoot.*[I] = InputRoot.*[I];
+            SET I = I + 1;
+        END WHILE;
+    END;
+    CREATE PROCEDURE CopyEntireMessage() BEGIN
+        SET OutputRoot = InputRoot;
+    END;
+    END MODULE;
+    """
+        elif section_type == 'compute':
+            return """
+    CREATE COMPUTE MODULE {MODULE_NAME}_Compute
+    CREATE FUNCTION Main() RETURNS BOOLEAN
+    BEGIN
+        -- ✅ BUSINESS LOGIC: Full message transformation and processing
+        DECLARE episInfo REFERENCE TO Environment.variables.EventData.episInfo;
+        DECLARE sourceInfo REFERENCE TO Environment.variables.EventData.sourceInfo;
+        DECLARE targetInfo REFERENCE TO Environment.variables.EventData.targetInfo;
+        DECLARE integrationInfo REFERENCE TO Environment.variables.EventData.integrationInfo;
+        DECLARE dataInfo REFERENCE TO Environment.variables.EventData.dataInfo;
+        
+        -- ✅ BUSINESS DATA EXTRACTION: Extract business identifiers and data
+        SET dataInfo.mainIdentifier = InputRoot.XMLNSC.[<].*:BusinessEntity.*:BusinessIdentifier;
+        
+        -- Add business logic here
+        
+        -- ✅ STANDARD MESSAGE PROCESSING
+        SET OutputRoot = NULL;
+        SET OutputRoot = InputRoot;
+        
+        RETURN TRUE;
+    END;
+
+    -- ✅ STANDARD IBM ACE INFRASTRUCTURE
+    CREATE PROCEDURE CopyMessageHeaders() BEGIN
+        DECLARE I INTEGER 1;
+        DECLARE J INTEGER;
+        SET J = CARDINALITY(InputRoot.*[]);
+        WHILE I < J DO
+            SET OutputRoot.*[I] = InputRoot.*[I];
+            SET I = I + 1;
+        END WHILE;
+    END;
+
+    CREATE PROCEDURE CopyEntireMessage() BEGIN
+        SET OutputRoot = InputRoot;
+    END;
+    END MODULE;
+    """
+        elif section_type == 'processing':
+            return """
+    CREATE COMPUTE MODULE {MODULE_NAME}_AfterEnrichment
+    CREATE FUNCTION Main() RETURNS BOOLEAN
+    BEGIN
+        -- After Enrichment processing
+        DECLARE episInfo REFERENCE TO Environment.variables.EventData.episInfo;
+        DECLARE sourceInfo REFERENCE TO Environment.variables.EventData.sourceInfo;
+        DECLARE targetInfo REFERENCE TO Environment.variables.EventData.targetInfo;
+        DECLARE integrationInfo REFERENCE TO Environment.variables.EventData.integrationInfo;
+        DECLARE dataInfo REFERENCE TO Environment.variables.EventData.dataInfo;
+        
+        -- Process enrichment data
+        -- Add enrichment-specific logic here
+        
+        CALL CopyEntireMessage();
+        RETURN TRUE;
+    END;
+    CREATE PROCEDURE CopyMessageHeaders() BEGIN
+        DECLARE I INTEGER 1;
+        DECLARE J INTEGER;
+        SET J = CARDINALITY(InputRoot.*[]);
+        WHILE I < J DO
+            SET OutputRoot.*[I] = InputRoot.*[I];
+            SET I = I + 1;
+        END WHILE;
+    END;
+    CREATE PROCEDURE CopyEntireMessage() BEGIN
+        SET OutputRoot = InputRoot;
+    END;
+    END MODULE;
+    """
+        elif section_type == 'output_event':
+            return """
+    CREATE COMPUTE MODULE {MODULE_NAME}_OutputEventMessage
+    CREATE FUNCTION Main() RETURNS BOOLEAN
+    BEGIN
+        -- Output event processing logic
+        DECLARE episInfo REFERENCE TO Environment.variables.EventData.episInfo;
+        DECLARE sourceInfo REFERENCE TO Environment.variables.EventData.sourceInfo;
+        DECLARE targetInfo REFERENCE TO Environment.variables.EventData.targetInfo;
+        DECLARE integrationInfo REFERENCE TO Environment.variables.EventData.integrationInfo;
+        DECLARE dataInfo REFERENCE TO Environment.variables.EventData.dataInfo;
+        
+        -- Prepare output event data
+        -- Process response data
+        -- Update event tracking information
+        
+        CALL CopyEntireMessage();
+        RETURN TRUE;
+    END;
+    CREATE PROCEDURE CopyMessageHeaders() BEGIN
+        DECLARE I INTEGER 1;
+        DECLARE J INTEGER;
+        SET J = CARDINALITY(InputRoot.*[]);
+        WHILE I < J DO
+            SET OutputRoot.*[I] = InputRoot.*[I];
+            SET I = I + 1;
+        END WHILE;
+    END;
+    CREATE PROCEDURE CopyEntireMessage() BEGIN
+        SET OutputRoot = InputRoot;
+    END;
+    END MODULE;
+    """
+        elif section_type == 'failure':
+            return """
+    CREATE COMPUTE MODULE {MODULE_NAME}_ErrorHandler
+    CREATE FUNCTION Main() RETURNS BOOLEAN
+    BEGIN
+        -- Error handling logic
+        DECLARE episInfo REFERENCE TO Environment.variables.EventData.episInfo;
+        DECLARE sourceInfo REFERENCE TO Environment.variables.EventData.sourceInfo;
+        DECLARE targetInfo REFERENCE TO Environment.variables.EventData.targetInfo;
+        DECLARE integrationInfo REFERENCE TO Environment.variables.EventData.integrationInfo;
+        DECLARE dataInfo REFERENCE TO Environment.variables.EventData.dataInfo;
+        DECLARE errorInfo REFERENCE TO Environment.variables.EventData.errorInfo;
+        
+        -- Capture error details
+        SET errorInfo.errorCode = 'ERR-' || CAST(InputExceptionList.[1].Number AS CHARACTER);
+        SET errorInfo.errorText = InputExceptionList.[1].Text;
+        SET errorInfo.errorSource = InputExceptionList.[1].Label;
+        
+        -- Set up error response
+        SET OutputRoot.XMLNSC.Error.Code = errorInfo.errorCode;
+        SET OutputRoot.XMLNSC.Error.Text = errorInfo.errorText;
+        SET OutputRoot.XMLNSC.Error.Source = errorInfo.errorSource;
+        
+        RETURN TRUE;
+    END;
+    CREATE PROCEDURE CopyMessageHeaders() BEGIN
+        DECLARE I INTEGER 1;
+        DECLARE J INTEGER;
+        SET J = CARDINALITY(InputRoot.*[]);
+        WHILE I < J DO
+            SET OutputRoot.*[I] = InputRoot.*[I];
+            SET I = I + 1;
+        END WHILE;
+    END;
+    END MODULE;
+    """
+        else:
+            return ""
+
+
+
+    # ============================================================================
+    # PART 3: MAIN EXECUTION 
+    # ============================================================================
+    
+    def generate_esql_files_for_flow(self, vector_content: str, esql_template_path: str, output_dir: str) -> Dict:
+        """
+        Main execution method to generate ESQL files for a flow.
+        
+        Args:
+            vector_content: Business requirements from Vector DB
+            esql_template_path: Path to ESQL template
+            output_dir: Output directory
+            
+        Returns:
+            Generation results
+        """
+        try:
+            print("\n" + "="*70)
+            print("🚀 STARTING ENHANCED ESQL GENERATION")
+            print("="*70)
+            
+            # Step 1: Create output directory if it doesn't exist
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Step 2: Analyze vector content to extract business requirements
+            business_requirements = self.analyze_vector_content(vector_content)
+            if not business_requirements:
+                raise ValueError("Failed to extract business requirements from Vector DB content")
+            
+            # Step 3: Find messageflow files in the output directory
+            msgflow_files = []
+            for root, _, files in os.walk(output_dir):
+                for file in files:
+                    if file.endswith('.msgflow'):
+                        msgflow_files.append(os.path.join(root, file))
+            
+            if not msgflow_files:
+                print(f"⚠️ No messageflow files found in {output_dir}")
+                print("⚠️ Proceeding with ESQL generation based on business requirements")
+            
+            # Step 4: Generate ESQL files for each messageflow
+            all_results = {
+                'status': 'in_progress',
+                'total_flows': len(msgflow_files) if msgflow_files else 1,
+                'successful_flows': 0,
+                'failed_flows': 0,
+                'flow_results': []
+            }
+            
+            for msgflow_path in msgflow_files:
+                try:
+                    # Extract flow name
+                    flow_name = self._extract_flow_name_from_msgflow(msgflow_path)
+                    
+                    # Update messageflow
+                    msgflow_updated = self.update_messageflow(msgflow_path)
+                    
+                    # Generate ESQL files
+                    flow_dir = os.path.dirname(msgflow_path)
+                    # Create proper parameter dictionaries
+                    template_dict = {'path': esql_template_path}
+                    msgflow_content = {'path': msgflow_path}
+                    json_mappings = {'path': os.path.join(flow_dir, '..', 'component_mapping.json')}
+                    
+                    # Call with correct parameters - now we support both parameter styles
+                    flow_results = self.generate_esql_files(
+                        vector_content=vector_content,
+                        template_dict=template_dict,
+                        msgflow_content=msgflow_content,
+                        json_mappings=json_mappings,
+                        output_dir=flow_dir
+                    )
+                    
+                    # Add to overall results
+                    flow_results['messageflow_updated'] = msgflow_updated
+                    flow_results['messageflow_path'] = msgflow_path
+                    all_results['flow_results'].append(flow_results)
+                    
+                    if flow_results['status'] == 'completed':
+                        all_results['successful_flows'] += 1
+                    else:
+                        all_results['failed_flows'] += 1
+                
+                except Exception as e:
+                    print(f"❌ Error processing messageflow {msgflow_path}: {str(e)}")
+                    all_results['failed_flows'] += 1
+                    all_results['flow_results'].append({
+                        'status': 'failed',
+                        'error': str(e),
+                        'messageflow_path': msgflow_path
+                    })
+            
+            # If no messageflow files found, still generate ESQL based on requirements
+            if not msgflow_files:
+                try:
+                    flow_name = business_requirements.get('flow_name', 'Default_Flow')
+                    
+                    # Create a dummy messageflow content
+                    msgflow_content = {'path': os.path.join(output_dir, f"{flow_name}.msgflow")}
+                    template_dict = {'path': esql_template_path}
+                    json_mappings = {'path': os.path.join(output_dir, 'component_mapping.json')}
+                    
+                    # Generate ESQL files with new parameter style
+                    flow_results = self.generate_esql_files(
+                        vector_content=vector_content,
+                        template_dict=template_dict,
+                        msgflow_content=msgflow_content,
+                        json_mappings=json_mappings,
+                        output_dir=output_dir
+                    )
+                    
+                    # Add to overall results
+                    flow_results['messageflow_updated'] = False
+                    flow_results['messageflow_path'] = msgflow_content['path']
+                    all_results['flow_results'].append(flow_results)
+                    
+                    if flow_results['status'] == 'completed':
+                        all_results['successful_flows'] += 1
+                    else:
+                        all_results['failed_flows'] += 1
+                
+                except Exception as e:
+                    print(f"❌ Error generating ESQL without messageflow: {str(e)}")
+                    all_results['failed_flows'] += 1
+                    all_results['flow_results'].append({
+                        'status': 'failed',
+                        'error': str(e)
+                    })
+            
+            # Step 5: Generate final results
+            all_results['status'] = 'completed'
+            all_results['statistics'] = self.generation_stats
+            
+            # Calculate total success rate
+            total_modules = sum(result.get('total_modules', 0) for result in all_results['flow_results'])
+            successful_modules = sum(result.get('successful', 0) for result in all_results['flow_results'])
+            if total_modules > 0:
+                all_results['success_rate'] = f"{(successful_modules / total_modules * 100):.1f}%"
+            else:
+                all_results['success_rate'] = "0%"
+            
+            # Print overall summary
+            print("\n" + "="*70)
+            print("📊 OVERALL GENERATION SUMMARY")
+            print("="*70)
+            print(f"✅ Successful Flows: {all_results['successful_flows']}/{all_results['total_flows']}")
+            print(f"✅ Successful Modules: {successful_modules}/{total_modules} ({all_results['success_rate']})")
+            print(f"🧠 Total LLM Calls: {self.generation_stats['llm_calls']}")
+            print(f"🔧 Total Auto-fixes: {self.generation_stats['auto_fixes_applied']}")
+            print(f"🔄 MessageFlows Updated: {self.generation_stats['messageflows_updated']}")
+            
+            return all_results
         
         except Exception as e:
             print(f"\n❌ ESQL Generation Failed: {str(e)}")
             return {
                 'status': 'failed',
                 'error': str(e),
-                'total_modules': 0,
-                'successful': 0,
-                'failed': 0,
-                'statistics': self.generation_stats,
-
-                        # UI-compatible keys for error case
-                'llm_calls': self.generation_stats.get('llm_calls', 0),
-                'llm_calls_made': self.generation_stats.get('llm_calls', 0),
-                'files_generated': 0,
-                'total_files': 0,
-                'esql_files_generated': 0,
-                'generation_method': 'Failed'
+                'statistics': self.generation_stats
             }
-    
-    
-    # ============================================================================
-    # PART 5: FILE OPERATIONS
-    # ============================================================================
-    
-    def _write_esql_file(self, module_name: str, esql_content: str, output_dir: str) -> str:
-        """
-        Write ESQL content to file.
-        
-        Args:
-            module_name: Module name (becomes filename)
-            esql_content: Complete ESQL code
-            output_dir: Output directory
-        
-        Returns:
-            Full path to written file
-        """
-        # Ensure output directory exists
-        os.makedirs(output_dir, exist_ok=True)
-        
-        # Create filename
-        filename = f"{module_name}.esql"
-        file_path = os.path.join(output_dir, filename)
-        
-        # Write file
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(esql_content)
-        
-        return file_path
 
 
 # ============================================================================
 # HELPER FUNCTIONS FOR INTEGRATION
 # ============================================================================
 
-def create_esql_generator(groq_api_key: Optional[str] = None, 
-                         groq_model: str = "llama-3.1-70b-versatile") -> ESQLGenerator:
+def create_enhanced_esql_generator(groq_api_key: Optional[str] = None, 
+                                groq_model: str = "llama-3.1-70b-versatile") -> ESQLGenerator:
     """
     Factory function to create ESQLGenerator instance.
     
     Args:
-        groq_api_key: Groq API key (optional, uses environment variable if not provided)
+        groq_api_key: Groq API key (optional, uses environment variable)
         groq_model: LLM model to use
     
     Returns:
@@ -1226,45 +1160,61 @@ def create_esql_generator(groq_api_key: Optional[str] = None,
     return ESQLGenerator(groq_api_key=groq_api_key, groq_model=groq_model)
 
 
+def run_enhanced_esql_generator(vector_content: str, output_dir: str, 
+                            esql_template_path: str = "templates/ESQL_Template_Updated.ESQL",
+                            groq_api_key: Optional[str] = None,
+                            groq_model: str = "llama-3.1-70b-versatile") -> Dict:
+    """
+    Main execution function with simplified inputs for main.py.
+    
+    Args:
+        vector_content: Business requirements from Vector DB
+        output_dir: Output directory
+        esql_template_path: Path to ESQL template
+        groq_api_key: Groq API key
+        groq_model: LLM model to use
+        
+    Returns:
+        Generation results
+    """
+    generator = create_enhanced_esql_generator(groq_api_key, groq_model)
+    return generator.generate_esql_files_for_flow(vector_content, esql_template_path, output_dir)
+
+
+
+
 # ============================================================================
 # MAIN EXECUTION (for testing)
 # ============================================================================
 
 def main():
     """
-    Test execution of ESQL Generator.
+    Test execution of Enhanced ESQL Generator.
     This is for standalone testing only.
     """
     import sys
     
     print("="*70)
-    print("ESQL Generator - Standalone Test")
+    print("Enhanced ESQL Generator - Standalone Test")
     print("="*70)
     
-    # Check for required files
-    required_files = [
-        'ESQL_Template_Updated.ESQL',
-        'naming_convention.json',
-        'component_mapping.json'
-    ]
+    # Check for ESQL template
+    template_path = "templates/ESQL_Template_Updated.ESQL"
+    if not os.path.exists(template_path):
+        template_path = "ESQL_Template_Updated.ESQL"
+        if not os.path.exists(template_path):
+            print(f"\n❌ ESQL template not found in templates directory or current directory")
+            print("Please ensure ESQL_Template_Updated.ESQL is available")
+            sys.exit(1)
     
-    missing_files = [f for f in required_files if not os.path.exists(f)]
-    if missing_files:
-        print(f"\n❌ Missing required files: {missing_files}")
-        print("Please ensure all required files are in the current directory.")
+    # Check for output directory
+    output_dir = "output"
+    if not os.path.exists(output_dir):
+        print(f"\n❌ Output directory not found: {output_dir}")
+        print("Please generate MessageFlow first")
         sys.exit(1)
     
-    # Check for MessageFlow
-    import glob
-    msgflow_files = glob.glob("output/**/*.msgflow", recursive=True)
-    if not msgflow_files:
-        print("\n❌ No .msgflow file found in output directory")
-        print("Please generate MessageFlow first.")
-        sys.exit(1)
-    
-    print(f"\n✅ Found MessageFlow: {msgflow_files[0]}")
-    
-    # Check for Vector DB content (simulated)
+    # Simulated Vector DB content for testing
     vector_content = """
     CW1 Document Processing Flow
     
@@ -1290,24 +1240,18 @@ def main():
     """
     
     try:
-        # Create generator
-        generator = create_esql_generator()
-        
-        # Generate ESQL files
-        results = generator.generate_esql_files(
+        # Run generator
+        results = run_enhanced_esql_generator(
             vector_content=vector_content,
-            esql_template={'path': 'ESQL_Template_Updated.ESQL'},
-            msgflow_content={'path': msgflow_files[0]},
-            json_mappings={'path': 'component_mapping.json'},
-            output_dir='output/esql'
+            output_dir=output_dir,
+            esql_template_path=template_path
         )
         
         # Print results
-        if results['status'] == 'completed':
-            print("\n🎉 ESQL Generation Completed Successfully!")
-            print(f"📁 Check output in: {results['output_directory']}")
+        if results.get('status') == 'completed':
+            print("\n🎉 Enhanced ESQL Generation Completed Successfully!")
         else:
-            print(f"\n❌ ESQL Generation Failed: {results.get('error', 'Unknown error')}")
+            print(f"\n❌ Enhanced ESQL Generation Failed: {results.get('error', 'Unknown error')}")
             sys.exit(1)
     
     except Exception as e:
@@ -1319,4 +1263,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
