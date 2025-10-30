@@ -1,0 +1,19 @@
+{
+  "pdf_source": "tmpob0g08dj.pdf",
+  "extraction_timestamp": "2025-10-30T23:02:36.340732",
+  "project_naming": {
+    "ace_application_name": "EPIS_SAP_Edicom_App",
+    "message_flow_name": "SAP_Data_Edicom_RTS",
+    "connected_system": "SAP",
+    "ace_server": "group-sap-server",
+    "input_type": "HTTP"
+  },
+  "component_naming_rules": {
+    "msgflow_files": "SAP_Data_Edicom_RTS.msgflow",
+    "project_name": "EPIS_SAP_Edicom_App"
+  },
+  "business_context": {
+    "description": "ESB will receive invoice files from SAP through a WCF-BasicHttp adapter.",
+    "pdf_extracted": true
+  }
+}
