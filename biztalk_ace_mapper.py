@@ -268,119 +268,6 @@ class BizTalkACEMapper:
  
 
 
-    def generate_nodes_from_pattern(self, pattern: Dict, business_json: Dict) -> tuple:
-        """Generate nodes dynamically - NO HARDCODED VALUES"""
-        nodes = []
-        node_map = {}
-        node_id = 1
-        
-        for node_type in pattern['node_sequence']:
-            current_id = f"FCMComposite_1_{node_id}"
-            node_map[node_type] = current_id
-            
-            if node_type == 'HTTP':
-                nodes.append(self._create_http_input(current_id, business_json))
-            elif node_type == 'MQInput':
-                nodes.append(self._create_mq_input(current_id, business_json))
-            elif node_type == 'InputEventMessage':
-                nodes.append(self._create_event_node(current_id, 'InputEventMessage'))
-            elif node_type == 'BeforeEnrichment':
-                nodes.append(self._create_subflow_node(current_id, 'BeforeEnrichment'))
-            elif node_type == 'Compute':
-                nodes.append(self._create_compute(current_id, business_json))
-            elif node_type == 'XSLTransform':
-                for xsl_file in pattern['xsl_files']:
-                    nodes.append(self._create_xsl(current_id, xsl_file))
-                    node_id += 1
-                    current_id = f"FCMComposite_1_{node_id}"
-                node_id -= 1
-            elif node_type == 'AfterEnrichment':
-                nodes.append(self._create_subflow_node(current_id, 'AfterEnrichment'))
-            elif node_type == 'SOAPRequest':
-                nodes.append(self._create_soap(current_id, pattern.get('soap_endpoint')))
-            elif node_type == 'AfterEventMessage':
-                nodes.append(self._create_event_node(current_id, 'AfterEventMessage'))
-            elif node_type == 'HTTPReply':
-                nodes.append(self._create_http_reply(current_id))
-            elif node_type == 'MQOutput':
-                nodes.append(self._create_mq_output(current_id, business_json))
-            elif node_type == 'FailureHandler':
-                nodes.append(self._create_failure(current_id))
-            
-            node_id += 1
-        
-        return '\n'.join(nodes), node_map
-
-
-    def _create_http_input(self, node_id: str, biz: Dict) -> str:
-        url = biz.get('url_specifier', biz.get('service_path', '/service'))
-        return f'''<nodes xmi:type="ComIbmWSInput.msgnode:FCMComposite_1" xmi:id="{node_id}" location="50,150" URLSpecifier="{url}">
-        <translation xmi:type="utility:ConstantString" string="HTTPInput"/>
-    </nodes>'''
-
-
-    def _create_mq_input(self, node_id: str, biz: Dict) -> str:
-        queue = biz.get('source_queue', biz.get('input_queue', 'INPUT.QUEUE'))
-        return f'''<nodes xmi:type="ComIbmMQInput.msgnode:FCMComposite_1" xmi:id="{node_id}" location="50,150" queueName="{queue}">
-        <translation xmi:type="utility:ConstantString" string="MQInput"/>
-    </nodes>'''
-
-
-    def _create_compute(self, node_id: str, biz: Dict) -> str:
-        module = biz.get('compute_module', 'Compute')
-        return f'''<nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="{node_id}" location="300,150" dataLocation="{module}.esql" computeExpression="esql://{module}#{module}.Main">
-        <translation xmi:type="utility:TranslatableString" key="{module}" bundleName="{module}" pluginId="{biz.get('project_name', 'Project')}"/>
-    </nodes>'''
-
-
-    def _create_xsl(self, node_id: str, xsl_file: str) -> str:
-        return f'''<nodes xmi:type="ComIbmXSLMQSI.msgnode:FCMComposite_1" xmi:id="{node_id}" location="450,150" xslFile="{xsl_file}">
-        <translation xmi:type="utility:ConstantString" string="XSLTransform"/>
-    </nodes>'''
-
-
-    def _create_subflow_node(self, node_id: str, name: str) -> str:
-        """Create Subflow node for enrichment"""
-        return f'''<nodes xmi:type="eflow:FCMComposite" xmi:id="{node_id}" location="200,150">
-        <translation xmi:type="utility:ConstantString" string="{name}"/>
-    </nodes>'''
-
-
-    def _create_event_node(self, node_id: str, name: str) -> str:
-        """Create Event node - CORRECT node type"""
-        # Event nodes should be subflow nodes, not WSReply
-        return f'''<nodes xmi:type="eflow:FCMComposite" xmi:id="{node_id}" location="250,150">
-        <translation xmi:type="utility:ConstantString" string="{name}"/>
-    </nodes>'''
-
-
-    def _create_soap(self, node_id: str, endpoint: str) -> str:
-        url = endpoint or 'http://default.service.com'
-        return f'''<nodes xmi:type="ComIbmSOAPRequest.msgnode:FCMComposite_1" xmi:id="{node_id}" location="600,150" webServiceURL="{url}">
-        <translation xmi:type="utility:ConstantString" string="SOAPRequest"/>
-    </nodes>'''
-
-
-    def _create_mq_output(self, node_id: str, biz: Dict) -> str:
-        queue = biz.get('target_queue', biz.get('output_queue', 'OUTPUT.QUEUE'))
-        return f'''<nodes xmi:type="ComIbmMQOutput.msgnode:FCMComposite_1" xmi:id="{node_id}" location="700,150" queueName="{queue}">
-        <translation xmi:type="utility:ConstantString" string="MQOutput"/>
-    </nodes>'''
-
-
-    def _create_http_reply(self, node_id: str) -> str:
-        return f'''<nodes xmi:type="ComIbmWSReply.msgnode:FCMComposite_1" xmi:id="{node_id}" location="700,150">
-        <translation xmi:type="utility:ConstantString" string="HTTPReply"/>
-    </nodes>'''
-
-
-    def _create_failure(self, node_id: str) -> str:
-        return f'''<nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="{node_id}" location="500,300" computeExpression="esql://Failure#Main">
-        <translation xmi:type="utility:ConstantString" string="FailureHandler"/>
-    </nodes>'''
-
-
-
     def optimize_msgflow_template(self, vector_db_results: List[Dict], 
                                 business_json: Dict = None, 
                                 output_path: str = "msgflow_template.xml") -> str:
@@ -544,7 +431,7 @@ class BizTalkACEMapper:
             print("\nSTEP 3: Processing template based on detected pattern...")
             optimized_template = template
             
-            # 3.1. Replace basic placeholders
+            # 3.1. Replace basic placeholders with SELECTIVE {FLOW_NAME} handling
             flow_name = business_json.get('flow_name', 'UnknownFlow')
             app_name = business_json.get('project_name', 'UnknownProject')
             source_queue = business_json.get('source_queue', 'INPUT.QUEUE')
@@ -556,7 +443,54 @@ class BizTalkACEMapper:
             print(f"  - Source queue: {source_queue}")
             print(f"  - Target queue: {target_queue}")
             
-            optimized_template = optimized_template.replace('{FLOW_NAME}', flow_name)
+            # CRITICAL: Protect computeExpression attributes from {FLOW_NAME} replacement
+            import re
+            
+            print("\nProtecting computeExpression attributes from {{FLOW_NAME}} replacement...")
+            
+            # Extract and store ALL computeExpression values with their indices
+            compute_pattern = r'computeExpression="([^"]*)"'
+            compute_expressions = []
+            
+            def extract_compute_expr(match):
+                """Extract and store computeExpression values"""
+                expr_value = match.group(1)
+                if '{FLOW_NAME}' in expr_value:
+                    # Store the original expression
+                    compute_expressions.append(expr_value)
+                    # Replace with a unique placeholder
+                    placeholder = f'<<<COMPUTE_EXPR_{len(compute_expressions)-1}>>>'
+                    return f'computeExpression="{placeholder}"'
+                return match.group(0)  # Return unchanged if no {FLOW_NAME}
+            
+            # Step 1: Extract all computeExpression attributes containing {FLOW_NAME}
+            protected_template = re.sub(compute_pattern, extract_compute_expr, optimized_template)
+            
+            print(f"  ✓ Protected {len(compute_expressions)} computeExpression attributes")
+            if len(compute_expressions) > 0:
+                print(f"  ✓ Sample: {compute_expressions[0][:50]}...")
+            
+            # Step 2: Now safely replace all remaining {FLOW_NAME} placeholders
+            protected_template = protected_template.replace('{FLOW_NAME}', flow_name)
+            print(f"  ✓ Replaced {{FLOW_NAME}} (except in computeExpression) with: {flow_name}")
+            
+            # Step 3: Restore the original computeExpression values with preserved {FLOW_NAME}
+            def restore_compute_expr(match):
+                """Restore original computeExpression values"""
+                placeholder = match.group(1)
+                if placeholder.startswith('<<<COMPUTE_EXPR_'):
+                    # Extract the index
+                    idx = int(placeholder.replace('<<<COMPUTE_EXPR_', '').replace('>>>', ''))
+                    # Return the original expression
+                    return f'computeExpression="{compute_expressions[idx]}"'
+                return match.group(0)
+            
+            restore_pattern = r'computeExpression="([^"]*)"'
+            optimized_template = re.sub(restore_pattern, restore_compute_expr, protected_template)
+            
+            print(f"  ✓ Restored {len(compute_expressions)} computeExpression attributes with {{FLOW_NAME}} preserved")
+            
+            # Step 4: Replace other placeholders normally
             optimized_template = optimized_template.replace('{APP_NAME}', app_name)
             optimized_template = optimized_template.replace('{INPUT_QUEUE_NAME}', source_queue)
             optimized_template = optimized_template.replace('{OUTPUT_QUEUE_NAME}', target_queue)
@@ -924,6 +858,11 @@ class BizTalkACEMapper:
             optimized_template = self.clean_conditional_markers(optimized_template)
             import re
             remaining_placeholders = re.findall(r'\{[A-Z_]+\}', optimized_template)
+            
+            # CRITICAL: Filter out {FLOW_NAME} from remaining placeholders check 
+            # as it's intentionally preserved in computeExpression attributes
+            remaining_placeholders = [p for p in remaining_placeholders if p != '{FLOW_NAME}']
+            
             if remaining_placeholders:
                 print(f"WARNING: Found {len(set(remaining_placeholders))} unprocessed placeholders:")
                 for placeholder in sorted(set(remaining_placeholders)):
@@ -941,7 +880,7 @@ class BizTalkACEMapper:
                     else:
                         optimized_template = optimized_template.replace(placeholder, placeholder[1:-1])
             else:
-                print("✓ No remaining placeholders found")
+                print("✓ No remaining placeholders found (except {FLOW_NAME} in computeExpression)")
             
             # Step 5: Validate and save template
             print("\nSTEP 5: Validating and saving template...")
@@ -1018,8 +957,6 @@ class BizTalkACEMapper:
             
             # Return the error log path
             return log_path
-
-
 
 
     def clean_conditional_markers(self, template: str) -> str:
@@ -1106,201 +1043,6 @@ class BizTalkACEMapper:
         return cleaned_template
 
 
-
-
-
-    def assemble_messageflow(self, pattern: Dict, business_json: Dict, output_path: str) -> str:
-        """Assemble complete ACE Toolkit-compatible messageflow"""
-        flow_name = business_json.get('flow_name', 'GeneratedFlow')
-        project_name = business_json.get('project_name', 'Project')
-        
-        # Load template - try multiple locations
-        template_paths = [
-            "messageflow_template_sample.xml",
-            "templates/messageflow_template_sample.xml",
-            os.path.join(os.path.dirname(__file__), "messageflow_template_sample.xml")
-        ]
-        
-        template_path = None
-        for path in template_paths:
-            if os.path.exists(path):
-                template_path = path
-                break
-        
-        if not template_path:
-            raise FileNotFoundError(f"Template not found in any of: {template_paths}")
-        
-        with open(template_path, 'r', encoding='utf-8') as f:
-            msgflow = f.read()
-        
-        # Replace placeholders - ensure all values are strings
-        app_name = business_json.get('app_name', project_name)
-        msgflow = msgflow.replace('{FLOW_NAME}', flow_name)
-        msgflow = msgflow.replace('{APP_NAME}', app_name)
-        msgflow = msgflow.replace('{INPUT_QUEUE_NAME}', business_json.get('input_queue') or 'INPUT.QUEUE')
-        msgflow = msgflow.replace('{OUTPUT_QUEUE_NAME}', business_json.get('output_queue') or 'OUTPUT.QUEUE')
-        msgflow = msgflow.replace('{HTTP_URL_SPECIFIER}', business_json.get('http_url') or '/api/service')
-        msgflow = msgflow.replace('{SOAP_SERVICE_URL}', pattern.get('soap_endpoint') or 'http://service.endpoint')
-        msgflow = msgflow.replace('{WSDL_FILE_NAME}', business_json.get('wsdl_file') or 'service.wsdl')
-        
-        # Generate nodes and connections
-        nodes_xml, node_map = self.generate_nodes_from_pattern(pattern, business_json)
-        connections_xml = self.generate_connections_from_nodes(pattern, node_map)
-        
-        # Replace composition section
-        import re
-        composition_content = f'{nodes_xml}\n      {connections_xml}'
-        msgflow = re.sub(
-            r'(<composition>).*?(</composition>)',
-            f'\\1\n      {composition_content}\n      \\2',
-            msgflow,
-            flags=re.DOTALL
-        )
-        
-        os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(msgflow)
-        
-        return output_path
-
-
-
-    def _generate_property_organizer(self, pattern: Dict, business_json: Dict) -> str:
-        """Generate propertyOrganizer section for ACE Toolkit compatibility"""
-        properties = []
-        
-        # Base properties for MQ nodes
-        if 'MQInput' in pattern['node_sequence']:
-            properties.append(f'''<propertyDescriptor groupName="Group.INPUT" configurable="true" userDefined="true" describedAttribute="Property.INPUT_QUEUE">
-        <propertyName xmi:type="utility:TranslatableString" key="Property.INPUT_QUEUE" bundleName="{business_json.get('project_name', 'Project')}" pluginId="{business_json.get('project_name', 'Project')}"/>
-        </propertyDescriptor>''')
-        
-        if 'MQOutput' in pattern['node_sequence']:
-            properties.append(f'''<propertyDescriptor groupName="Group.OUTPUT" configurable="true" userDefined="true" describedAttribute="Property.OUTPUT_QUEUE">
-        <propertyName xmi:type="utility:TranslatableString" key="Property.OUTPUT_QUEUE" bundleName="{business_json.get('project_name', 'Project')}" pluginId="{business_json.get('project_name', 'Project')}"/>
-        </propertyDescriptor>''')
-        
-        # XSL properties
-        if pattern['has_xsl_transform']:
-            properties.append(f'''<propertyDescriptor groupName="Group.TRANSFORM" configurable="true" describedAttribute="Property.stylesheetName">
-        <propertyName xmi:type="utility:TranslatableString" key="Property.stylesheetName" bundleName="ComIbmXslMqsi" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
-        </propertyDescriptor>''')
-        
-        if not properties:
-            return '<propertyOrganizer/>'
-        
-        return f'''<propertyOrganizer>
-        {chr(10).join(properties)}
-    </propertyOrganizer>'''
-
-
-
-    def validate_messageflow(self, msgflow_path: str, pattern: Dict) -> Dict:
-        """Validate generated messageflow"""
-        validation = {
-            'is_valid': False,
-            'node_count': 0,
-            'connection_count': 0,
-            'expected_nodes': len(pattern['node_sequence']),
-            'errors': [],
-            'warnings': []
-        }
-        
-        try:
-            tree = ET.parse(msgflow_path)
-            root = tree.getroot()
-            
-            nodes = root.findall('.//{http://www.ibm.com/wbi/2005/eflow}FCMComposite_1')
-            connections = root.findall('.//{http://www.ibm.com/wbi/2005/eflow}FCMConnection')
-            
-            validation['node_count'] = len(nodes)
-            validation['connection_count'] = len(connections)
-            
-            # Check node count
-            if validation['node_count'] != validation['expected_nodes']:
-                validation['errors'].append(f"Node mismatch: Expected {validation['expected_nodes']}, got {validation['node_count']}")
-            
-            # Check minimum connections (at least N-1)
-            min_conn = validation['expected_nodes'] - 1
-            if validation['connection_count'] < min_conn:
-                validation['errors'].append(f"Insufficient connections: Expected >{min_conn}, got {validation['connection_count']}")
-            
-            # Check orphaned nodes
-            node_ids = [n.get('{http://www.omg.org/XMI}id') for n in nodes]
-            connected = set()
-            for c in connections:
-                connected.add(c.get('sourceNode'))
-                connected.add(c.get('targetNode'))
-            
-            orphaned = set(node_ids) - connected
-            if orphaned:
-                validation['errors'].append(f"Orphaned nodes: {len(orphaned)} not connected")
-            
-            validation['is_valid'] = len(validation['errors']) == 0
-            
-        except Exception as e:
-            validation['errors'].append(f"Validation error: {str(e)}")
-        
-        return validation
-
-
-
-
-    def generate_connections_from_nodes(self, pattern: Dict, node_map: Dict) -> str:
-        """Generate all connections - NO HARDCODED CONNECTIONS"""
-        connections = []
-        conn_id = 1
-        sequence = pattern['node_sequence']
-        
-        # Main flow connections
-        for i in range(len(sequence) - 1):
-            source_type = sequence[i]
-            target_type = sequence[i + 1]
-            
-            if target_type == 'FailureHandler':
-                continue
-            
-            source_id = node_map.get(source_type)
-            target_id = node_map.get(target_type)
-            
-            if source_id and target_id:
-                source_term = self._get_out_terminal(source_type)
-                target_term = self._get_in_terminal(target_type)
-                
-                connections.append(f'''<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_{conn_id}" targetNode="{target_id}" sourceNode="{source_id}" sourceTerminalName="{source_term}" targetTerminalName="{target_term}"/>''')
-                conn_id += 1
-        
-        # Error connections
-        error_nodes = ['Compute', 'XSLTransform', 'SOAPRequest', 'BeforeEnrichment', 'AfterEnrichment']
-        failure_id = node_map.get('FailureHandler')
-        
-        if failure_id:
-            for node_type in error_nodes:
-                if node_type in node_map:
-                    source_id = node_map[node_type]
-                    connections.append(f'''<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_{conn_id}" targetNode="{failure_id}" sourceNode="{source_id}" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>''')
-                    conn_id += 1
-        
-        return '\n'.join(connections)
-
-
-    def _get_out_terminal(self, node_type: str) -> str:
-        """Get output terminal - NO HARDCODED MAPPINGS"""
-        terminals = {
-            'MQInput': 'OutTerminal.Output',
-            'HTTP': 'OutTerminal.out',
-            'HTTPInput': 'OutTerminal.out'
-        }
-        return terminals.get(node_type, 'OutTerminal.out')
-
-
-    def _get_in_terminal(self, node_type: str) -> str:
-        """Get input terminal - NO HARDCODED MAPPINGS"""
-        terminals = {
-            'MQOutput': 'InTerminal.Input',
-            'MQInput': 'InTerminal.in'
-        }
-        return terminals.get(node_type, 'InTerminal.in')
     
 
 
@@ -1416,7 +1158,7 @@ CREATE COMPUTE MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE__I
 END MODULE;
 """
         self.esql_template = template.strip()
-        print("ðŸ“‹ Standard ESQL template loaded")
+        print("Standard ESQL template loaded")
         return self.esql_template
     
     def validate_esql_syntax(self, esql_content: str) -> Dict:
@@ -1449,7 +1191,7 @@ END MODULE;
                 validation['errors'].append(f"Forbidden pattern found: {pattern}")
                 validation['valid'] = False
         
-        print(f"ðŸ” ESQL validation: {'âœ… Valid' if validation['valid'] else 'âŒ Invalid'}")
+        print(f"ESQL validation: {'Valid' if validation['valid'] else 'Invalid'}")
         return validation
     
     # ========================================
@@ -2372,13 +2114,13 @@ if __name__ == "__main__":
         if biztalk_files:
             try:
                 result = mapper.process_mapping(biztalk_files, args.pdf_path, args.output_dir)
-                print(f"âœ… BizTalk processing: {result}")
+                print(f"BizTalk processing: {result}")
             except Exception as e:
-                print(f"âš ï¸  BizTalk processing warning: {e}")
+                print(f"BizTalk processing warning: {e}")
         else:
-            print("âš ï¸  No BizTalk files found in provided path")
+            print("No BizTalk files found in provided path")
     else:
-        print("\nâ­ï¸  Step 4: Skipped (No BizTalk path provided - PDF-only mode)")
+        print("\nStep 4: Skipped (No BizTalk path provided - PDF-only mode)")
     
     # Step 5: Save metadata for Agent 2
     metadata = {
@@ -2393,8 +2135,8 @@ if __name__ == "__main__":
     with open(metadata_path, 'w') as f:
         json.dump(metadata, f, indent=2)
     
-    print(f"\nâœ… Template optimization complete!")
+    print(f"\nTemplate optimization complete!")
     print(f"   - Template: {template_path}")
     print(f"   - Metadata: {metadata_path}")
-    print("\nðŸŽ¯ Ready for Agent 2 (fetch_naming.py + pdf_processor.py)")
+    print("\nReady for Agent 2 (fetch_naming.py + pdf_processor.py)")
     print("=" * 60)

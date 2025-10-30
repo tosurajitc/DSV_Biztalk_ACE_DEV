@@ -23,8 +23,8 @@
     xmlns:epis_encoding_lib_Base64Encoder.subflow="epis/encoding/lib/Base64Encoder.subflow"
     xmlns:epis_storage_lib_BlobStorage.subflow="epis/storage/lib/BlobStorage.subflow"
     xmlns:utility="http://www.ibm.com/wbi/2005/eflow_utility" 
-    nsURI="SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL.msgflow" 
-    nsPrefix="SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL.msgflow">
+    nsURI="SuccessFactors_CSV_IGA_P2P.msgflow" 
+    nsPrefix="SuccessFactors_CSV_IGA_P2P.msgflow">
 
   <eClassifiers xmi:type="eflow:FCMComposite" name="FCMComposite_1" nodeLayoutStyle="RECTANGLE">
     <eSuperTypes href="http://www.ibm.com/wbi/2005/eflow#//FCMBlock"/>
@@ -43,7 +43,7 @@
     </eStructuralFeatures>
     
     <!-- MQ INPUT PROPERTIES -->
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.INPUT_QUEUE" name="INPUT_QUEUE" lowerBound="1" defaultValueLiteral="group-payroll-server">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.INPUT_QUEUE" name="INPUT_QUEUE" lowerBound="1" defaultValueLiteral="SUCCESSFACTOR.OUT.IGA.SNDSAT.QL">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -71,7 +71,7 @@
     </eStructuralFeatures>
     
     <!-- XSL TRANSFORM PROPERTIES -->
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.stylesheetName" name="stylesheetName" defaultValueLiteral="SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL.xsl">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.stylesheetName" name="stylesheetName" defaultValueLiteral="SuccessFactors_CSV_IGA_P2P.xsl">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -88,7 +88,7 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
     </eStructuralFeatures>
     
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.BEFORE_INPUT_DIR" name="BEFORE_INPUT_DIR" defaultValueLiteral="EPIS_SuccessFactors_IGA_SAT_DMZ_App/SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL/enrichment">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.BEFORE_INPUT_DIR" name="BEFORE_INPUT_DIR" defaultValueLiteral="CDM_Message/SuccessFactors_CSV_IGA_P2P/enrichment">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -101,7 +101,7 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
     </eStructuralFeatures>
     
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AFTER_INPUT_DIR" name="AFTER_INPUT_DIR" defaultValueLiteral="EPIS_SuccessFactors_IGA_SAT_DMZ_App/SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL/enrichment">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AFTER_INPUT_DIR" name="AFTER_INPUT_DIR" defaultValueLiteral="CDM_Message/SuccessFactors_CSV_IGA_P2P/enrichment">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -147,9 +147,9 @@
     </eStructuralFeatures>
 
     <!-- Branding and Graphics -->
-    <translation xmi:type="utility:TranslatableString" key="SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL" bundleName="SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL" pluginId="EPIS_SuccessFactors_IGA_SAT_DMZ_App_Developer"/>
-    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_SuccessFactors_IGA_SAT_DMZ_App_Developer/icons/full/obj16/SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL.gif"/>
-    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_SuccessFactors_IGA_SAT_DMZ_App_Developer/icons/full/obj30/SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL.gif"/>
+    <translation xmi:type="utility:TranslatableString" key="SuccessFactors_CSV_IGA_P2P" bundleName="SuccessFactors_CSV_IGA_P2P" pluginId="CDM_Message_Developer"/>
+    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/CDM_Message_Developer/icons/full/obj16/SuccessFactors_CSV_IGA_P2P.gif"/>
+    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/CDM_Message_Developer/icons/full/obj30/SuccessFactors_CSV_IGA_P2P.gif"/>
     
     <composition>
       
@@ -175,7 +175,7 @@
             xmi:id="FCMComposite_1_2" 
             location="-221,338" 
             rotation="RIGHT_TO_LEFT" 
-            computeExpression="esql://routine/SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL#SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL_InputEventMessage.Main">
+            computeExpression="esql://routine/{FLOW_NAME}#{FLOW_NAME}_InputEventMessage.Main">
         <translation xmi:type="utility:ConstantString" string="InputEventMessage"/>
       </nodes>
 
@@ -213,7 +213,7 @@
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" 
             xmi:id="FCMComposite_1_1" 
             location="376,68" 
-            computeExpression="esql://routine/SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL#SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL_Compute.Main">
+            computeExpression="esql://routine/{FLOW_NAME}#{FLOW_NAME}_Compute.Main">
         <translation xmi:type="utility:ConstantString" string="Compute"/>
       </nodes>
       
@@ -247,7 +247,7 @@
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" 
             xmi:id="FCMComposite_1_12" 
             location="796,45" 
-            computeExpression="esql://routine/SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL#SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL_AfterEnrichment.Main">
+            computeExpression="esql://routine/{FLOW_NAME}#{FLOW_NAME}_AfterEnrichment.Main">
         <translation xmi:type="utility:ConstantString" string="AfterEnrichment"/>
       </nodes>
       
@@ -303,7 +303,7 @@
             xmi:id="FCMComposite_1_13" 
             location="1000,300" 
             rotation="RIGHT_TO_LEFT" 
-            computeExpression="esql://routine/SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL#SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL_OutputEventMessage.Main">
+            computeExpression="esql://routine/{FLOW_NAME}#{FLOW_NAME}_OutputEventMessage.Main">
         <translation xmi:type="utility:ConstantString" string="OutputEventMessage"/>
       </nodes>
 
@@ -311,7 +311,7 @@
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" 
             xmi:id="FCMComposite_1_15" 
             location="1600,100" 
-            computeExpression="esql://routine/SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL#SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL_AfterEventMsg.Main">
+            computeExpression="esql://routine/{FLOW_NAME}#{FLOW_NAME}_AfterEventMsg.Main">
         <translation xmi:type="utility:ConstantString" string="AfterEventMessage"/>
       </nodes>
 
@@ -319,7 +319,7 @@
       <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" 
             xmi:id="FCMComposite_1_11" 
             location="1600,300" 
-            computeExpression="esql://routine/SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL#SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL_Failure.Main">
+            computeExpression="esql://routine/{FLOW_NAME}#{FLOW_NAME}_Failure.Main">
         <translation xmi:type="utility:ConstantString" string="FailureHandler"/>
       </nodes>
 
@@ -432,7 +432,7 @@
         <propertyName xmi:type="utility:TranslatableString" key="Property.stylesheetName" bundleName="ComIbmXslMqsi" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
         
         <propertyDescriptor groupName="Group.InternalRuntimeGroup" readOnly="true" hidden="true" userDefined="true" describedAttribute="Property.stylesheetName.internal_npcompiler">
-          <propertyName xmi:type="utility:TranslatableString" key="Property.stylesheetName.internal_npcompiler" bundleName="SND flow gets a message from - SUCCESSFACTOR.OUT.IGA.SNDSAT.QL" pluginId="EPIS_SuccessFactors_IGA_SAT_DMZ_App_Developer"/>
+          <propertyName xmi:type="utility:TranslatableString" key="Property.stylesheetName.internal_npcompiler" bundleName="SuccessFactors_CSV_IGA_P2P" pluginId="CDM_Message_Developer"/>
           
         </propertyDescriptor>
       </propertyDescriptor>

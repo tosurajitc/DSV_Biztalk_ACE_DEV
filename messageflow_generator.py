@@ -770,19 +770,7 @@ class DSVMessageFlowGenerator:
             # Generate 6 required modules
             print(f"      🔄 Creating standard ESQL modules...")
             esql_modules = self._enforce_6_module_standard(flow_name)
-            for module in esql_modules:
-                esql_file = output_dir / "esql" / f"{module['name']}.esql"
-                with open(esql_file, 'w', encoding='utf-8') as f:
-                    # Create basic module content
-                    f.write(f"-- ESQL Module: {module['name']} - {module['purpose']}\n\n")
-                    f.write(f"CREATE MODULE {module['name']}\n")
-                    f.write("CREATE FUNCTION Main() RETURNS BOOLEAN\n")
-                    f.write("BEGIN\n")
-                    f.write("  -- Auto-generated module\n")
-                    f.write("  -- Purpose: {module['purpose']}\n")
-                    f.write("  -- Type: {module['type']}\n\n")
-                    f.write("  RETURN TRUE;\n")
-                    f.write("END;\n")
+
             
             return {
                 'success': True,
@@ -1484,6 +1472,7 @@ END;
         try:
             # Only load from the root directory
             template_path = self.root_path / "msgflow_template.xml"
+            #template_path = self.root_path / "templates/messageflow_template_sample.xml"
             
             with open(template_path, 'r', encoding='utf-8') as f:
                 template = f.read()
