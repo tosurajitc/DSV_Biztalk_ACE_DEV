@@ -89,7 +89,42 @@ class ChromaVectorStore:
         print(f"✅ Knowledge base created with {len(chunks)} chunks")
 
         
+
+
+    def search_flow_requirements(self, flow_name: str) -> Dict:
+        """Search for routing requirements information for a specific message flow"""
+        # Formulate query to find chunks with flow routing information
+        query = f"{flow_name} message flow routing requirements"
         
+        results = self.collection.query(
+            query_texts=[query],
+            n_results=5,
+            where={"flow_name": flow_name}  # Use exact metadata match for efficiency
+        )
+        
+        # Process results to extract routing decision
+        if not results['metadatas'][0]:
+            return {"flow_name": flow_name, "requires_routing": None, "confidence": 0.0}
+        
+        # Get the most confident result
+        highest_confidence = 0
+        best_result = None
+        
+        for i, metadata in enumerate(results['metadatas'][0]):
+            confidence = metadata.get('routing_confidence', 0)
+            if confidence > highest_confidence:
+                highest_confidence = confidence
+                best_result = {
+                    "flow_name": flow_name,
+                    "requires_routing": metadata.get('requires_routing', False),
+                    "confidence": confidence,
+                    "content": results['documents'][0][i][:200] if i < len(results['documents'][0]) else ""
+                }
+        
+        return best_result or {"flow_name": flow_name, "requires_routing": False, "confidence": 0.0}
+
+
+
     def search_for_agent(self, agent_name: str, queries: List[str], top_k: int = 5) -> List[Dict]:
         """Search for agent-specific content using semantic similarity and keyword matching"""
         all_results = []

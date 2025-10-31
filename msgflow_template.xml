@@ -23,8 +23,8 @@
     xmlns:epis_encoding_lib_Base64Encoder.subflow="epis/encoding/lib/Base64Encoder.subflow"
     xmlns:epis_storage_lib_BlobStorage.subflow="epis/storage/lib/BlobStorage.subflow"
     xmlns:utility="http://www.ibm.com/wbi/2005/eflow_utility" 
-    nsURI="SAP_Data_Edicom_P2P.msgflow" 
-    nsPrefix="SAP_Data_Edicom_P2P.msgflow">
+    nsURI="RECSAT flow fetch SuccessFactors data as XML file.msgflow" 
+    nsPrefix="RECSAT flow fetch SuccessFactors data as XML file.msgflow">
 
   <eClassifiers xmi:type="eflow:FCMComposite" name="FCMComposite_1" nodeLayoutStyle="RECTANGLE">
     <eSuperTypes href="http://www.ibm.com/wbi/2005/eflow#//FCMBlock"/>
@@ -43,7 +43,7 @@
     </eStructuralFeatures>
     
     <!-- MQ INPUT PROPERTIES -->
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.INPUT_QUEUE" name="INPUT_QUEUE" lowerBound="1" defaultValueLiteral="Backout Queue">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.INPUT_QUEUE" name="INPUT_QUEUE" lowerBound="1" defaultValueLiteral="SUCCESSFACTOR.OUT.IGA.SNDSAT.QL">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -71,7 +71,7 @@
     </eStructuralFeatures>
     
     <!-- XSL TRANSFORM PROPERTIES -->
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.stylesheetName" name="stylesheetName" defaultValueLiteral="SAP_Data_Edicom_P2P.xsl">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.stylesheetName" name="stylesheetName" defaultValueLiteral="RECSAT flow fetch SuccessFactors data as XML file.xsl">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -88,7 +88,7 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
     </eStructuralFeatures>
     
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.BEFORE_INPUT_DIR" name="BEFORE_INPUT_DIR" defaultValueLiteral="EPIS_SAP_Edicom_App/SAP_Data_Edicom_P2P/enrichment">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.BEFORE_INPUT_DIR" name="BEFORE_INPUT_DIR" defaultValueLiteral="EPIS_SuccessFactors_IGA_App/RECSAT flow fetch SuccessFactors data as XML file/enrichment">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -101,7 +101,7 @@
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
     </eStructuralFeatures>
     
-    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AFTER_INPUT_DIR" name="AFTER_INPUT_DIR" defaultValueLiteral="EPIS_SAP_Edicom_App/SAP_Data_Edicom_P2P/enrichment">
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AFTER_INPUT_DIR" name="AFTER_INPUT_DIR" defaultValueLiteral="EPIS_SuccessFactors_IGA_App/RECSAT flow fetch SuccessFactors data as XML file/enrichment">
       <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
     </eStructuralFeatures>
     
@@ -147,9 +147,9 @@
     </eStructuralFeatures>
 
     <!-- Branding and Graphics -->
-    <translation xmi:type="utility:TranslatableString" key="SAP_Data_Edicom_P2P" bundleName="SAP_Data_Edicom_P2P" pluginId="EPIS_SAP_Edicom_App_Developer"/>
-    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_SAP_Edicom_App_Developer/icons/full/obj16/SAP_Data_Edicom_P2P.gif"/>
-    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_SAP_Edicom_App_Developer/icons/full/obj30/SAP_Data_Edicom_P2P.gif"/>
+    <translation xmi:type="utility:TranslatableString" key="RECSAT flow fetch SuccessFactors data as XML file" bundleName="RECSAT flow fetch SuccessFactors data as XML file" pluginId="EPIS_SuccessFactors_IGA_App_Developer"/>
+    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_SuccessFactors_IGA_App_Developer/icons/full/obj16/RECSAT flow fetch SuccessFactors data as XML file.gif"/>
+    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/EPIS_SuccessFactors_IGA_App_Developer/icons/full/obj30/RECSAT flow fetch SuccessFactors data as XML file.gif"/>
     
     <composition>
       
@@ -157,13 +157,11 @@
       <!-- SECTION 1: INPUT NODES (Dynamic - one of three) -->
       <!-- ================================================== -->
       
-        <!-- HTTP Input Node -->
-        <nodes xmi:type="ComIbmWSInput.msgnode:FCMComposite_1" 
+        <!-- MQ Input Node -->
+        <nodes xmi:type="epis_common_flows_lib_MQInput.subflow:FCMComposite_1" 
                 xmi:id="FCMComposite_1_7" 
-                location="-201,103"
-                URLSpecifier="/api/service"
-                messageDomainProperty="XMLNSC">
-            <translation xmi:type="utility:ConstantString" string="HTTPInput"/>
+                location="-201,103">
+            <translation xmi:type="utility:ConstantString" string="MQInput"/>
         </nodes>
                 
       
@@ -194,6 +192,15 @@
       <!-- ================================================== -->
       
       
+        <!-- Before Enrichment Node -->
+        <nodes xmi:type="epis_enrichment_lib_EPIS_MessageEnrichment.subflow:FCMComposite_1" 
+                xmi:id="FCMComposite_1_4" 
+                location="30,299" 
+                inputDirectory="/var/mqsi/enrichment" 
+                filenamePattern="BeforeEnrichmentConf.json">
+            <translation xmi:type="utility:ConstantString" string="BeforeEnrichment"/>
+        </nodes>
+                
       <!--
       BeforeEnrichment subflow - Only if has_before_enrichment=True
       -->
@@ -277,11 +284,14 @@
       <!-- ================================================== -->
       
       
-        <!-- HTTP Reply Node -->
-        <nodes xmi:type="ComIbmWSReply.msgnode:FCMComposite_1" 
+        <!-- MQ Output Node -->
+        <nodes xmi:type="epis_common_flows_lib_MQOutput.subflow:FCMComposite_1" 
                 xmi:id="FCMComposite_1_14" 
-                location="1000,100">
-            <translation xmi:type="utility:ConstantString" string="HTTPReply"/>
+                location="1000,100" 
+                NonCDM="_ROUTE_NON_CDM_" 
+                STATIC_OUTPUT_QUEUE="QUEUE.NAME" 
+                IS_OUTPUT_MQ="false">
+            <translation xmi:type="utility:ConstantString" string="MQOutput"/>
         </nodes>
                 
       <!--
@@ -358,19 +368,23 @@
       <!-- HTTP INPUT PROPERTIES (Include if input_type=HTTP) -->
       <!-- ============================================ -->
       
-      <propertyDescriptor groupName="Group.HTTP" configurable="true" describedAttribute="Property.HTTP_URL_SPECIFIER">
-        <propertyName xmi:type="utility:TranslatableString" key="Property.HTTP_URL_SPECIFIER" bundleName="ComIbmWSInput" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
-        
-        <propertyDescriptor groupName="Group.HTTP" configurable="true" describedAttribute="Property.HTTP_METHOD">
-          <propertyName xmi:type="utility:TranslatableString" key="Property.HTTP_METHOD" bundleName="ComIbmWSInput" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
-          
-        </propertyDescriptor>
-      </propertyDescriptor>
-      
       
       <!-- ============================================ -->
       <!-- MQ INPUT PROPERTIES (Include if input_type=MQ) -->
       <!-- ============================================ -->
+      
+      <propertyDescriptor groupName="Group.COMPRESSION" configurable="true" userDefined="true" describedAttribute="Property.COMPRESS_MSG_SIZE">
+        <propertyName xmi:type="utility:TranslatableString" key="Property.COMPRESS_MSG_SIZE" bundleName="epis/common/flows/lib/MQInput" pluginId="EPIS_CommonFlows_Lib"/>
+        
+        <propertyDescriptor groupName="Group.INPUT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.MRMessageDomainPropertyEditor" describedAttribute="Property.INPUT_MSG_PARSING">
+          <propertyName xmi:type="utility:TranslatableString" key="Property.INPUT_MSG_PARSING" bundleName="epis/common/flows/lib/MQInput" pluginId="EPIS_CommonFlows_Lib"/>
+          
+          <propertyDescriptor groupName="Group.INPUT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.mq.MQQueueNameEditor" configurable="true" describedAttribute="Property.INPUT_QUEUE">
+            <propertyName xmi:type="utility:TranslatableString" key="Property.INPUT_QUEUE" bundleName="epis/common/flows/lib/MQInput" pluginId="EPIS_CommonFlows_Lib"/>
+            
+          </propertyDescriptor>
+        </propertyDescriptor>
+      </propertyDescriptor>
       
       
       <!-- ============================================ -->
@@ -392,6 +406,23 @@
       <!-- ENRICHMENT PROPERTIES (Include if has_enrichment=True) -->
       <!-- ============================================ -->
       
+      <propertyDescriptor groupName="Group.BEFORE_ENRICHMENT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileReadNodeFilePropertyEditor" configurable="true" describedAttribute="Property.BEFORE_FILE_NAME">
+        <propertyName xmi:type="utility:TranslatableString" key="Property.BEFORE_FILE_NAME" bundleName="ComIbmFileRead" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
+        
+        <propertyDescriptor groupName="Group.BEFORE_ENRICHMENT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileNodesBrowseDirPropertyEditor" configurable="true" describedAttribute="Property.BEFORE_INPUT_DIR">
+          <propertyName xmi:type="utility:TranslatableString" key="Property.BEFORE_INPUT_DIR" bundleName="ComIbmFileRead" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
+          
+          <propertyDescriptor groupName="Group.AFTER_ENRICHMENT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileReadNodeFilePropertyEditor" configurable="true" describedAttribute="Property.AFTER_FILE_NAME">
+            <propertyName xmi:type="utility:TranslatableString" key="Property.AFTER_FILE_NAME" bundleName="ComIbmFileRead" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
+            
+            <propertyDescriptor groupName="Group.AFTER_ENRICHMENT" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.file.FileNodesBrowseDirPropertyEditor" configurable="true" describedAttribute="Property.AFTER_INPUT_DIR">
+              <propertyName xmi:type="utility:TranslatableString" key="Property.AFTER_INPUT_DIR" bundleName="ComIbmFileRead" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
+              
+            </propertyDescriptor>
+          </propertyDescriptor>
+        </propertyDescriptor>
+      </propertyDescriptor>
+      
       
       <!-- ============================================ -->
       <!-- XSL TRANSFORM PROPERTIES (Include if has_xsl_transform=True) -->
@@ -401,7 +432,7 @@
         <propertyName xmi:type="utility:TranslatableString" key="Property.stylesheetName" bundleName="ComIbmXslMqsi" pluginId="com.ibm.etools.mft.ibmnodes.definitions"/>
         
         <propertyDescriptor groupName="Group.InternalRuntimeGroup" readOnly="true" hidden="true" userDefined="true" describedAttribute="Property.stylesheetName.internal_npcompiler">
-          <propertyName xmi:type="utility:TranslatableString" key="Property.stylesheetName.internal_npcompiler" bundleName="SAP_Data_Edicom_P2P" pluginId="EPIS_SAP_Edicom_App_Developer"/>
+          <propertyName xmi:type="utility:TranslatableString" key="Property.stylesheetName.internal_npcompiler" bundleName="RECSAT flow fetch SuccessFactors data as XML file" pluginId="EPIS_SuccessFactors_IGA_App_Developer"/>
           
         </propertyDescriptor>
       </propertyDescriptor>

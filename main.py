@@ -2,7 +2,6 @@
 """
 Streamlit Main UI - BizTalk to ACE Migration Pipeline
 Complete UI for all 5 programs with progress tracking
-MINIMAL UPDATE: Only adds Program 5 tab, preserves all existing functionality
 """
 import streamlit as st
 import os
@@ -19,7 +18,7 @@ import requests
 from bs4 import BeautifulSoup
 from fetch_naming import run_pdf_naming_extraction
 from cleanup_manager import CleanupManager
-from ace_module_creator import create_ace_project
+from ace_module_creator import create_ace_project, ACEModuleCreator
 # Vector DB imports - MANDATORY, no fallback
 try:
     from vector_knowledge.pdf_processor import AdaptivePDFProcessor
@@ -64,7 +63,7 @@ except ImportError as e:
 # Page configuration
 st.set_page_config(
     page_title="BizTalk to ACE Migration",
-    page_icon="ðŸ”„",
+    page_icon="🔄",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -105,9 +104,9 @@ def optimized_pipeline_execution():
             groq_model=st.session_state.get('groq_model', 'llama-3.3-70b-versatile')
         )),
         
-        ('ace_module_creator', lambda confluence_content: ACEModuleCreatorOrchestrator(
+        ('ace_module_creator', lambda confluence_content: ACEModuleCreator(
             groq_api_key=st.session_state.get('groq_api_key', '')
-        ).create_ace_project(ACEGenerationInputs(
+        ).create_ace_project(ACEModuleCreator(
             business_requirements_json_path=st.session_state.pipeline_progress['program_1']['output'],
             msgflow_path=st.session_state.pipeline_progress['program_2']['output'],
             esql_template_path="ESQL_Template.esql",
@@ -149,13 +148,24 @@ def reset_vector_pipeline():
     st.success("  Vector pipeline reset")
 
 
-
 def setup_vector_knowledge_base(uploaded_pdf, agent_name="Agent 1"):
-    """Setup vector knowledge base from uploaded PDF with AdaptivePDFProcessor integration"""
+    """
+    Setup vector knowledge base from uploaded PDF or Confluence text content
+    
+    Args:
+        uploaded_pdf: Either a Streamlit UploadedFile (PDF) or string (Confluence content)
+        agent_name: Name of the agent for display purposes
+    """
     if not VECTOR_DB_AVAILABLE or not st.session_state.vector_enabled:
         return False
     
     try:
+        # Detect input type: PDF file object or string (Confluence content)
+        is_string_input = isinstance(uploaded_pdf, str)
+        input_type = "Confluence content" if is_string_input else "PDF file"
+        
+        print(f"🚀 Starting adaptive processing for: {input_type}")
+        
         # Initialize vector pipeline
         if not VECTOR_PIPELINE_AVAILABLE:
             # Simple pipeline creation if VectorOptimizedPipeline not available
@@ -170,12 +180,12 @@ def setup_vector_knowledge_base(uploaded_pdf, agent_name="Agent 1"):
                 st.session_state.vector_pipeline = VectorOptimizedPipeline()
         
         # Setup knowledge base
-        with st.spinner(f"  Setting up Vector Knowledge Base for {agent_name}..."):
+        with st.spinner(f"Setting up Vector Knowledge Base for {agent_name}..."):
             if VECTOR_PIPELINE_AVAILABLE:
                 stats = st.session_state.vector_pipeline.setup_knowledge_base(uploaded_pdf)
                 
-                # NEW: Store adaptive processing results
-                if hasattr(st.session_state.vector_pipeline, 'pdf_processor'):
+                # Store adaptive processing results (only available for PDF processing)
+                if not is_string_input and hasattr(st.session_state.vector_pipeline, 'pdf_processor'):
                     processor = st.session_state.vector_pipeline.pdf_processor
                     if hasattr(processor, 'processing_stats'):
                         st.session_state.vector_pipeline.pdf_processor_stats = processor.processing_stats
@@ -186,99 +196,156 @@ def setup_vector_knowledge_base(uploaded_pdf, agent_name="Agent 1"):
                 # Simple setup if no pipeline integration
                 pdf_processor = AdaptivePDFProcessor()
                 
-                # Process PDF with adaptive extraction
-                text = pdf_processor.extract_text_from_pdf(uploaded_pdf)
-                
-                # Get processed chunks from the adaptive processor
-                if hasattr(pdf_processor, '_last_chunks') and pdf_processor._last_chunks:
-                    chunks = pdf_processor._last_chunks
+                # Process based on input type
+                if is_string_input:
+                    # Direct text processing for Confluence content
+                    text = uploaded_pdf
+                    st.info("🌐 Processing Confluence text content...")
+                    
+                    # Create adaptive chunks from text string
+                    text_content = {'text': text}
+                    chunks = pdf_processor._create_adaptive_chunks(text_content)
+                    
                 else:
-                    # Fallback: create basic chunks if adaptive processing didn't store them
-                    print("⚠️ Warning: Using fallback chunking - adaptive chunks not available")
-                    chunks = pdf_processor._create_adaptive_chunks({'text': text})
+                    # PDF extraction - using temp file approach for streamlit uploaded files
+                    temp_pdf_path = None
+                    try:
+                        # Save uploaded PDF to temporary file
+                        import tempfile
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+                            # Reset file pointer and read content
+                            uploaded_pdf.seek(0)
+                            temp_file.write(uploaded_pdf.read())
+                            temp_pdf_path = temp_file.name
+                            uploaded_pdf.seek(0)  # Reset for other uses
+                        
+                        # Extract text using raw PyPDF2 to avoid the complex extraction pipeline
+                        with open(temp_pdf_path, 'rb') as file:
+                            pdf_reader = PyPDF2.PdfReader(file)
+                            text = ""
+                            for page_num in range(len(pdf_reader.pages)):
+                                page = pdf_reader.pages[page_num]
+                                text += page.extract_text() + "\n\n"
+                        
+                        # Create chunks directly from text
+                        print("📊 Creating adaptive chunks from PDF text...")
+                        chunks = []
+                        paragraphs = text.split('\n\n')
+                        for i, paragraph in enumerate(paragraphs):
+                            if not paragraph.strip():
+                                continue
+                                
+                            chunk = {
+                                'chunk_id': f"chunk_{i}",
+                                'content': paragraph.strip(),
+                                'metadata': {
+                                    'source': 'PDF',
+                                    'chunk_index': i,
+                                    'char_count': len(paragraph),
+                                    'word_count': len(paragraph.split()),
+                                    'content_type': 'text'
+                                }
+                            }
+                            chunks.append(chunk)
+                    
+                    finally:
+                        # Clean up temp file
+                        if temp_pdf_path and os.path.exists(temp_pdf_path):
+                            try:
+                                os.unlink(temp_pdf_path)
+                            except:
+                                pass  # Ignore cleanup errors
                 
                 # Create vector store with chunks
                 vector_store = ChromaVectorStore()
                 vector_store.create_knowledge_base(chunks)
                 
-                # Store processor results in session state for later use
-                st.session_state.vector_pipeline['pdf_processor_stats'] = pdf_processor.processing_stats
-                if hasattr(pdf_processor, 'document_structure'):
-                    st.session_state.vector_pipeline['document_structure'] = pdf_processor.document_structure
+                # Store processor results in session state (only for PDF)
+                if not is_string_input:
+                    st.session_state.vector_pipeline['pdf_processor_stats'] = pdf_processor.processing_stats
+                    if hasattr(pdf_processor, 'document_structure'):
+                        st.session_state.vector_pipeline['document_structure'] = pdf_processor.document_structure
                 
                 stats = {
                     'chunks_created': len(chunks),
                     'total_chunks': len(chunks),
                     'embedding_model': 'all-MiniLM-L6-v2',
-                    'pdf_processed': True,
-                    'adaptive_processing': True,
-                    'business_blocks_found': pdf_processor.processing_stats.get('business_blocks_found', 0),
-                    'patterns_discovered': pdf_processor.processing_stats.get('patterns_discovered', 0),
-                    'diagrams_processed': pdf_processor.processing_stats.get('diagrams_processed', 0)
+                    'pdf_processed': not is_string_input,
+                    'confluence_processed': is_string_input,
+                    'adaptive_processing': not is_string_input,
+                    'business_blocks_found': pdf_processor.processing_stats.get('business_blocks_found', 0) if not is_string_input else 0,
+                    'patterns_discovered': pdf_processor.processing_stats.get('patterns_discovered', 0) if not is_string_input else 0,
+                    'diagrams_processed': pdf_processor.processing_stats.get('diagrams_processed', 0) if not is_string_input else 0
                 }
             
             st.session_state.vector_stats = stats
             st.session_state.vector_ready = True
             st.session_state.confluence_pdf_processed = True
 
-            # NEW: Extract naming conventions from PDF
-            temp_pdf_path = None
-            with st.spinner("  Extracting naming conventions from PDF..."):
-                temp_pdf_path = None  # Initialize variable
-                try:
-                    # Save uploaded PDF to temporary file for fetch_naming.py
-                    import tempfile
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
-                        # Reset file pointer and read content
-                        uploaded_pdf.seek(0)
-                        temp_file.write(uploaded_pdf.read())
-                        temp_pdf_path = temp_file.name  # Now properly scoped
-                        uploaded_pdf.seek(0)  # Reset for other uses
-                    
-                    # Initialize LLM client for PDF processing
-                    from groq import Groq
-                    llm_client = Groq(api_key=os.getenv('GROQ_API_KEY'))
-                    
-                    # Extract naming conventions
-                    naming_success = run_pdf_naming_extraction(temp_pdf_path, llm_client)
-                    
-                    if naming_success:
-                        st.success("✅ Extracted naming conventions from PDF")
-                    else:
-                        st.warning("⚠️ PDF naming extraction failed - using default naming conventions")
+            # Extract naming conventions (ONLY for PDF files, not for Confluence content)
+            if not is_string_input:
+                temp_pdf_path = None
+                with st.spinner("Extracting naming conventions from PDF..."):
+                    try:
+                        # Save uploaded PDF to temporary file for fetch_naming.py
+                        import tempfile
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+                            # Reset file pointer and read content
+                            uploaded_pdf.seek(0)
+                            temp_file.write(uploaded_pdf.read())
+                            temp_pdf_path = temp_file.name
+                            uploaded_pdf.seek(0)  # Reset for other uses
                         
-                except Exception as e:
-                    st.warning(f"⚠️ PDF naming extraction error: {str(e)} - using default naming conventions")
-                finally:
-                    # Clean up temp file
-                    if temp_pdf_path and os.path.exists(temp_pdf_path):
-                        try:
-                            os.unlink(temp_pdf_path)
-                        except:
-                            pass  # Ignore cleanup errors
+                        # Initialize LLM client for PDF processing
+                        from groq import Groq
+                        llm_client = Groq(api_key=os.getenv('GROQ_API_KEY'))
+                        
+                        # Extract naming conventions
+                        naming_success = run_pdf_naming_extraction(temp_pdf_path, llm_client)
+                        
+                        if naming_success:
+                            st.success("✅ Extracted naming conventions from PDF")
+                        else:
+                            st.warning("⚠️ PDF naming extraction failed - using default naming conventions")
+                            
+                    except Exception as e:
+                        st.warning(f"⚠️ PDF naming extraction error: {str(e)} - using default naming conventions")
+                    finally:
+                        # Clean up temp file
+                        if temp_pdf_path and os.path.exists(temp_pdf_path):
+                            try:
+                                os.unlink(temp_pdf_path)
+                            except:
+                                pass  # Ignore cleanup errors
+            else:
+                st.info("ℹ️ Confluence content: Using default naming conventions")
             
-            # Enhanced success message with adaptive processing info
-            success_msg = f"  Vector DB Ready! {stats['chunks_created']} chunks indexed"
-            if stats.get('adaptive_processing'):
-                if stats.get('business_blocks_found', 0) > 0:
-                    success_msg += f" | {stats['business_blocks_found']} business blocks discovered"
-                if stats.get('patterns_discovered', 0) > 0:
-                    success_msg += f" | {stats['patterns_discovered']} patterns found"
+            # Enhanced success message with source type and processing info
+            if is_string_input:
+                success_msg = f"Vector DB Ready! {stats['chunks_created']} chunks indexed from Confluence content"
+            else:
+                success_msg = f"Vector DB Ready! {stats['chunks_created']} chunks indexed from PDF"
+                if stats.get('adaptive_processing'):
+                    if stats.get('business_blocks_found', 0) > 0:
+                        success_msg += f" | {stats['business_blocks_found']} business blocks discovered"
+                    if stats.get('patterns_discovered', 0) > 0:
+                        success_msg += f" | {stats['patterns_discovered']} patterns found"
             
             st.success(success_msg)
             return True
             
     except Exception as e:
-        st.error(f"  Vector DB setup failed: {e}")
+        st.error(f"Vector knowledge base setup failed: {e}")
         st.session_state.vector_ready = False
         return False
+
     
 
     
 def get_vector_status_display():
     """Get vector status for pipeline display"""
     if not VECTOR_DB_AVAILABLE:
-        return "🔴 Vector DB Not Available"
+        return "📁´ Vector DB Not Available"
     elif st.session_state.vector_ready:
         return "🟢 Vector DB Ready"
     elif st.session_state.vector_enabled:
@@ -302,17 +369,17 @@ def render_vector_db_controls():
         stats = st.session_state.vector_stats
         
 
-        st.metric("📊 Chunks", stats.get('total_chunks', 0))
+        st.metric("  Chunks", stats.get('total_chunks', 0))
         
         # Reset button
-        if st.button("🔄 Reset Vector DB", help="Clear knowledge base and start fresh"):
+        if st.button("📄 Reset Vector DB", help="Clear knowledge base and start fresh"):
             reset_vector_pipeline()
             st.rerun()
             
     elif st.session_state.confluence_pdf_processed:
         st.warning("⚠️ PDF uploaded but Vector DB not ready")
         if st.button("🚀 Initialize Vector DB"):
-            st.info("👆 Go to Agent 1 to set up Vector Knowledge Base")
+            st.info("ðŸ‘† Go to Agent 1 to set up Vector Knowledge Base")
     else:
         st.info("Upload Business Requirement to initialize")
     
@@ -370,11 +437,11 @@ def main():
         st.write("**Vector DB**:", get_vector_status_display())
         st.write("---")  # Add separator line
 
-        st.write("**Agent 1**: BizTalk Mapper", "✅" if progress['program_1']['status'] == 'success' else "🔄" if progress['program_1']['status'] == 'running' else "❌" if progress['program_1']['status'] == 'error' else "⏳")
-        st.write("**Agent 2**: ACE Mesageflow", "✅" if progress['program_2']['status'] == 'success' else "🔄" if progress['program_2']['status'] == 'running' else "❌" if progress['program_2']['status'] == 'error' else "⏳")
-        st.write("**Agent 3**: ACE Modules", "✅" if progress['program_3']['status'] == 'success' else "🔄" if progress['program_3']['status'] == 'running' else "❌" if progress['program_3']['status'] == 'error' else "⏳")
-        st.write("**Agent 4**: Quality Review", "✅" if progress['program_4']['status'] == 'success' else "🔄" if progress['program_4']['status'] == 'running' else "❌" if progress['program_4']['status'] == 'error' else "⏳")
-        st.write("**Agent 5**: Postman Collection", "✅" if progress['program_5']['status'] == 'success' else "🔄" if progress['program_5']['status'] == 'running' else "❌" if progress['program_5']['status'] == 'error' else "⏳")
+        st.write("**Agent 1**: BizTalk Mapper", "✅" if progress['program_1']['status'] == 'success' else "📄" if progress['program_1']['status'] == 'running' else " " if progress['program_1']['status'] == 'error' else "  ")
+        st.write("**Agent 2**: ACE Mesageflow", "✅" if progress['program_2']['status'] == 'success' else "📄" if progress['program_2']['status'] == 'running' else " " if progress['program_2']['status'] == 'error' else "  ")
+        st.write("**Agent 3**: ACE Modules", "✅" if progress['program_3']['status'] == 'success' else "📄" if progress['program_3']['status'] == 'running' else " " if progress['program_3']['status'] == 'error' else "  ")
+        st.write("**Agent 4**: Quality Review", "✅" if progress['program_4']['status'] == 'success' else "📄" if progress['program_4']['status'] == 'running' else " " if progress['program_4']['status'] == 'error' else "  ")
+        st.write("**Agent 5**: Postman Collection", "✅" if progress['program_5']['status'] == 'success' else "📄" if progress['program_5']['status'] == 'running' else " " if progress['program_5']['status'] == 'error' else "  ")
         
         # Token tracker status
         if 'token_tracker' in st.session_state:
@@ -432,7 +499,7 @@ def get_status_icon(status):
         'success': '',
         'error': ''
     }
-    return icons.get(status, 'â“')
+    return icons.get(status, 'Ã¢Ââ€œ')
 
 
 def reset_pipeline():
@@ -471,6 +538,8 @@ def render_program_1_ui():
         st.session_state.business_input_method = 'pdf'
     if 'confluence_content' not in st.session_state:
         st.session_state.confluence_content = ""
+    if 'confluence_fetch_error' not in st.session_state:
+        st.session_state.confluence_fetch_error = None
     if 'vector_db_ready' not in st.session_state:
         st.session_state.vector_db_ready = False
     if 'agent1_completed' not in st.session_state:
@@ -526,7 +595,7 @@ def render_program_1_ui():
                     cleanup_results = cleanup_manager.perform_full_cleanup()
                     
                     # Display cleanup results
-                    st.write("📋 Cleanup Results:")
+                    st.write("*Cleanup Results*:")
                     
                     # Vector DB
                     vdb_result = cleanup_results['vector_db']
@@ -547,7 +616,7 @@ def render_program_1_ui():
                     if root_result['status'] == 'success':
                         st.write(f"✅ {root_result['message']}")
                         if root_result.get('files_removed'):
-                            with st.expander("📄 Files Removed"):
+                            with st.expander("Files Removed"):
                                 for file in root_result['files_removed']:
                                     st.text(f"  • {file}")
                     else:
@@ -580,9 +649,9 @@ def render_program_1_ui():
                         st.warning("⚠️ Cleanup completed with some warnings. Check details above.")
                     
                 except Exception as e:
-                    st.error(f"❌ Cleanup failed: {str(e)}")
+                    st.error(f"  Cleanup failed: {str(e)}")
                     import traceback
-                    with st.expander("🔍 Error Details"):
+                    with st.expander("📁Error Details"):
                         st.code(traceback.format_exc())
     
     # Show cleanup status
@@ -597,7 +666,7 @@ def render_program_1_ui():
     
     # BizTalk Folder Input C:\@Official\@Gen AI\DSV\BizTalk\MH.ESB.EE.Out.DocPackApp\MH.ESB.EE.Out.DocPackApp
     biztalk_folder = st.text_input(
-        "📁 **BizTalk Folder Path**",
+        "**BizTalk Folder Path**",
         disabled=not st.session_state.cleanup_completed,
         value="",
         help="Path to your BizTalk project folder containing maps and schemas"
@@ -658,19 +727,42 @@ def render_program_1_ui():
                         
                         if content:
                             st.session_state.confluence_content = content
+                            st.session_state.confluence_fetch_error = None  # Clear any previous error
                             st.success(f"✅ Successfully fetched {len(content)} characters from Confluence")
                         else:
-                            st.error("❌ No content found at the provided URL")
+                            st.error("  No content found at the provided URL")
                             
                 except requests.exceptions.RequestException as e:
-                    st.error(f"❌ Failed to fetch Confluence content: {str(e)}")
+                    error_msg = str(e)
+                    if "ProxyError" in error_msg or "403" in error_msg or "Connection" in error_msg:
+                        friendly_msg = "🚫 Cannot access URL due to network restrictions. Use internal Confluence or upload PDF instead."
+                        st.session_state.confluence_fetch_error = friendly_msg
+                        st.error(f"❌ {friendly_msg}")
+                    else:
+                        st.session_state.confluence_fetch_error = f"Network error: {error_msg}"
+                        st.error(f"❌ Failed to fetch: {error_msg}")
                 except Exception as e:
-                    st.error(f"❌ Error processing Confluence content: {str(e)}")
+                    st.error(f"  Error processing Confluence content: {str(e)}")
+
+    # Display current Confluence content status (for debugging)
+    if business_input_method == "Confluence URL":
+        if st.session_state.get('confluence_content'):
+            content_len = len(st.session_state.confluence_content)
+            with st.expander(f"📄 Confluence Content: {content_len} chars", expanded=False):
+                preview = st.session_state.confluence_content[:500]
+                st.text_area("Content Preview", preview + "..." if content_len > 500 else preview, height=100, disabled=True)
+        else:
+            st.info("ℹ️ No Confluence content loaded. Click 'Fetch Content from Confluence' button above.")
+
+    # Show persistent fetch error if any
+    if st.session_state.get('confluence_fetch_error'):
+        st.error(f"⚠️ Confluence Fetch Error: {st.session_state.confluence_fetch_error}")
+        st.info("💡 **Solutions**: Use your company's internal Confluence URL, or upload content as a PDF file instead.")
     
     # Check if inputs are provided
     inputs_ready = (
         st.session_state.cleanup_completed and 
-        biztalk_folder and 
+        # biztalk_folder and  # FIXED: Made BizTalk folder OPTIONAL 
         (
             (business_input_method == "PDF Upload" and uploaded_file is not None) or
             (business_input_method == "Confluence URL" and st.session_state.confluence_content)
@@ -679,7 +771,21 @@ def render_program_1_ui():
     
     if inputs_ready and not st.session_state.inputs_provided:
         st.session_state.inputs_provided = True
-        st.success("✅ All required inputs provided!")
+        
+        # Show what inputs were provided
+        input_sources = []
+        if biztalk_folder:
+            input_sources.append("BizTalk folder")
+        if uploaded_file:
+            input_sources.append("PDF file")
+        if st.session_state.get('confluence_content'):
+            input_sources.append("Confluence content")
+        
+        if input_sources:
+            st.success(f"✅ Inputs provided: {', '.join(input_sources)}")
+        else:
+            st.success("✅ Ready to setup Vector DB")
+
     
 
     # ===== STEP 3: SETUP VECTOR KNOWLEDGE BASE =====
@@ -710,10 +816,10 @@ def render_program_1_ui():
                     if uploaded_file is not None:
                         success = setup_vector_knowledge_base(uploaded_file, "Agent 1")
                     elif st.session_state.get('confluence_content'):
-                        st.write("🌐 Processing Confluence content...")
+                        st.write("🌐 Processing Confluence content...")
                         success = setup_vector_knowledge_base(st.session_state.confluence_content, "Agent 1")
                     else:
-                        st.error("❌ No content source available!")
+                        st.error("  No content source available!")
                         success = False
                     
                     if success:
@@ -722,10 +828,10 @@ def render_program_1_ui():
                         st.success("✅ Vector Knowledge Base setup completed!")
                     else:
                         st.session_state.vector_db_ready = False
-                        st.error("❌ Vector Knowledge Base setup failed!")
+                        st.error("  Vector Knowledge Base setup failed!")
                     
             except Exception as e:
-                st.error(f"❌ Vector Knowledge Base setup failed: {str(e)}")
+                st.error(f"  Vector Knowledge Base setup failed: {str(e)}")
                 st.session_state.vector_db_ready = False
     
     # Show vector DB status
@@ -735,7 +841,7 @@ def render_program_1_ui():
         verify_business_requirements_quality()
     
     elif inputs_ready:
-        st.info("🔄 Click 'Setup Vector Knowledge Base' to process requirements")
+        st.info("📄 Click 'Setup Vector Knowledge Base' to process requirements")
     else:
         st.warning("⚠️ Please upload a PDF or provide Confluence content first")
 
@@ -764,7 +870,7 @@ def render_program_1_ui():
         ):
             # Run Agent 1 inline
             try:
-                with st.spinner("🎯 Running Agent 1..."):
+                with st.spinner("Running Agent 1..."):
                     # Get required parameters
                     groq_api_key = os.getenv('GROQ_API_KEY', '')
                     groq_model = os.getenv('GROQ_MODEL', 'llama-3.1-8b-instant')
@@ -794,7 +900,7 @@ def render_program_1_ui():
                 # Store error for display
                 error_message = str(e)
                 st.session_state.agent1_error = error_message
-                st.error(f"❌ Agent 1 execution failed: {error_message}")
+                st.error(f"  Agent 1 execution failed: {error_message}")
                 st.session_state.agent1_completed = False
     
     # ===== DISPLAY RESULTS (Only if execution was successful) =====
@@ -811,13 +917,13 @@ def render_program_1_ui():
                 file_path = os.path.join(output_dir, file)
                 if os.path.isfile(file_path):
                     files_found = True
-                    st.success(f"📄 {file}")
+                    st.success(f"  {file}")
             
             # Check root directory for msgflow_template.xml
             msgflow_path = "msgflow_template.xml"
             if os.path.exists(msgflow_path):
                 files_found = True
-                st.success(f"📄 {msgflow_path}")
+                st.success(f"  {msgflow_path}")
             
             if not files_found:
                 st.warning("No output files found in the output directory.")
@@ -827,11 +933,11 @@ def render_program_1_ui():
 
 def debug_vector_db_state(context=""):
     """Debug function to check vector DB state"""
-    print(f"\n🔍 DEBUG: Vector DB State Analysis {context}")
+    print(f"\n📁 DEBUG: Vector DB State Analysis {context}")
     print("=" * 50)
     
     if not st.session_state.get('vector_pipeline'):
-        print("❌ No vector pipeline available")
+        print("  No vector pipeline available")
         return False
     
     pipeline = st.session_state.vector_pipeline
@@ -840,27 +946,27 @@ def debug_vector_db_state(context=""):
         # PDF processor stats
         if hasattr(pipeline, 'pdf_processor_stats'):
             stats = getattr(pipeline, 'pdf_processor_stats', {})
-            print(f"  📊 PDF Processor Stats Available: True")
+            print(f"    PDF Processor Stats Available: True")
             print(f"    - Sections: {stats.get('total_sections', 0)}")
             print(f"    - Business blocks: {stats.get('business_blocks_found', 0)}")
             print(f"    - Patterns: {stats.get('patterns_discovered', 0)}")
             print(f"    - Diagrams: {stats.get('diagrams_processed', 0)}")
         else:
-            print(f"  📊 PDF Processor Stats Available: False")
+            print(f"    PDF Processor Stats Available: False")
         
         # Document structure
         if hasattr(pipeline, 'document_structure'):
             doc_structure = getattr(pipeline, 'document_structure', {})
-            print(f"  📋 Document Structure Available: True")
+            print(f"    Document Structure Available: True")
             print(f"    - Document type: {doc_structure.get('document_type', 'Unknown')}")
             print(f"    - Business indicators: {len(doc_structure.get('business_indicators', []))}")
             print(f"    - Complexity score: {doc_structure.get('stats', {}).get('complexity_score', 'N/A')}")
         else:
-            print(f"  📋 Document Structure Available: False")
+            print(f"    Document Structure Available: False")
         
         # Vector store status
         if hasattr(pipeline, 'vector_store') and pipeline.vector_store:
-            print(f"  🗄️ Vector Store: Available")
+            print(f"  ðŸ—„ï¸ Vector Store: Available")
             try:
                 stats = pipeline.vector_store.get_stats()
                 print(f"    - Total chunks: {stats.get('total_chunks', 0)}")
@@ -868,13 +974,13 @@ def debug_vector_db_state(context=""):
             except Exception as e:
                 print(f"    - Stats error: {e}")
         else:
-            print(f"  🗄️ Vector Store: Not Available")
+            print(f"  ðŸ—„ï¸ Vector Store: Not Available")
         
         # Search engine status
         if hasattr(pipeline, 'search_engine') and pipeline.search_engine:
-            print(f"  🔍 Search Engine: Available")
+            print(f"  📁 Search Engine: Available")
         else:
-            print(f"  🔍 Search Engine: Not Available")
+            print(f"  📁 Search Engine: Not Available")
         
         # Knowledge ready status
         if hasattr(pipeline, 'knowledge_ready'):
@@ -885,23 +991,23 @@ def debug_vector_db_state(context=""):
         return True
         
     except Exception as e:
-        print(f"❌ Debug failed: {str(e)}")
+        print(f"  Debug failed: {str(e)}")
         return False
 
 
 def verify_business_requirements_quality():
     """Verify Vector DB contains quality business requirements - ADAPTIVE SYNC VERSION"""
-    print(f"\n🎯 BUSINESS REQUIREMENTS VERIFICATION")
+    print(f"\n  BUSINESS REQUIREMENTS VERIFICATION")
     print("="*50)
     
     if not st.session_state.get('vector_pipeline'):
-        print("❌ No vector pipeline available")
+        print("  No vector pipeline available")
         return False
     
     pipeline = st.session_state.vector_pipeline
     
     try:
-        print(f"🔍 Testing adaptive business requirement extraction...")
+        print(f"📁 Testing adaptive business requirement extraction...")
         
         # NEW: Get adaptive processing statistics from PDF processor
         pdf_processor_stats = getattr(pipeline, 'pdf_processor_stats', {})
@@ -911,7 +1017,7 @@ def verify_business_requirements_quality():
         vector_content = pipeline.search_engine.get_agent_content("esql_generator")
         
         if not vector_content:
-            print("❌ No vector content retrieved")
+            print("  No vector content retrieved")
             return False
             
         print(f"✅ Vector content retrieved: {len(vector_content)} characters")
@@ -919,8 +1025,8 @@ def verify_business_requirements_quality():
         # ADAPTIVE APPROACH 1: Use discovered indicators (if available)
         if document_structure and document_structure.get('business_indicators'):
             discovered_indicators = document_structure['business_indicators']
-            print(f"🎯 Using discovered indicators from PDF analysis: {len(discovered_indicators)}")
-            print(f"📋 Discovered indicators: {discovered_indicators[:10]}...")  # Show first 10
+            print(f"  Using discovered indicators from PDF analysis: {len(discovered_indicators)}")
+            print(f"  Discovered indicators: {discovered_indicators[:10]}...")  # Show first 10
             
             # Count discovered indicators in content
             found_indicators = []
@@ -956,7 +1062,7 @@ def verify_business_requirements_quality():
             
             min_indicators_needed = 6  # Static threshold for fallback
         
-        print(f"📊 Business indicators found: {len(found_indicators)}")
+        print(f"  Business indicators found: {len(found_indicators)}")
         print(f"✅ Found indicators: {found_indicators}")
         
         # ADAPTIVE CONTENT CHECKS
@@ -1003,24 +1109,24 @@ def verify_business_requirements_quality():
                 print(f"✅ Detected {pattern_name.replace('_', ' ')}")
         
         # COMPREHENSIVE QUALITY ASSESSMENT
-        print(f"\n📋 Adaptive Content Quality Assessment:")
-        print(f"  📝 Substantial content: {content_checks['has_substantial_content']} ({len(vector_content)} chars, need > {min_content_length})")
-        print(f"  🔧 Sufficient indicators: {content_checks['has_sufficient_indicators']} ({len(found_indicators)} found, need >= {min_indicators_needed})")
-        print(f"  📊 Document complexity: {content_checks['document_complexity']:.2f}")
-        print(f"  🎯 Content quality score: {content_checks['content_quality_score']:.1f}")
-        print(f"  🔍 Pattern diversity: {content_checks['pattern_diversity']}/6 patterns detected")
-        print(f"  📦 Vector chunks available: {content_checks['has_chunks']}")
+        print(f"\n  Adaptive Content Quality Assessment:")
+        print(f"  ðŸ“ Substantial content: {content_checks['has_substantial_content']} ({len(vector_content)} chars, need > {min_content_length})")
+        print(f"  📁§ Sufficient indicators: {content_checks['has_sufficient_indicators']} ({len(found_indicators)} found, need >= {min_indicators_needed})")
+        print(f"    Document complexity: {content_checks['document_complexity']:.2f}")
+        print(f"    Content quality score: {content_checks['content_quality_score']:.1f}")
+        print(f"  📁 Pattern diversity: {content_checks['pattern_diversity']}/6 patterns detected")
+        print(f"    Vector chunks available: {content_checks['has_chunks']}")
         
         # ADVANCED PROCESSING STATISTICS (if available)
         if pdf_processor_stats:
-            print(f"\n📈 PDF Processing Statistics:")
-            print(f"  📑 Sections discovered: {pdf_processor_stats.get('total_sections', 'N/A')}")
-            print(f"  🔧 Business blocks found: {pdf_processor_stats.get('business_blocks_found', 'N/A')}")
-            print(f"  📊 Patterns discovered: {pdf_processor_stats.get('patterns_discovered', 'N/A')}")
-            print(f"  🖼️ Diagrams processed: {pdf_processor_stats.get('diagrams_processed', 'N/A')}")
+            print(f"\n  PDF Processing Statistics:")
+            print(f"  ðŸ“‘ Sections discovered: {pdf_processor_stats.get('total_sections', 'N/A')}")
+            print(f"  📁§ Business blocks found: {pdf_processor_stats.get('business_blocks_found', 'N/A')}")
+            print(f"    Patterns discovered: {pdf_processor_stats.get('patterns_discovered', 'N/A')}")
+            print(f"  ðŸ–¼ï¸ Diagrams processed: {pdf_processor_stats.get('diagrams_processed', 'N/A')}")
         
         # Content preview
-        print(f"\n📄 Content preview (first 300 chars):")
+        print(f"\n  Content preview (first 300 chars):")
         print(f"   {vector_content[:300]}...")
         
         # INTELLIGENT SUCCESS CRITERIA
@@ -1049,23 +1155,23 @@ def verify_business_requirements_quality():
         # Overall assessment
         quality_passed = adaptive_quality_passed or pattern_quality_passed or complexity_quality_passed
         
-        print(f"\n🎯 INTELLIGENT QUALITY ASSESSMENT:")
-        print(f"   🛤️  Adaptive Quality Path: {'✅ PASS' if adaptive_quality_passed else '❌ FAIL'}")
-        print(f"   🔍 Pattern Diversity Path: {'✅ PASS' if pattern_quality_passed else '❌ FAIL'}")
-        print(f"   📊 Complexity Assessment Path: {'✅ PASS' if complexity_quality_passed else '❌ FAIL'}")
+        print(f"\n  INTELLIGENT QUALITY ASSESSMENT:")
+        print(f"      Adaptive Quality Path: {'✅ PASS' if adaptive_quality_passed else '  FAIL'}")
+        print(f"   📁 Pattern Diversity Path: {'✅ PASS' if pattern_quality_passed else '  FAIL'}")
+        print(f"     Complexity Assessment Path: {'✅ PASS' if complexity_quality_passed else '  FAIL'}")
         
         if quality_passed:
             print(f"\n✅ BUSINESS REQUIREMENTS QUALITY CHECK PASSED")
             if adaptive_quality_passed:
-                print(f"   🎯 Passed via adaptive quality assessment")
+                print(f"     Passed via adaptive quality assessment")
             elif pattern_quality_passed:
-                print(f"   🔍 Passed via pattern diversity assessment")
+                print(f"   📁 Passed via pattern diversity assessment")
             else:
-                print(f"   📊 Passed via document complexity assessment")
+                print(f"     Passed via document complexity assessment")
             print(f"   Vector DB contains sufficient business requirement content for ACE generation")
         else:
             print(f"\n⚠️ BUSINESS REQUIREMENTS QUALITY CHECK FAILED")
-            print(f"   📋 Improvement recommendations:")
+            print(f"     Improvement recommendations:")
             
             if not content_checks['has_substantial_content']:
                 print(f"   • Content volume: Upload more detailed documentation (need > {min_content_length} chars)")
@@ -1079,12 +1185,12 @@ def verify_business_requirements_quality():
             if content_checks['document_complexity'] < 0.6:
                 print(f"   • Document complexity: Use more comprehensive technical specification documents")
             
-            print(f"   💡 Recommended content: Technical Description, Event Data, Routing Tables, Performance Requirements, Migration Details, MQ Details")
+            print(f"   ðŸ’¡ Recommended content: Technical Description, Event Data, Routing Tables, Performance Requirements, Migration Details, MQ Details")
         
         return quality_passed
             
     except Exception as e:
-        print(f"❌ Adaptive business verification failed: {e}")
+        print(f"  Adaptive business verification failed: {e}")
         return False
 
 
@@ -1490,12 +1596,12 @@ def run_messageflow_generation(confluence_doc, app_name, flow_name, groq_api_key
             # Display metadata
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("📂 Mode", result.get('mode', 'MULTIPLE').upper())
+                st.metric("   Mode", result.get('mode', 'MULTIPLE').upper())
             with col2:
-                st.metric("🔢 Total Flows", result.get('total_flows', 2))
+                st.metric("📁Total Flows", result.get('total_flows', 2))
             with col3:
                 output_path = os.path.dirname(messageflow_file) if messageflow_file else result.get('output_root', "C:\\")
-                st.metric("📁 Output", output_path)
+                st.metric("  Output", output_path)
             
             # Display list of generated messageflows
             st.markdown("## Generated MessageFlows")
@@ -1664,11 +1770,11 @@ def run_program_3(groq_api_key):
             status_placeholder.success(f"✅ Generated {results['total_files_generated']} files")
         else:
             st.session_state.pipeline_progress['program_3']['status'] = 'failed'
-            status_placeholder.error(f"❌ Failed: {results.get('error_message', 'Unknown')}")
+            status_placeholder.error(f"  Failed: {results.get('error_message', 'Unknown')}")
             
     except Exception as e:
         st.session_state.pipeline_progress['program_3']['status'] = 'failed'
-        status_placeholder.error(f"❌ Error: {str(e)}")     
+        status_placeholder.error(f"  Error: {str(e)}")     
 
 
 def render_program_4_ui():
@@ -1706,13 +1812,13 @@ def render_program_4_ui():
         status_placeholder.info("🚀 Initializing Smart Migration Quality Reviewer...")
         
         progress_placeholder.progress(10)
-        status_placeholder.info("📋 Preparing inputs for smart review...")
+        status_placeholder.info("  Preparing inputs for smart review...")
         
         # Get vector DB content for business requirements
         vector_db_content = st.session_state.vector_pipeline.search_engine.get_agent_content("migration_quality_reviewer")
         
         progress_placeholder.progress(20)
-        status_placeholder.info("🛠️ Initializing Smart ACE Quality Reviewer...")
+        status_placeholder.info("ðŸ› ï¸ Initializing Smart ACE Quality Reviewer...")
         
         # Import and initialize - EXACT parameter matching
         from migration_quality_reviewer import SmartACEQualityReviewer
@@ -1728,7 +1834,7 @@ def render_program_4_ui():
         )
         
         progress_placeholder.progress(30)
-        status_placeholder.info("📊 Starting template-driven quality analysis...")
+        status_placeholder.info("  Starting template-driven quality analysis...")
         
         # Run smart review - exact method name
         final_output_path = reviewer.run_smart_review()
@@ -1752,14 +1858,14 @@ def render_program_4_ui():
         status_placeholder.success("✅ Smart Quality Review completed!")
         
         # Display results
-        st.success("🎉 **Smart Migration Quality Review Complete!**")
+        st.success("  **Smart Migration Quality Review Complete!**")
         
         # Results summary
         col1, col2, col3 = st.columns(3)
         
         with col1:
             st.metric(
-                label="🎯 Token Usage", 
+                label="  Token Usage", 
                 value=f"{reviewer.token_usage:,}",
                 delta=f"{((10000 - reviewer.token_usage) / 10000 * 100):.1f}% under budget",
                 help="Actual token usage vs 10K budget"
@@ -1769,14 +1875,14 @@ def render_program_4_ui():
             final_path = Path(final_output_path)
             component_count = len([f for f in final_path.iterdir() if f.is_file() and f.suffix in ['.esql', '.msgflow', '.subflow', '.xsd']])
             st.metric(
-                label="📦 Components Reviewed",
+                label="  Components Reviewed",
                 value=component_count,
                 help="Total ACE components processed and reviewed"
             )
         
         with col3:
             st.metric(
-                label="📁 Final Project",
+                label="  Final Project",
                 value="Ready",
                 delta="ACE Application",
                 help="Final project structure created"
@@ -1784,9 +1890,9 @@ def render_program_4_ui():
         
         # Final project details
         st.info(f"""
-        🏆 **Smart Review Results**
+          **Smart Review Results**
         
-        📁 **Project Location:** `{final_output_path}`
+          **Project Location:** `{final_output_path}`
         
         **Quality Analysis Features:**
         - ✅ Template-driven compliance checking
@@ -1797,7 +1903,7 @@ def render_program_4_ui():
         
         **Import into IBM ACE Toolkit:**
         1. Open IBM ACE Toolkit
-        2. File → Import → General → Existing Projects into Workspace
+        2. File    Import    General    Existing Projects into Workspace
         3. Select directory: `{final_output_path}`
         4. Import the complete reviewed project structure
         """)
@@ -1912,7 +2018,7 @@ def render_program_5_ui():
         
         project_name = st.text_input(
             "  Project Name",
-            value=extracted_project_name,  # ← DYNAMIC from Agent 4!
+            value=extracted_project_name,  # â† DYNAMIC from Agent 4!
             help="Name for the Postman collections and test scenarios"
         )
         
@@ -2113,7 +2219,7 @@ def preview_test_scenarios(program_4_output, project_name):
                     st.write(f"*{test_config['description']}*")
                     
                     for scenario in test_config['scenarios']:
-                        st.write(f"  â€¢ {scenario}")
+                        st.write(f"  Ã¢â‚¬Â¢ {scenario}")
                         category_total += 1
                     
                     st.write("---")
@@ -2131,7 +2237,7 @@ def run_postman_collection_generation(reviewed_modules_path, target_output_folde
                                     project_name, generate_advanced_scenarios, environment_count, use_llm_enhancement):
 
 
-    print("🔍 VECTOR DB DIAGNOSTIC:")
+    print("📁 VECTOR DB DIAGNOSTIC:")
     print(f"  VECTOR_DB_AVAILABLE: {VECTOR_DB_AVAILABLE}")
     print(f"  VECTOR_PIPELINE_AVAILABLE: {VECTOR_PIPELINE_AVAILABLE}")
     print(f"  st.session_state.vector_enabled: {st.session_state.get('vector_enabled', False)}")
@@ -2143,7 +2249,7 @@ def run_postman_collection_generation(reviewed_modules_path, target_output_folde
         print(f"  vector_pipeline.knowledge_ready: {getattr(st.session_state.vector_pipeline, 'knowledge_ready', 'N/A')}")
         print(f"  vector_pipeline.search_engine exists: {getattr(st.session_state.vector_pipeline, 'search_engine', None) is not None}")
     
-    print("🔍 END DIAGNOSTIC")
+    print("📁 END DIAGNOSTIC")
 
     progress_placeholder = st.empty()
     status_placeholder = st.empty()
@@ -2267,7 +2373,7 @@ def run_postman_collection_generation(reviewed_modules_path, target_output_folde
                 4. **Run Tests**: Execute comprehensive test scenarios
                 5. **Monitor Results**: Track test execution and business validation
                 
-                **📂 Output Location**: `{output_path}`
+                **   Output Location**: `{output_path}`
             ```bash
                 newman run "{project_name}_Complete_TestSuite.postman_collection.json" \\
                   -e "Development.postman_environment.json" \\
@@ -2337,7 +2443,7 @@ def download_environments(environments_created):
                 zip_data = f.read()
             
             st.download_button(
-                label="ðŸŒ Download All Environments",
+                label="Ã°Å¸Å’Â Download All Environments",
                 data=zip_data,
                 file_name="postman_environments.zip",
                 mime="application/zip",
@@ -2605,7 +2711,7 @@ def render_token_analytics_tab():
                     )
                     
                     st.metric(
-                        "ðŸ“… Flows per Month",
+                        "Ã°Å¸â€œâ€¦ Flows per Month",
                         capacity_results['capacity_metrics']['flows_per_month'],
                         help="Number of flows processible per month (20 working days)"
                     )
@@ -2676,7 +2782,7 @@ def render_token_analytics_tab():
                     elif "Dev" in tier:
                         st.warning(f"   **{tier}** (${tier_cost}/month)")
                     else:
-                        st.error(f"ðŸš¨ **{tier}** (${tier_cost}+/month)")
+                        st.error(f"Ã°Å¸Å¡Â¨ **{tier}** (${tier_cost}+/month)")
                     
                     st.write(f"**Daily Token Limit Needed**: {capacity_results['subscription_requirements']['daily_token_limit_needed']:,}")
                 
@@ -2694,7 +2800,7 @@ def render_token_analytics_tab():
                     if capacity_results['subscription_requirements']['exceeds_free_tier']:
                         st.warning("   Exceeds Free Tier limits")
                     if capacity_results['subscription_requirements']['exceeds_dev_tier']:
-                        st.error("ðŸš¨ Requires Pro Tier subscription")
+                        st.error("Ã°Å¸Å¡Â¨ Requires Pro Tier subscription")
                 
                 # Efficiency insights
                 st.markdown("###   Efficiency Insights")
@@ -2712,7 +2818,7 @@ def render_token_analytics_tab():
                     if monthly_cost_8b < 50:
                         st.success(f"  **Affordable**: ${monthly_cost_8b:.2f}/month")
                     elif monthly_cost_8b < 200:
-                        st.warning(f"ðŸ’› **Moderate**: ${monthly_cost_8b:.2f}/month") 
+                        st.warning(f"  **Moderate**: ${monthly_cost_8b:.2f}/month") 
                     else:
                         st.error(f"  **Expensive**: ${monthly_cost_8b:.2f}/month")
                 
@@ -2899,7 +3005,7 @@ def render_token_analytics_tab():
 
 def render_results_dashboard():
     """Enhanced results dashboard with token usage summary"""
-    st.header("🏠 Migration Results Dashboard")
+    st.header(" Migration Results Dashboard")
     
     # Check if pipeline_progress exists in session state
     if 'pipeline_progress' not in st.session_state:
@@ -2933,7 +3039,7 @@ def render_results_dashboard():
     
     # Token Usage Summary Section
     if 'token_tracker' in st.session_state and st.session_state.token_tracker:
-        st.subheader("📊 Pipeline Token Usage Summary")
+        st.subheader("  Pipeline Token Usage Summary")
         
         tracker = st.session_state.token_tracker
         metrics = tracker.get_real_time_metrics()
@@ -2943,7 +3049,7 @@ def render_results_dashboard():
         
         with col1:
             st.metric(
-                label="🎯 Total Tokens Used",
+                label="  Total Tokens Used",
                 value=f"{metrics.total_tokens:,}",
                 delta=f"{metrics.total_calls} LLM calls",
                 help="Total tokens consumed across all pipeline agents"
@@ -2960,7 +3066,7 @@ def render_results_dashboard():
         with col3:
             execution_time = (datetime.now() - tracker.session_start).total_seconds() / 60
             st.metric(
-                label="⏱️ Pipeline Duration",
+                label="  Pipeline Duration",
                 value=f"{execution_time:.1f} min",
                 delta=f"{metrics.current_tokens_per_minute:.0f} tokens/min",
                 help="Total time for pipeline execution"
@@ -2971,18 +3077,18 @@ def render_results_dashboard():
             if metrics.total_cost > 0 and metrics.flows_processed > 0:
                 efficiency = metrics.total_tokens / metrics.total_cost  # tokens per dollar
                 st.metric(
-                    label="⚡ Pipeline Efficiency",
+                    label="  Pipeline Efficiency",
                     value=f"{efficiency:,.0f}",
                     delta="tokens/$",
                     help="Token efficiency: higher is better"
                 )
             else:
-                st.metric("⚡ Pipeline Efficiency", "Calculating...", delta="tokens/$")
+                st.metric("  Pipeline Efficiency", "Calculating...", delta="tokens/$")
         
         # Agent contribution breakdown
         agent_breakdown = tracker.get_agent_breakdown()
         if agent_breakdown:
-            with st.expander("🔍 Agent Token Contribution", expanded=False):
+            with st.expander("📁 Agent Token Contribution", expanded=False):
                 agent_df = pd.DataFrame(agent_breakdown).T
                 agent_df = agent_df.round(4)
                 
@@ -2998,16 +3104,16 @@ def render_results_dashboard():
     
     # Show final results if all programs completed
     if all(progress[prog]['status'] == 'success' for prog in progress):
-        st.success("🎉 **MIGRATION PIPELINE COMPLETED SUCCESSFULLY!**")
+        st.success("  **MIGRATION PIPELINE COMPLETED SUCCESSFULLY!**")
         
         # Enhanced completion summary with token metrics
         if 'token_tracker' in st.session_state and st.session_state.token_tracker:
-            st.subheader("📋 Final Pipeline Results")
+            st.subheader("  Final Pipeline Results")
             
             col1, col2 = st.columns(2)
             
             with col1:
-                st.markdown("**📦 Generated Artifacts:**")
+                st.markdown("**  Generated Artifacts:**")
                 # List all outputs
                 artifacts = []
                 for i, prog in enumerate(['program_1', 'program_2', 'program_3', 'program_4', 'program_5'], 1):
@@ -3019,7 +3125,7 @@ def render_results_dashboard():
                     st.write(artifact)
             
             with col2:
-                st.markdown("**📊 Resource Utilization:**")
+                st.markdown("**  Resource Utilization:**")
                 metrics = st.session_state.token_tracker.get_real_time_metrics()
                 
                 # Calculate cost per artifact
@@ -3027,9 +3133,9 @@ def render_results_dashboard():
                 cost_per_artifact = metrics.total_cost / max(total_artifacts, 1)
                 
                 st.write(f"💰 **Total Investment**: ${metrics.total_cost:.4f}")
-                st.write(f"🎯 **Token Consumption**: {metrics.total_tokens:,}")
-                st.write(f"📦 **Cost per Artifact**: ${cost_per_artifact:.4f}")
-                st.write(f"⚡ **Processing Efficiency**: {metrics.current_tokens_per_minute:.0f} tokens/min")
+                st.write(f"  **Token Consumption**: {metrics.total_tokens:,}")
+                st.write(f"  **Cost per Artifact**: ${cost_per_artifact:.4f}")
+                st.write(f"  **Processing Efficiency**: {metrics.current_tokens_per_minute:.0f} tokens/min")
                 
                 # ROI calculation
                 estimated_manual_hours = st.number_input(
@@ -3050,20 +3156,20 @@ def render_results_dashboard():
                 savings = manual_cost - metrics.total_cost
                 roi_percentage = (savings / manual_cost) * 100 if manual_cost > 0 else 0
                 
-                st.write(f"👨‍💻 **Manual Cost**: ${manual_cost:.2f}")
+                st.write(f"  **Manual Cost**: ${manual_cost:.2f}")
                 st.write(f"💵 **Savings**: ${savings:.2f}")
-                st.write(f"📈 **ROI**: {roi_percentage:.0f}%")
+                st.write(f"  **ROI**: {roi_percentage:.0f}%")
         
         # Next steps with token insights
         st.subheader("🚀 Next Steps")
         st.markdown("""
-        1. 📖 **Review** generated functional documentation
+        1.   **Review** generated functional documentation
         2. ✅ **Review** generated quality reports  
-        3. 📥 **Import** ACE foundation into IBM ACE Toolkit
-        4. ⚙️ **Configure** database connections and environment settings
-        5. 🧪 **Test** enhanced ESQL modules individually
+        3.   **Import** ACE foundation into IBM ACE Toolkit
+        4.   **Configure** database connections and environment settings
+        5.   **Test** enhanced ESQL modules individually
         6. 🚀 **Deploy** to ACE runtime environment
-        7. 🔍 **Perform** end-to-end testing
+        7. 📁 **Perform** end-to-end testing
         8. ✅ **Go-live** with migrated solution
         """)
         
@@ -3077,11 +3183,11 @@ def render_results_dashboard():
                     st.json(files)
         
         with col2:
-            if st.button("📊 View Token Analytics"):
+            if st.button("  View Token Analytics"):
                 st.info("Switch to 'Token Analytics' tab for detailed analysis")
         
         with col3:
-            if st.button("🔄 Start New Pipeline"):
+            if st.button("📄 Start New Pipeline"):
                 # Reset pipeline progress
                 st.session_state.pipeline_progress = {
                     'program_1': {'status': 'pending', 'output': None, 'timestamp': None},
@@ -3101,23 +3207,23 @@ def render_results_dashboard():
                 st.rerun()
     
     elif any(progress[prog]['status'] == 'error' for prog in progress):
-        st.error("❌ **PIPELINE HAS ERRORS** - Check individual program tabs for details")
+        st.error("  **PIPELINE HAS ERRORS** - Check individual program tabs for details")
         
         # Show partial token usage if available
         if 'token_tracker' in st.session_state and st.session_state.token_tracker:
             metrics = st.session_state.token_tracker.get_real_time_metrics()
             if metrics.total_calls > 0:
                 st.warning(f"⚠️ **Partial Execution Cost**: ${metrics.total_cost:.4f} ({metrics.total_tokens:,} tokens)")
-                st.info("📊 Check Token Analytics tab for detailed breakdown of completed operations")
+                st.info("  Check Token Analytics tab for detailed breakdown of completed operations")
     
     else:
-        st.info("🔄 **PIPELINE IN PROGRESS** - Continue with remaining programs")
+        st.info("📄 **PIPELINE IN PROGRESS** - Continue with remaining programs")
         
         # Show current token usage if available
         if 'token_tracker' in st.session_state and st.session_state.token_tracker:
             metrics = st.session_state.token_tracker.get_real_time_metrics()
             if metrics.total_calls > 0:
-                with st.expander("📊 Current Token Usage", expanded=False):
+                with st.expander("  Current Token Usage", expanded=False):
                     col1, col2, col3 = st.columns(3)
                     with col1:
                         st.metric("Tokens So Far", f"{metrics.total_tokens:,}")

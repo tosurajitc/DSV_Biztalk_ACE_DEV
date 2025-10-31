@@ -39,12 +39,12 @@ class BizTalkACEMapper:
         if api_key:
             try:
                 self.groq_client = groq.Groq(api_key=api_key)
-                print("âœ… LLM client initialized")
+                print("  LLM client initialized")
             except Exception as e:
-                print(f"âš ï¸ LLM initialization failed: {e}")
+                print(f"  LLM initialization failed: {e}")
                 self.groq_client = None
         else:
-            print("âš ï¸ GROQ_API_KEY not found in environment")
+            print("  GROQ_API_KEY not found in environment")
 
     # ========================================
     # RULE-BASED FUNCTIONS (100% Rule-Based)
@@ -72,7 +72,7 @@ class BizTalkACEMapper:
                         full_path = Path(root) / file
                         file_paths.append(full_path)
             
-            print(f"ðŸ“ Scanned folder: Found {len(file_paths)} BizTalk files")
+            print(f"  Scanned folder: Found {len(file_paths)} BizTalk files")
         else:
             # Handle list of file paths
             file_paths = [Path(fp) for fp in biztalk_files]
@@ -85,10 +85,10 @@ class BizTalkACEMapper:
                     components.append(component)
                     
             except Exception as e:
-                print(f"âš ï¸ Failed to parse {file_path.name}: {e}")
+                print(f"  Failed to parse {file_path.name}: {e}")
                 continue
         
-        print(f"ðŸ” Parsed {len(components)} BizTalk components")
+        print(f"  Parsed {len(components)} BizTalk components")
         return components
 
 
@@ -119,10 +119,10 @@ class BizTalkACEMapper:
             # 1. Input type detection
             if any(kw in combined_content for kw in ['http', 'wcf', 'basichttp', 'web service', 'wsdl', 'soap']):
                 pattern['input_type'] = 'HTTP'
-                print("    âœ“ HTTP Input detected")
+                print("      HTTP Input detected")
             elif any(kw in combined_content for kw in ['mq', 'queue', 'mqinput']):
                 pattern['input_type'] = 'MQ'
-                print("    âœ“ MQ Input detected")
+                print("      MQ Input detected")
             else:
                 pattern['input_type'] = 'MQ'  # Default
             
@@ -133,7 +133,7 @@ class BizTalkACEMapper:
             if xsl_matches or 'transform' in combined_content or 'xslt' in combined_content or 'mapping' in combined_content:
                 pattern['has_xsl_transform'] = True
                 pattern['xsl_files'] = list(set(xsl_matches)) if xsl_matches else ['Transform.xsl']
-                print(f"    âœ“ XSL Transform detected: {len(pattern['xsl_files'])} files")
+                print(f"      XSL Transform detected: {len(pattern['xsl_files'])} files")
             
             # 3. Enrichment detection
             enrichment_keywords = [
@@ -145,7 +145,7 @@ class BizTalkACEMapper:
             ]
             if any(kw in combined_content for kw in enrichment_keywords):
                 pattern['has_enrichment'] = True
-                print("    âœ“ Enrichment detected")
+                print("      Enrichment detected")
             
             # 4. SOAP detection
             if 'soap' in combined_content or 'web service' in combined_content or 'wsdl' in combined_content:
@@ -153,19 +153,19 @@ class BizTalkACEMapper:
                 
                 soap_urls = re.findall(r'https?://[^\s<>"]+', combined_content)
                 pattern['soap_endpoint'] = soap_urls[0] if soap_urls else 'http://service.endpoint'
-                print(f"    âœ“ SOAP Request detected: {pattern['soap_endpoint']}")
+                print(f"      SOAP Request detected: {pattern['soap_endpoint']}")
             
             # 5. Flow type detection
             if any(kw in combined_content for kw in ['rts', 'synchronous', 'request-response', 'two-way', 'reply']):
                 pattern['is_synchronous'] = True
                 pattern['flow_type'] = 'RTS'
                 pattern['has_event_nodes'] = True
-                print("    âœ“ RTS (Synchronous) flow detected")
+                print("      RTS (Synchronous) flow detected")
             elif pattern['input_type'] == 'HTTP':
                 pattern['is_synchronous'] = True
                 pattern['flow_type'] = 'RTS'
                 pattern['has_event_nodes'] = True
-                print("    âœ“ HTTP implies RTS flow")
+                print("      HTTP implies RTS flow")
             
             # 6. Method extraction (NEW)
             method_patterns = [
@@ -188,13 +188,13 @@ class BizTalkACEMapper:
                 pattern['has_method_routing'] = True
                 pattern['routing_methods'] = list(found_methods)
                 pattern['routing_type'] = 'route'  # Use Route node pattern
-                print(f"    âœ“ Multi-method routing detected: {len(found_methods)} methods")
+                print(f"      Multi-method routing detected: {len(found_methods)} methods")
                 print(f"      Methods: {', '.join(list(found_methods)[:5])}")
             
             # 8. Build node sequence
             pattern['node_sequence'] = self._build_node_sequence(pattern)
             
-            print(f"    ðŸ“Š Pattern Summary:")
+            print(f"      Pattern Summary:")
             print(f"       Input: {pattern['input_type']}")
             print(f"       Flow Type: {pattern['flow_type']}")
             print(f"       XSL: {pattern['has_xsl_transform']}")
@@ -206,7 +206,7 @@ class BizTalkACEMapper:
             return pattern
             
         except Exception as e:
-            print(f"    âš ï¸ Pattern detection error: {e}")
+            print(f"      Pattern detection error: {e}")
             return {
                 'input_type': 'MQ',
                 'has_enrichment': False,
@@ -1093,11 +1093,11 @@ class BizTalkACEMapper:
                 for page in pdf_reader.pages:
                     text_content += page.extract_text() + "\n"
                 
-                print(f"ðŸ“„ Extracted {len(text_content)} characters from PDF")
+                print(f"  Extracted {len(text_content)} characters from PDF")
                 return text_content.strip()
                 
         except Exception as e:
-            print(f"âŒ PDF extraction failed: {e}")
+            print(f"  PDF extraction failed: {e}")
             return ""
     
     def load_standard_esql_template(self) -> str:
@@ -1216,7 +1216,7 @@ END MODULE;
             num_chunks = max(1, (total_chars + max_chunk_size - 1) // max_chunk_size)
             actual_chunk_size = total_chars // num_chunks
             
-            print(f"ðŸ“Š PDF Analysis: {total_chars} chars â†’ {num_chunks} iterations of ~{actual_chunk_size} chars each")
+            print(f"PDF Analysis: {total_chars} chars â†’ {num_chunks} iterations of ~{actual_chunk_size} chars each")
             
             # Step 2: Process content in planned iterations
             all_requirements = {
@@ -1238,7 +1238,7 @@ END MODULE;
                 end_pos = min(start_pos + actual_chunk_size + 500, total_chars)  # 500 char overlap
                 chunk_content = cleaned_content[start_pos:end_pos]
                 
-                print(f"ðŸ§  Processing chunk {chunk_idx + 1}/{num_chunks} ({len(chunk_content)} chars)")
+                print(f"Processing chunk {chunk_idx + 1}/{num_chunks} ({len(chunk_content)} chars)")
                 
                 prompt = f"""You are an expert IBM ACE architect analyzing business specification chunk {chunk_idx + 1} of {num_chunks}.
 
@@ -1300,12 +1300,12 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
             if total_extracted_items < 5:
                 raise Exception(f"Insufficient business requirements extracted - only {total_extracted_items} items found across all chunks")
             
-            print(f"âœ… Successfully extracted {total_extracted_items} specific business requirements from {num_chunks} iterations")
+            print(f"Successfully extracted {total_extracted_items} specific business requirements from {num_chunks} iterations")
             
             # Debug output for verification
             for category, items in all_requirements.items():
                 if items:
-                    print(f"  ðŸ“‹ {category}: {len(items)} items - {items[:2]}")  # Show first 2 items
+                    print(f"   {category}: {len(items)} items - {items[:2]}")  # Show first 2 items
             
             return all_requirements
             
@@ -1457,14 +1457,14 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
             # Format Excel file for better readability
             self._format_excel_file(output_path)
             
-            print(f"ðŸ“Š Enhanced Excel file generated: {output_path}")
-            print(f"ðŸ“‹ Component mappings: {len(mappings)}")
-            print(f"ðŸ“„ Excel sheets: 6 (Overview, Artifacts, Database, Integration, Roadmap, Legacy)")
+            print(f"Enhanced Excel file generated: {output_path}")
+            print(f"Component mappings: {len(mappings)}")
+            print(f"Excel sheets: 6 (Overview, Artifacts, Database, Integration, Roadmap, Legacy)")
             
             return output_path
             
         except Exception as e:
-            print(f"âŒ Excel generation failed: {e}")
+            print(f"Excel generation failed: {e}")
             raise
 
     def _format_excel_file(self, file_path: str):
@@ -1505,10 +1505,10 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
                     worksheet.column_dimensions[column_letter].width = adjusted_width
             
             workbook.save(file_path)
-            print(f"âœ… Excel formatting applied")
+            print(f"Excel formatting applied")
             
         except Exception as e:
-            print(f"âš ï¸ Excel formatting failed (but file still usable): {e}")
+            print(f"Excel formatting failed (but file still usable): {e}")
 
     def generate_intelligent_mappings(self, biztalk_components: List[Dict], business_requirements: Dict) -> List[Dict]:
         """Generate intelligent BizTalk to ACE component mappings based on business specifications"""
@@ -1620,12 +1620,12 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
                     mapping.get('ace_components').get('primary_artifact').get('name')):
                     valid_mappings.append(mapping)
                 else:
-                    print(f"âš ï¸ Skipping incomplete mapping for: {mapping.get('biztalk_component', 'Unknown')}")
+                    print(f"Skipping incomplete mapping for: {mapping.get('biztalk_component', 'Unknown')}")
             
             if not valid_mappings:
                 raise Exception("No valid component mappings generated. All mappings failed quality validation.")
             
-            print(f"âœ… Generated {len(valid_mappings)} intelligent component mappings")
+            print(f"Generated {len(valid_mappings)} intelligent component mappings")
             return valid_mappings
             
         except Exception as e:
@@ -1655,15 +1655,15 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
             with open(json_file_path, 'w', encoding='utf-8') as f:
                 json.dump(json_output, f, indent=2, ensure_ascii=False)
             
-            print(f"ðŸ“„ JSON file saved: {json_file_path}")
-            print(f"   â†’ Input for Programs 3, 4, 5...")
+            print(f"JSON file saved: {json_file_path}")
+            print(f"   Input for Programs 3, 4, 5...")
             
             # OUTPUT 2: Excel file for user documentation  
             excel_file_path = os.path.join(output_dir, "biztalk_ace_component_mapping.xlsx")
             excel_path = self.generate_excel_output(mappings, excel_file_path)
             
-            print(f"ðŸ“Š Excel file saved: {excel_path}")
-            print(f"   â†’ Documentation and user review")
+            print(f"Excel file saved: {excel_path}")
+            print(f"   Documentation and user review")
             
             return {
                 "json_file": json_file_path,
@@ -1679,41 +1679,41 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
         """Main processing function with Vector DB integration - Supports PDF-only mode"""
         
         try:
-            print("ðŸŽ¯ Starting Specification-Driven Component Mapping")
+            print("Starting Specification-Driven Component Mapping")
             print("=" * 60)
             
             # Phase 1: BizTalk Component Analysis (Rule-Based) - OPTIONAL
-            print("ðŸ” Phase 1: Analyzing BizTalk components...")
+            print("Phase 1: Analyzing BizTalk components...")
             
             if biztalk_files:
                 self.biztalk_components = self.parse_biztalk_components(biztalk_files)
                 
                 if not self.biztalk_components:
-                    print("âš ï¸  No BizTalk components found in provided path")
+                    print("No BizTalk components found in provided path")
                     self.biztalk_components = []
                 else:
-                    print(f"âœ… Found {len(self.biztalk_components)} BizTalk components")
+                    print(f"Found {len(self.biztalk_components)} BizTalk components")
             else:
-                print("â­ï¸  No BizTalk path provided - PDF-only mode enabled")
+                print("No BizTalk path provided - PDF-only mode enabled")
                 self.biztalk_components = []
             
             # Phase 2: Business Requirements Extraction - VECTOR DB ONLY
-            print("ðŸš€ Phase 2: Processing Vector DB focused content...")
+            print("Phase 2: Processing Vector DB focused content...")
             
             if not pdf_file:
-                raise Exception("âŒ Vector DB Error: No focused content received from Vector search")
+                raise Exception("Vector DB Error: No focused content received from Vector search")
             
             # Use Vector DB content directly
-            print(f"ðŸ“Š Vector content received: {len(pdf_file)} characters")
+            print(f"Vector content received: {len(pdf_file)} characters")
             self.business_requirements = self.extract_business_requirements(pdf_file)
             
             if not self.business_requirements:
-                raise Exception("âŒ Vector DB Error: Failed to extract business requirements from focused content")
+                raise Exception("Vector DB Error: Failed to extract business requirements from focused content")
             
-            print(f"âœ… Vector business requirements processed successfully")
+            print(f"Vector business requirements processed successfully")
             
             # NEW PHASE: Generate MessageFlow Template based on business requirements
-            print("âš™ï¸ Phase 2.5: Generating MessageFlow template...")
+            print("Phase 2.5: Generating MessageFlow template...")
             
             # Prepare vector_db_results from pdf_file content
             vector_db_results = [
@@ -1730,8 +1730,8 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
                 'structural_features': []
             }
             
-            print(f"   ðŸ“‹ Flow: {business_json['flow_name']}")
-            print(f"   ðŸ“¦ Project: {business_json['project_name']}")
+            print(f"   Flow: {business_json['flow_name']}")
+            print(f"   Project: {business_json['project_name']}")
             
             # Generate MessageFlow template
             msgflow_path = None
@@ -1741,16 +1741,16 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
                     business_json,
                     output_path="msgflow_template.xml"
                 )
-                print(f"âœ… MessageFlow template generated: {msgflow_path}")
+                print(f"MessageFlow template generated: {msgflow_path}")
             except Exception as e:
-                print(f"âš ï¸ MessageFlow template generation failed: {str(e)}")
+                print(f"MessageFlow template generation failed: {str(e)}")
                 import traceback
                 print(f"   Traceback:\n{traceback.format_exc()}")
             
             # Phase 3: Component-Level Mapping (LLM) - CONDITIONAL
-            print("ðŸ§  Phase 3: Generating component mappings...")
+            print("Phase 3: Generating component mappings...")
             
-            # âœ… FIX: Only generate mappings if BizTalk components exist
+            #   FIX: Only generate mappings if BizTalk components exist
             if self.biztalk_components:
                 self.mappings = self.generate_intelligent_mappings(
                     self.biztalk_components,
@@ -1758,19 +1758,19 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
                 )
                 
                 if not self.mappings:
-                    print("âš ï¸  No valid component mappings generated")
+                    print("No valid component mappings generated")
                     self.mappings = []
                 else:
-                    print(f"âœ… Generated {len(self.mappings)} component mappings")
+                    print(f"Generated {len(self.mappings)} component mappings")
             else:
-                print("â­ï¸  Skipping component mappings (No BizTalk components to map)")
+                print("Skipping component mappings (No BizTalk components to map)")
                 self.mappings = []
             
             # Phase 4: ESQL Template Customization (Optional Enhancement)
-            print("ðŸ“ Phase 4: Customizing ESQL template...")
+            print("Phase 4: Customizing ESQL template...")
             
             customized_path = None
-            # âœ… FIX: Check if template_path exists and is valid
+            #   FIX: Check if template_path exists and is valid
             template_path = "templates/messageflow_template_sample_v2.xml"
             
             if template_path and os.path.exists(template_path):
@@ -1790,15 +1790,15 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
                     os.makedirs(output_dir, exist_ok=True)
                     with open(customized_path, 'w', encoding='utf-8') as f:
                         f.write(customized_template)
-                    print(f"ðŸ“ Customized ESQL template saved: {customized_path}")
+                    print(f"Customized ESQL template saved: {customized_path}")
                 except Exception as e:
-                    print(f"âš ï¸ ESQL template customization failed: {e}")
+                    print(f"ESQL template customization failed: {e}")
                     customized_path = None
             else:
-                print("âš ï¸ Base ESQL template not found, skipping customization")
+                print("Base ESQL template not found, skipping customization")
             
             # Phase 5: Generate Output Files - CONDITIONAL
-            print("ðŸ’¾ Phase 5: Generating output files...")
+            print("Phase 5: Generating output files...")
             
             # Initialize output_files dictionary
             output_files = {"json_file": None, "excel_file": None}
@@ -1806,15 +1806,15 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
             # Only generate mapping outputs if we have mappings
             if self.mappings:
                 output_files = self.save_mapping_outputs(self.mappings, output_dir)
-                print(f"âœ… Mapping outputs saved")
+                print(f"Mapping outputs saved")
             else:
-                print("â­ï¸  No component mappings to save (PDF-only mode)")
+                print("No component mappings to save (PDF-only mode)")
                 # Still save business requirements for downstream use
                 requirements_path = os.path.join(output_dir, "business_requirements.json")
                 os.makedirs(output_dir, exist_ok=True)
                 with open(requirements_path, 'w', encoding='utf-8') as f:
                     json.dump(self.business_requirements, f, indent=2, ensure_ascii=False)
-                print(f"ðŸ“„ Business requirements saved: {requirements_path}")
+                print(f"Business requirements saved: {requirements_path}")
                 output_files["json_file"] = requirements_path
             
             # Return comprehensive results
@@ -1834,11 +1834,11 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
             if msgflow_path:
                 result["msgflow_template"] = msgflow_path
             
-            print("ðŸŽ¯ Specification-driven mapping completed successfully!")
+            print("  Specification-driven mapping completed successfully!")
             if not self.biztalk_components:
-                print("ðŸ“‹ PDF-only mode: Business requirements extracted, ready for Agent 2")
+                print("  PDF-only mode: Business requirements extracted, ready for Agent 2")
             else:
-                print(f"ðŸ“Š Full mapping mode: {len(self.mappings)} components mapped")
+                print(f"  Full mapping mode: {len(self.mappings)} components mapped")
             
             return result
             
@@ -1846,10 +1846,10 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
             # Let Vector DB errors propagate to UI
             error_message = str(e)
             if "Vector DB Error" in error_message:
-                print(f"âŒ {error_message}")
+                print(f"  {error_message}")
                 raise Exception(f"Vector DB Processing Failed: {error_message}")
             else:
-                print(f"ðŸ’¥ Error in process_mapping: {error_message}")
+                print(f"  Error in process_mapping: {error_message}")
                 raise Exception(f"Component Mapping Failed: {error_message}")
         
 
@@ -1902,13 +1902,13 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
     - customProperty field VALUES (not the field structure)
     - Remove unused customReference/customProperty assignments if not needed
 
-    ðŸŽ¯ CUSTOMIZATION INSTRUCTIONS:
+      CUSTOMIZATION INSTRUCTIONS:
     - If business entities include "ShipmentInstruction", keep ShipmentId mapping
     - If database lookups mention specific tables, populate relevant customReference fields
     - Update XPath expressions to match business entity structure from requirements
     - Keep ALL sourceInfo and targetInfo field assignments exactly as they are
 
-    âš ï¸ CRITICAL OUTPUT REQUIREMENTS:
+      CRITICAL OUTPUT REQUIREMENTS:
     - Return the COMPLETE template including ALL procedures
     - Do not truncate, abbreviate, or remove any procedures
     - Every line from the input template must appear in your output
@@ -1924,7 +1924,7 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.05,  # Very low temperature for precise customization
-                max_tokens=5000    # âœ… INCREASED TOKEN LIMIT
+                max_tokens=5000    #   INCREASED TOKEN LIMIT
             )
 
             # NEW: Add token tracking
@@ -1963,7 +1963,7 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
             template_fixed = False
             for proc_name, proc_code in missing_procedures.items():
                 if proc_name not in customized_template:
-                    print(f"âš ï¸ Auto-fixing missing procedure: {proc_name}")
+                    print(f"  Auto-fixing missing procedure: {proc_name}")
                     
                     # Smart insertion - place before END MODULE;
                     if 'END MODULE;' in customized_template:
@@ -1979,7 +1979,7 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
                     template_fixed = True
             
             if template_fixed:
-                print("ðŸ”§ Auto-fixed missing ESQL procedures")
+                print("  Auto-fixed missing ESQL procedures")
             
             # Enhanced validation with detailed checking
             essential_components = [
@@ -2004,11 +2004,11 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
             
             # Multi-level fallback strategy
             if missing_components:
-                print(f"âš ï¸ Still missing components after auto-fix: {missing_components}")
+                print(f"  Still missing components after auto-fix: {missing_components}")
                 
                 # Try to recover by merging with original template
                 if len(missing_components) <= 2:  # Only minor issues
-                    print("ðŸ”„ Attempting template merge recovery...")
+                    print("  Attempting template merge recovery...")
                     
                     # Extract customizations from LLM response
                     customization_patterns = [
@@ -2030,10 +2030,10 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
                             merged_template = re.sub(original_pattern, match, merged_template)
                     
                     customized_template = merged_template
-                    print("âœ… Template merge recovery successful")
+                    print("  Template merge recovery successful")
                     
                 else:  # Major issues - use original template
-                    print("ðŸ”„ Major issues detected - falling back to original template")
+                    print("  Major issues detected - falling back to original template")
                     return template
             
             # Final validation
@@ -2043,27 +2043,27 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
                     final_missing.append(component)
             
             if final_missing:
-                print(f"âŒ Final validation failed - missing: {final_missing}")
-                print("ðŸ”„ Using original template as final fallback")
+                print(f"  Final validation failed - missing: {final_missing}")
+                print("  Using original template as final fallback")
                 return template
             
             # Success metrics
-            print("âœ… ESQL template customization successful!")
-            print(f"ðŸ“Š Original length: {len(template)} characters")
-            print(f"ðŸ“Š Customized length: {len(customized_template)} characters")
-            print(f"ðŸ“Š Change ratio: {((len(customized_template) - len(template)) / len(template) * 100):.1f}%")
+            print("  ESQL template customization successful!")
+            print(f"  Original length: {len(template)} characters")
+            print(f"  Customized length: {len(customized_template)} characters")
+            print(f"  Change ratio: {((len(customized_template) - len(template)) / len(template) * 100):.1f}%")
             
             # Optional: Show what was customized
             if business_entities:
-                print(f"ðŸŽ¯ Customized for entities: {business_entities[:3]}")
+                print(f"  Customized for entities: {business_entities[:3]}")
             if database_lookups:
                 print(f"ðŸ—ƒï¸ Applied database lookups: {len(database_lookups)} items")
             
             return customized_template
             
         except Exception as e:
-            print(f"âŒ ESQL customization failed: {e}")
-            print("ðŸ”„ Falling back to original template")
+            print(f"  ESQL customization failed: {e}")
+            print("  Falling back to original template")
             return template  # Always return something usable
 
 
@@ -2087,16 +2087,16 @@ if __name__ == "__main__":
     mapper = BizTalkACEMapper()
     
     # Step 1: Query Vector DB for PDF content
-    print("\nðŸ“Š Step 1: Analyzing PDF content from Vector DB...")
+    print("\n  Step 1: Analyzing PDF content from Vector DB...")
     # TODO: Implement query_vector_db() or integrate with existing PDF processor
     vector_db_results = []  # Placeholder - replace with actual vector DB query
     
     # Step 2: Detect XSL and Transco presence
-    print("\nðŸ” Step 2: Detecting XSL and Transco requirements...")
+    print("\n  Step 2: Detecting XSL and Transco requirements...")
     has_xsl, has_transco = mapper.detect_flow_pattern(vector_db_results)
     
-    print(f"   - XSL Transform needed: {'âœ… Yes' if has_xsl else 'âŒ No'}")
-    print(f"   - Transco/Enrichment needed: {'âœ… Yes' if has_transco else 'âŒ No'}")
+    print(f"   - XSL Transform needed: {'  Yes' if has_xsl else '  No'}")
+    print(f"   - Transco/Enrichment needed: {'  Yes' if has_transco else '  No'}")
     
     # Step 3: Generate optimized msgflow template
     print("\nâš™ï¸  Step 3: Generating optimized msgflow_template.xml...")

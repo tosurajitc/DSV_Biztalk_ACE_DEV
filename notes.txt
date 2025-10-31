@@ -7,7 +7,7 @@ biztalk_ace_env\Scripts\activate
 
 to run the program : streamlit run main.py
 
-
+revise messageflow : python messageflow_corrector.py  
 C:\Users\SURAJITCHATTERJEE\AppData\Local\Programs\Python\Python312\python.exe clean_ace_generator.py
 
 
@@ -15,7 +15,8 @@ C:\Users\SURAJITCHATTERJEE\AppData\Local\Programs\Python\Python312\python.exe cl
 GIT PUSH Steps: 
 git init
 git add .
-git commit -m "Commit updated ESQL generator 30 Oct V2" 
+git commit -m "Commit updated messageflow file refinement 30 Oct V3" 
 git remote set-url origin https://github.com/tosurajitc/DSV_Biztalk_ACE_DEV.git
+https://github.ibm.com/GenAI-DSV
 git push -u origin master
 

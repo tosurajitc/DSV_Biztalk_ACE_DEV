@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """
-Enhanced MessageFlow Generator v4.0 - DSV Standard with JSON Input
 - Dynamic node addition/removal based on business requirements
 - Automatic connector management and flow integrity
 - Handles 1000+ different business flows without hardcoding
@@ -32,7 +31,7 @@ class DSVMessageFlowGenerator:
         self.app_name = app_name
         self.flow_name = flow_name
         self.client = Groq(api_key=groq_api_key)
-        self.groq_model = groq_model or os.getenv('GROQ_MODEL', 'llama-3.1-70b-versatile')
+        self.groq_model = groq_model or os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')
         self.root_path = Path.cwd()  # Current working directory as root
         print(f"🚀 DSV MessageFlow Generator Ready: {flow_name} | Model: {self.groq_model}")
     
@@ -714,8 +713,10 @@ class DSVMessageFlowGenerator:
         Enhanced to support dynamic node management and input type configuration
         """
         try:
-            print(f"      🔄 Loading MessageFlow template...")
-            msgflow_template = self._load_msgflow_template()
+            # DEBUG: Check if this is a SAT flow
+            is_sat_flow = flow_name.endswith("RECSAT") or flow_name.endswith("SNDSAT")
+            print(f"DEBUG: Flow name: {flow_name}")
+            print(f"DEBUG: Is SAT flow: {is_sat_flow}")
             
             # Process business requirements for node configuration
             print(f"      🔍 Determining required node configuration...")
@@ -724,11 +725,70 @@ class DSVMessageFlowGenerator:
             # Get input type from naming convention and update node_config
             input_type = naming_conv.get('project_naming', {}).get('input_type', 'MQ')
             print(f"      📊 Flow input type from business requirements: {input_type}")
+            print(f"DEBUG: Input type: {input_type}")
             
             # Update node_config based on the input_type
             node_config['needs_file_input'] = (input_type == 'File')
             node_config['needs_mq_input'] = (input_type == 'MQ')
             node_config['needs_http_input'] = (input_type == 'HTTP')
+            
+            # DEBUG: Print node configuration
+            print(f"DEBUG: Node config: {node_config}")
+            
+            # Special handling for SAT flows
+            if is_sat_flow:
+                # Determine SAT type and template path
+                sat_type = "RECSAT" if flow_name.endswith("RECSAT") else "SNDSAT"
+                template_path = self.root_path / "templates" / f"{sat_type}_template.xml"
+                print(f"DEBUG: Using SAT template for {flow_name}")
+                print(f"DEBUG: Looking for template at: {template_path}")
+                
+                # Check if template exists
+                if template_path.exists():
+                    print(f"DEBUG: Template found at {template_path}")
+                    # Load SAT template instead of standard template
+                    with open(template_path, 'r', encoding='utf-8') as f:
+                        sat_template = f.read()
+                        print(f"DEBUG: Successfully loaded SAT template ({len(sat_template)} bytes)")
+                    
+                    # Apply basic replacements to SAT template
+                    print(f"      🔧 Processing SAT template...")
+                    processed_xml = sat_template.replace("{FLOW_NAME}", flow_name)
+                    processed_xml = processed_xml.replace("{APP_NAME}", app_name)
+                    
+                    # Skip normal template processing for SAT flows
+                    print(f"DEBUG: Bypassing standard template processing")
+                    
+                    # Write MessageFlow to output directory
+                    msgflow_file = output_dir / f"{flow_name}.msgflow"
+                    print(f"      💾 Writing SAT MessageFlow to: {msgflow_file}")
+                    with open(msgflow_file, 'w', encoding='utf-8') as f:
+                        f.write(processed_xml)
+                    
+                    # Generate 6 required modules
+                    print(f"      🔄 Creating standard ESQL modules...")
+                    esql_modules = self._enforce_6_module_standard(flow_name)
+                    
+                    print(f"DEBUG: SAT flow generation complete")
+                    
+                    return {
+                        'success': True,
+                        'msgflow_file': str(msgflow_file),
+                        'esql_modules': len(esql_modules),
+                        'xsl_files': [],  # SAT flows don't use XSL transforms
+                        'input_type': 'File',  # SAT flows always use File input
+                        'xsl_nodes_config': [],
+                        'has_routing': False,  # SAT flows never have routing
+                        'is_sat_flow': True,
+                        'sat_type': sat_type
+                    }
+                else:
+                    print(f"DEBUG: SAT Template NOT found at {template_path}")
+                    print(f"WARNING: SAT template not found. Falling back to standard template.")
+            
+            # Standard flow generation (non-SAT flow or SAT template not found)
+            print(f"      🔄 Loading standard MessageFlow template...")
+            msgflow_template = self._load_msgflow_template()
             
             # Generate XSL files based on business requirements - UPDATED
             print(f"      🔍 Analyzing XSL transformation requirements...")
@@ -771,7 +831,6 @@ class DSVMessageFlowGenerator:
             print(f"      🔄 Creating standard ESQL modules...")
             esql_modules = self._enforce_6_module_standard(flow_name)
 
-            
             return {
                 'success': True,
                 'msgflow_file': str(msgflow_file),
@@ -779,11 +838,91 @@ class DSVMessageFlowGenerator:
                 'xsl_files': xsl_config.get('xsl_files', []),
                 'input_type': input_type,
                 'xsl_nodes_config': xsl_config.get('xsl_nodes_config', []),
-                'has_routing': xsl_config.get('needs_routing', False)
+                'has_routing': xsl_config.get('needs_routing', False),
+                'is_sat_flow': False
             }
         except Exception as e:
             print(f"      ❌ Error generating MessageFlow: {str(e)}")
             raise Exception(f"MessageFlow generation failed: {str(e)}")
+
+    # Add these methods to the class
+
+    def _is_sat_flow(self, flow_name: str) -> bool:
+        """Determine if a flow is a SAT flow based on naming convention"""
+        return flow_name.endswith("RECSAT") or flow_name.endswith("SNDSAT")
+
+    def _get_sat_type(self, flow_name: str) -> str:
+        """Get the specific type of SAT flow (RECSAT or SNDSAT)"""
+        if flow_name.endswith("RECSAT"):
+            return "RECSAT"
+        elif flow_name.endswith("SNDSAT"):
+            return "SNDSAT"
+        return None
+
+    def _load_sat_template(self, flow_name: str) -> str:
+        """Load the appropriate SAT template based on flow name"""
+        sat_type = self._get_sat_type(flow_name)
+        if not sat_type:
+            return None
+            
+        # Determine template path
+        template_name = f"{sat_type}_template.xml"
+        print(f"      🔄 Using {sat_type} template for {flow_name}")
+        
+        # Try to load from multiple possible locations
+        template_paths = [
+            self.root_path / "templates" / template_name,
+            self.root_path / template_name,
+            Path(__file__).parent / "templates" / template_name,
+            Path(__file__).parent / template_name
+        ]
+        
+        for template_path in template_paths:
+            if template_path.exists():
+                try:
+                    with open(template_path, 'r', encoding='utf-8') as f:
+                        template = f.read()
+                        print(f"      ✅ Loaded SAT template: {template_path}")
+                        return template
+                except Exception as e:
+                    print(f"      ⚠️ Error reading {template_path}: {str(e)}")
+        
+        # If we get here, no template was found
+        raise Exception(f"SAT template not found for {flow_name}. Ensure {template_name} exists in the templates directory.")
+
+    def _validate_flow_input_type(self, flow_name: str, input_type: str) -> dict:
+        """
+        Validate flow input type against flow name pattern to ensure consistency
+        Returns dict with validation result and corrected input type if needed
+        """
+        is_sat_flow = self._is_sat_flow(flow_name)
+        
+        # Rule 1: If input_type is 'File', it must be a SAT flow
+        if input_type.lower() == 'file' and not is_sat_flow:
+            print(f"      ⚠️ WARNING: File input type detected for non-SAT flow {flow_name}")
+            print(f"      🔄 Correcting input type to MQ for consistency with naming convention")
+            return {
+                'valid': False,
+                'corrected_type': 'MQ',
+                'message': f"File input is only allowed for SAT flows (ending with RECSAT/SNDSAT). Changed to MQ."
+            }
+        
+        # Rule 2: If it's a SAT flow, input_type should be 'File'
+        if is_sat_flow and input_type.lower() != 'file':
+            print(f"      ⚠️ WARNING: Non-File input type ({input_type}) detected for SAT flow {flow_name}")
+            print(f"      🔄 Correcting input type to File for consistency with SAT flow naming convention")
+            return {
+                'valid': False,
+                'corrected_type': 'File',
+                'message': f"SAT flows must use File input. Changed input type to File."
+            }
+        
+        # If we get here, the configuration is valid
+        return {
+            'valid': True,
+            'corrected_type': input_type,
+            'message': "Input type is consistent with flow naming convention."
+        }
 
 
         

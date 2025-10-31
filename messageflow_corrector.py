@@ -3,9 +3,14 @@ Smart MessageFlow Corrector Module
 ==================================
 Discovers ACE applications via naming_convention files and corrects messageflows
 to sync with actual components and configuration flags.
-
-Author: AI Assistant
-Date: 2025-10-30
+Ensure this module to verify the confluence Technical Diagram to understand the messageflow structure. Use OCR to read the image if OCR
+fails then use LLM specially for the node connections. File input is always satelitee and should be at the start of the flow.
+SO process the vector DB data and generate the connections accordingly.
+if any messageflow name ends with RECSAT or SNDSAT then it is a SAT messageflow and should follow the fixed SAT structure.
+Read the Technical Description specific to the flow name to understand abouit the flow. 
+No need for routing nodes in SAT flows. Failure node addition is not required.
+HUBInput Sub inflow is missing which receive from HTTP Input node. Add that subflow as first node in the messageflow.
+For MQ - prepareStart event node if missing, add that node after the input node.
 """
 
 import os
@@ -14,7 +19,8 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional
 import logging
-
+from resilient_llm_caller import ResilientLLMCaller
+from vector_knowledge.vector_store import ChromaVectorStore
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -26,6 +32,8 @@ class SmartMessageFlowCorrector:
         self.project_root = Path(project_root)
         self.corrected_count = 0
         self.error_count = 0
+        self.vector_store = ChromaVectorStore(db_path="./chroma_db")
+        self.llm_caller = ResilientLLMCaller()
         
     def run(self) -> Dict:
         """Main execution method"""
@@ -75,6 +83,119 @@ class SmartMessageFlowCorrector:
         except Exception as e:
             logger.error(f"❌ Fatal error: {e}")
             return {'status': 'error', 'message': str(e)}
+        
+
+
+    def generate_flow_correction_prompt(self, flow_name, flow_analysis, original_messageflow=None):
+        """Generate structured prompt for LLM to correct/generate message flows"""
+        
+        # Basic flow information
+        prompt = f"""
+        TASK: Analyze and {'correct' if original_messageflow else 'generate'} the message flow for {flow_name}.
+        
+        BUSINESS REQUIREMENTS:
+        {flow_analysis.get('evidence', 'No evidence provided')}
+        
+        EXTRACTED FLOW STRUCTURE:
+        """
+        
+        # Add node connection information
+        prompt += "\nNODE CONNECTIONS:\n"
+        if flow_analysis.get('node_connections'):
+            for conn in flow_analysis['node_connections']:
+                prompt += f"- {conn['from']} → {conn['to']}\n"
+        else:
+            prompt += "- No explicit node connections found\n"
+        
+        # Add queue information
+        prompt += "\nQUEUE DETAILS:\n"
+        if flow_analysis.get('queues'):
+            for queue in flow_analysis['queues']:
+                prompt += f"- {queue}\n"
+        else:
+            prompt += "- No queue information found\n"
+        
+        # Add endpoint information
+        prompt += "\nENDPOINT DETAILS:\n"
+        if flow_analysis.get('endpoints'):
+            for endpoint in flow_analysis['endpoints']:
+                direction = endpoint.get('direction', '')
+                endpoint_type = endpoint.get('type', '')
+                uri = endpoint.get('uri', '')
+                prompt += f"- {direction} {endpoint_type}: {uri}\n"
+        else:
+            prompt += "- No endpoint information found\n"
+        
+        # Add routing requirement information
+        prompt += f"\nROUTING REQUIREMENT:\n"
+        prompt += f"- Routing nodes {'ARE' if flow_analysis.get('requires_routing') else 'are NOT'} required"
+        prompt += f" (confidence: {flow_analysis.get('confidence', 0):.2f})\n"
+        
+        # If we're correcting an existing flow, include it
+        if original_messageflow:
+            prompt += "\nORIGINAL MESSAGE FLOW XML:\n"
+            prompt += original_messageflow[:1000] + "...\n" if len(original_messageflow) > 1000 else original_messageflow
+        
+        # Add specific instructions for the LLM
+        prompt += """
+        INSTRUCTIONS:
+        1. Analyze the node connections, queue details, and routing requirements
+        2. Determine the appropriate message flow structure
+        3. Create/correct the message flow with the following considerations:
+        - Use the correct node types (input, output, processing, MQ)
+        - Establish proper connections between nodes
+        - Include all required queues from the extracted information
+        - Only include routing nodes if they are explicitly required
+        - Ensure the flow follows a logical processing sequence
+        
+        If routing nodes are NOT required, create a simple linear flow where each node connects directly to the next node in sequence.
+        """
+        
+        return prompt
+
+
+    def _extract_messageflow_from_response(self, llm_response):
+        """Extract message flow XML from LLM response"""
+        if not llm_response:
+            return None
+            
+        # Look for XML content using regex
+        import re
+        
+        # Try to find content between <?xml and the closing tag of the root element
+        xml_match = re.search(r'(<\?xml.*?<\/.*?>)', llm_response, re.DOTALL)
+        if xml_match:
+            return xml_match.group(1)
+        
+        # If that fails, look for content between <messageflow and </messageflow>
+        msgflow_match = re.search(r'(<messageflow.*?</messageflow>)', llm_response, re.DOTALL)
+        if msgflow_match:
+            return '<?xml version="1.0" encoding="UTF-8"?>\n' + msgflow_match.group(1)
+        
+        # If no XML structure found, return None or log an error
+        print("⚠️ Could not extract valid messageflow XML from LLM response")
+        return None    
+
+
+
+    def correct_messageflow(self, flow_name, messageflow_xml):
+        """Correct an existing message flow based on business requirements"""
+        # 1. Get flow requirements using the vector_store's search method
+        flow_analysis = self.vector_store.search_flow_requirements(flow_name)
+        
+        # 2. Generate prompt for LLM using the retrieved information
+        prompt = self.generate_flow_correction_prompt(flow_name, flow_analysis, messageflow_xml)
+        
+        # 3. Call LLM to analyze and generate corrected flow
+        llm_response = self.llm_caller.call_with_retry(prompt)
+        
+        # 4. Extract and process the LLM's response
+        corrected_flow = self._extract_messageflow_from_response(llm_response)
+        
+        # 5. Return the corrected message flow
+        return corrected_flow
+    
+
     
     def discover_naming_conventions(self) -> List[Dict]:
         """Discover all naming_convention*.json files and extract ace_application_name"""
