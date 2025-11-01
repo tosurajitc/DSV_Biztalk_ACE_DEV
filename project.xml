@@ -5,11 +5,8 @@
 	<projects>
 		<project>EPIS_CommonUtils_Lib</project>
 		<project>EPIS_Consumer_Lib_v2</project>
-		<project>EPIS_BlobStorage_Lib</project>
 		<project>EPIS_MessageEnrichment_StaticLib</project>
 		<project>EPIS_CommonFlows_Lib</project>
-        <project>EPIS_CargoWiseOne_eAdapter_Lib</project>
-        <project>EPIS_CargoWiseOne_Schemas_Lib</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>

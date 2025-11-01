@@ -1,0 +1,40 @@
+{
+  "extraction_timestamp": "2025-11-01T12:00:00",
+  "messageflows": [
+    {
+      "flow_name": "SAP_Data_Edicom_RTS",
+      "app_name": "EPIS_SAP_Edicom_App",
+      "input_type": "HTTP",
+      "is_sat_flow": false,
+      "requires_routing": true,
+      "routing_methods": [
+        "cancelsubscription",
+        "flows",
+        "submitnfs",
+        "cancelnfse",
+        "confirmsubscription",
+        "submitnfse",
+        "cancelnfs",
+        "subscription",
+        "subscriptionws"
+      ],
+      "flow_type": "RTS",
+      "has_enrichment": true,
+      "has_xsl_transform": true,
+      "has_soap_request": false,
+      "xsl_files": [
+        "sap_data_edicom_p2p_06_getsubscription_to_subscriptionws.xsl",
+        "sap_data_edicom_p2p_03_cancelsubscription_to_subscriptionws.xsl",
+        "sap_data_edicom_p2p_05_submitnfs_to_payload.xsl",
+        "sap_data_edicom_p2p_02_cancelnfs_to_payload.xsl",
+        "sap_data_edicom_p2p_05_payload_to_publishws.xsl",
+        "sap_data_edicom_p2p_02_payload_to_cancelpublishws.xsl",
+        "sap_data_edicom_p2p_04_confirmsubscription_to_confirmsubscriptionws.xsl"
+      ],
+      "is_synchronous": true,
+      "has_event_nodes": true,
+      "node_connections": [],
+      "technical_description": "Sample technical description"
+    }
+  ]
+}

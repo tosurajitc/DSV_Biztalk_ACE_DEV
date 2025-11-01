@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 from llm_json_parser import LLMJSONParser
 import streamlit as st
 import lxml.etree as ET
-
+from vector_knowledge.vector_store import ChromaVectorStore
 load_dotenv()
 
 class BizTalkACEMapper:
@@ -1198,119 +1198,7 @@ END MODULE;
     # LLM-BASED FUNCTIONS (100% LLM-Based)
     # ========================================
     
-    def extract_business_requirements(self, pdf_content: str) -> Dict:
-        """LLM: Extract detailed business requirements in optimized iterations"""
-        if not self.groq_client:
-            raise Exception("LLM client not available - cannot process business requirements")
-        
-        if not pdf_content or len(pdf_content.strip()) < 100:
-            raise Exception("PDF content is empty or too short - cannot extract business requirements")
-        
-        try:
-            # Step 1: Analyze PDF content size and plan processing strategy
-            cleaned_content = pdf_content.replace('\n\n', '\n').replace('\t', ' ').strip()
-            total_chars = len(cleaned_content)
-            
-            # Calculate optimal chunk size (target ~6000 chars per LLM call)
-            max_chunk_size = 6000
-            num_chunks = max(1, (total_chars + max_chunk_size - 1) // max_chunk_size)
-            actual_chunk_size = total_chars // num_chunks
-            
-            print(f"PDF Analysis: {total_chars} chars â†’ {num_chunks} iterations of ~{actual_chunk_size} chars each")
-            
-            # Step 2: Process content in planned iterations
-            all_requirements = {
-                "message_flows": [],
-                "transformation_requirements": [],
-                "integration_endpoints": [],
-                "database_lookups": [],
-                "business_entities": [],
-                "ace_library_indicators": [],
-                "processing_patterns": [],
-                "technical_specifications": [],
-                "data_enrichment_rules": [],
-                "routing_logic": []
-            }
-            
-            # Process each chunk with LLM
-            for chunk_idx in range(num_chunks):
-                start_pos = chunk_idx * actual_chunk_size
-                end_pos = min(start_pos + actual_chunk_size + 500, total_chars)  # 500 char overlap
-                chunk_content = cleaned_content[start_pos:end_pos]
-                
-                print(f"Processing chunk {chunk_idx + 1}/{num_chunks} ({len(chunk_content)} chars)")
-                
-                prompt = f"""You are an expert IBM ACE architect analyzing business specification chunk {chunk_idx + 1} of {num_chunks}.
 
-BUSINESS SPECIFICATION CHUNK:
-{chunk_content}
-
-Extract SPECIFIC technical details from this chunk only. Focus on concrete names, entities, and requirements.
-
-Return JSON with these categories (add items only if found in THIS chunk):
-{{
-    "message_flows": ["specific flow names and purposes"],
-    "transformation_requirements": ["detailed transformation rules with entity names"],
-    "integration_endpoints": ["specific queue names, service endpoints, system names"],
-    "database_lookups": ["table names, lookup procedures, database operations"],
-    "business_entities": ["concrete entity names like ShipmentInstruction, Company, Document"],
-    "ace_library_indicators": ["keywords suggesting EPIS_*, CDM_*, routing libraries"],
-    "processing_patterns": ["batch, real-time, orchestration, enrichment patterns"],
-    "technical_specifications": ["performance numbers, error handling, security"],
-    "data_enrichment_rules": ["specific enrichment logic and validation rules"],
-    "routing_logic": ["routing conditions, distribution logic, target systems"]
-}}
-
-Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for categories not found."""
-
-                response = self.groq_client.chat.completions.create(
-                    model=os.getenv('GROQ_MODEL', 'llama-3.1-8b-instant'),
-                    messages=[
-                        {"role": "system", "content": "You are an expert IBM ACE architect specializing in technical requirement extraction."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.1,
-                    max_tokens=1500
-                )
-                if 'token_tracker' in st.session_state and hasattr(response, 'usage') and response.usage:
-                    st.session_state.token_tracker.manual_track(
-                        agent="biztalk_mapper",
-                        operation="business_requirements_extraction",
-                        model=os.getenv('GROQ_MODEL', 'llama-3.1-8b-instant'),
-                        input_tokens=response.usage.prompt_tokens,
-                        output_tokens=response.usage.completion_tokens,
-                        flow_name=getattr(self, 'current_flow_name', 'pdf_processing')
-                    )
-
-                self.json_parser = LLMJSONParser(debug=True)
-                result = self.json_parser.parse_business_requirements(response.choices[0].message.content)
-                chunk_requirements = result
-
-                # Merge chunk results into overall requirements
-                for category, items in chunk_requirements.items():
-                    if category in all_requirements and isinstance(items, list):
-                        all_requirements[category].extend(items)
-            
-            # Remove duplicates and validate final results
-            for category in all_requirements:
-                all_requirements[category] = list(set(all_requirements[category]))
-            
-            total_extracted_items = sum(len(v) for v in all_requirements.values())
-            
-            if total_extracted_items < 5:
-                raise Exception(f"Insufficient business requirements extracted - only {total_extracted_items} items found across all chunks")
-            
-            print(f"Successfully extracted {total_extracted_items} specific business requirements from {num_chunks} iterations")
-            
-            # Debug output for verification
-            for category, items in all_requirements.items():
-                if items:
-                    print(f"   {category}: {len(items)} items - {items[:2]}")  # Show first 2 items
-            
-            return all_requirements
-            
-        except Exception as e:
-            raise Exception(f"Business requirements extraction failed: {e}")
 
     def generate_excel_output(self, mappings: List[Dict], output_path: str) -> str:
         """Generate comprehensive Excel file with multiple sheets for detailed component mapping"""
@@ -1854,6 +1742,783 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
         
 
 
+    def extract_business_requirements(self, pdf_content: str) -> Dict:
+        """
+        Extract comprehensive business requirements for all messageflows
+        with enhanced error handling and robustness
+        
+        Args:
+            pdf_content: PDF content text
+            
+        Returns:
+            Dict with extracted business requirements
+        """
+        try:
+            print("🔍 Extracting comprehensive business requirements...")
+            
+            # CRITICAL FIX: Create a safer wrapper to access vector DB
+            def safe_vector_query(query_text):
+                try:
+                    return self._query_vector_db(query_text)
+                except Exception as e:
+                    print(f"  ⚠️ Vector query failed: {str(e)}")
+                    return []
+            
+            # Step 1: Discover applications via naming conventions
+            naming_files = self._discover_naming_conventions()
+            print(f"📋 Found {len(naming_files)} naming convention files")
+            
+            if not naming_files:
+                print("⚠️ No naming_convention*.json files found")
+                # Return default structure instead of empty dict
+                return {
+                    "message_flows": [],
+                    "transformation_requirements": [],
+                    "integration_endpoints": [],
+                    "database_lookups": [],
+                    "business_entities": [],
+                    "ace_library_indicators": [],
+                    "processing_patterns": [],
+                    "technical_specifications": [],
+                    "data_enrichment_rules": [],
+                    "routing_logic": [],
+                    "messageflows": []  # Add our new structure key too
+                }
+            
+            # Step 2: Initialize business requirements structure
+            business_requirements = {
+                "extraction_timestamp": datetime.now().isoformat(),
+                "messageflows": []
+            }
+            
+            # Also maintain compatibility with old format
+            old_format = {
+                "message_flows": [],
+                "transformation_requirements": [],
+                "integration_endpoints": [],
+                "database_lookups": [],
+                "business_entities": [],
+                "ace_library_indicators": [],
+                "processing_patterns": [],
+                "technical_specifications": [],
+                "data_enrichment_rules": [],
+                "routing_logic": []
+            }
+            
+            # Step 3: Process each application/flow
+            for naming_file in naming_files:
+                try:
+                    flow_name = naming_file.get('project_naming', {}).get('message_flow_name', '')
+                    app_name = naming_file.get('project_naming', {}).get('ace_application_name', '')
+                    
+                    if not flow_name or not app_name:
+                        print(f"⚠️ Missing flow_name or app_name in naming file")
+                        continue
+                        
+                    print(f"\n🔧 Processing Flow: {flow_name}")
+                    
+                    # Add to old format lists for compatibility
+                    old_format["message_flows"].append(flow_name)
+                    old_format["ace_library_indicators"].append(app_name)
+                    
+                    # Get basic flow metadata
+                    input_type = naming_file.get('project_naming', {}).get('input_type', 'MQ')
+                    is_sat_flow = flow_name.endswith("RECSAT") or flow_name.endswith("SNDSAT")
+                    
+                    # SAFE APPROACH: Use rule-based detection first
+                    flow_pattern = {
+                        'input_type': input_type,
+                        'has_enrichment': False,
+                        'has_xsl_transform': True,
+                        'xsl_files': [f"{flow_name}_transform.xsl"],
+                        'has_soap_request': False,
+                        'is_synchronous': input_type == "HTTP",
+                        'flow_type': "SAT" if is_sat_flow else "RTS" if input_type == "HTTP" else "P2P",
+                        'has_event_nodes': True,
+                        'has_method_routing': input_type == "HTTP",
+                        'routing_methods': ["GET", "POST"] if input_type == "HTTP" else []
+                    }
+                    
+                    # Try to enhance with vector DB info if available
+                    try:
+                        vector_results = safe_vector_query(flow_name)
+                        if vector_results and isinstance(vector_results, list):
+                            detected_pattern = self.detect_flow_pattern(vector_results)
+                            # Merge only if valid
+                            if isinstance(detected_pattern, dict):
+                                flow_pattern.update(detected_pattern)
+                    except Exception as e:
+                        print(f"  ⚠️ Vector pattern detection failed: {str(e)}")
+                    
+                    # Create messageflow requirements entry
+                    flow_requirements = {
+                        "flow_name": flow_name,
+                        "app_name": app_name,
+                        "input_type": input_type,
+                        "is_sat_flow": is_sat_flow,
+                        "requires_routing": flow_pattern.get('has_method_routing', False),
+                        "routing_methods": flow_pattern.get('routing_methods', []),
+                        "flow_type": flow_pattern.get('flow_type'),
+                        "has_enrichment": flow_pattern.get('has_enrichment', False),
+                        "has_xsl_transform": flow_pattern.get('has_xsl_transform', False),
+                        "has_soap_request": flow_pattern.get('has_soap_request', False),
+                        "xsl_files": flow_pattern.get('xsl_files', []),
+                        "is_synchronous": flow_pattern.get('is_synchronous', False),
+                        "has_event_nodes": flow_pattern.get('has_event_nodes', False),
+                        "node_connections": [], # Simplified for now to avoid errors
+                        "technical_description": f"Message flow {flow_name} processes data between systems."
+                    }
+                    
+                    business_requirements["messageflows"].append(flow_requirements)
+                    
+                    # Add queue to endpoints list for old format compatibility
+                    if input_type == "MQ":
+                        old_format["integration_endpoints"].append(f"INPUT.{flow_name}.QUEUE")
+                    
+                except Exception as e:
+                    print(f"⚠️ Error processing {flow_name}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    continue
+                    
+            # Step 4: Save the enhanced business_requirements.json file
+            output_dir = "."  # Use current directory as default
+            output_path = Path(output_dir) / "business_requirements.json"
+            
+            # Combine both formats for maximum compatibility
+            combined_requirements = {**old_format, **business_requirements}
+            
+            # Ensure directory exists
+            try:
+                os.makedirs(output_dir, exist_ok=True)
+                
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    json.dump(combined_requirements, f, indent=2)
+                    
+                print(f"✅ Created enhanced business_requirements.json with {len(business_requirements['messageflows'])} flows")
+            except Exception as e:
+                print(f"⚠️ Error saving JSON file: {e}")
+            
+            return combined_requirements
+            
+        except Exception as e:
+            print(f"❌ Failed to extract business requirements: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Return the default structure for both formats
+            return {
+                "message_flows": [],
+                "transformation_requirements": [],
+                "integration_endpoints": [],
+                "database_lookups": [],
+                "business_entities": [],
+                "ace_library_indicators": [],
+                "processing_patterns": [],
+                "technical_specifications": [],
+                "data_enrichment_rules": [],
+                "routing_logic": [],
+                "messageflows": [],
+                "extraction_timestamp": datetime.now().isoformat()
+            }
+    
+
+    def _rule_based_flow_pattern(self, flow_name: str, is_sat_flow: bool, input_type: str) -> Dict:
+        """Determine flow pattern using rule-based logic when vector DB is unavailable"""
+        pattern = {
+            'input_type': input_type,
+            'has_enrichment': False,
+            'has_xsl_transform': True,  # Most flows need transformation
+            'xsl_files': [f"{flow_name.lower()}_transform.xsl"],
+            'has_soap_request': False,
+            'soap_endpoint': None,
+            'is_synchronous': input_type == "HTTP",
+            'has_event_nodes': True,
+            'has_method_routing': False,
+            'routing_methods': [],
+            'routing_type': None
+        }
+        
+        # SAT flows
+        if is_sat_flow:
+            pattern['flow_type'] = "SAT"
+            
+        # HTTP flows are typically synchronous
+        elif input_type == "HTTP":
+            pattern['is_synchronous'] = True
+            pattern['flow_type'] = "RTS"
+            pattern['has_method_routing'] = True
+            pattern['routing_methods'] = ["GET", "POST", "PUT", "DELETE"]
+        
+        # Default MQ flow
+        else:
+            pattern['flow_type'] = "P2P"
+            
+            # Check for special patterns in flow name
+            if "RTS" in flow_name:
+                pattern['flow_type'] = "RTS"
+                pattern['is_synchronous'] = True
+            
+            if any(x in flow_name for x in ["Enrich", "Lookup", "DB"]):
+                pattern['has_enrichment'] = True
+        
+        return pattern
+
+    def _determine_flow_type(self, flow_name: str, flow_pattern: Dict, is_sat_flow: bool) -> str:
+        """Determine the flow type based on naming and pattern detection"""
+        if is_sat_flow:
+            return "SAT"
+        
+        if flow_pattern.get('flow_type'):
+            return flow_pattern.get('flow_type')
+        
+        # Determine from name if pattern doesn't specify
+        if "RTS" in flow_name:
+            return "RTS"
+        elif "P2P" in flow_name:
+            return "P2P"
+        
+        # Determine from input type
+        if flow_pattern.get('input_type') == "HTTP":
+            return "RTS"
+            
+        return "P2P"  # Default flow type
+
+    def _extract_queue_info(self, flow_name: str, flow_pattern: Dict) -> List[Dict]:
+        """Extract queue information for the flow"""
+        queues = []
+        
+        # Input queue
+        input_type = flow_pattern.get('input_type', 'MQ')
+        if input_type == "MQ":
+            queues.append({
+                "name": f"INPUT.{flow_name}.QUEUE",
+                "type": "input",
+                "direction": "read"
+            })
+        
+        # Output queue
+        if not flow_pattern.get('is_synchronous', False):
+            queues.append({
+                "name": f"OUTPUT.{flow_name}.QUEUE",
+                "type": "output",
+                "direction": "write"
+            })
+        
+        # Error queue
+        queues.append({
+            "name": f"ERROR.{flow_name}.QUEUE",
+            "type": "error",
+            "direction": "write"
+        })
+        
+        return queues
+
+    def _extract_endpoints(self, flow_name: str, flow_pattern: Dict) -> List[Dict]:
+        """Extract endpoint information for the flow"""
+        endpoints = []
+        
+        # HTTP endpoint
+        if flow_pattern.get('input_type') == "HTTP":
+            endpoints.append({
+                "type": "HTTP",
+                "uri": f"/api/{flow_name.lower()}",
+                "direction": "input",
+                "methods": flow_pattern.get('routing_methods', ["GET", "POST"])
+            })
+        
+        # SOAP endpoint
+        if flow_pattern.get('has_soap_request', False):
+            endpoints.append({
+                "type": "SOAP",
+                "uri": flow_pattern.get('soap_endpoint', 'http://service.endpoint'),
+                "direction": "output",
+                "wsdl": f"{flow_name}_service.wsdl"
+            })
+        
+        return endpoints
+
+    def _has_technical_diagram(self, flow_name: str) -> bool:
+        """Check if technical diagram exists for the flow"""
+        try:
+            if hasattr(self, 'vector_store') and self.vector_store:
+                query = f"{flow_name} technical diagram architecture"
+                results = self._query_vector_db(query)
+                
+                if results:
+                    # Look for diagram indicators in results
+                    for result in results:
+                        metadata = result.get('metadata', {})
+                        if metadata.get('has_technical_diagrams') or metadata.get('has_diagrams'):
+                            return True
+        except Exception:
+            pass
+            
+        return False
+
+    def _get_required_nodes(self, flow_name: str, is_sat_flow: bool, input_type: str, flow_pattern: Dict) -> List[Dict]:
+        """Determine the required nodes for this flow"""
+        nodes = []
+        
+        # Input node
+        if input_type == "MQ":
+            nodes.append({"type": "MQInput", "name": "MQInput", "required": True})
+            nodes.append({"type": "ComputeNode", "name": "prepareStart", "required": True})
+        elif input_type == "HTTP":
+            nodes.append({"type": "HTTPInput", "name": "HTTPInput", "required": True})
+        elif input_type == "File":
+            nodes.append({"type": "FileInput", "name": "FileInput", "required": True})
+        
+        # HUBInput subflow for SAT or HTTP flows
+        if is_sat_flow or input_type == "HTTP":
+            nodes.append({"type": "Subflow", "name": "HUBInput", "required": True})
+        
+        # Standard event compute nodes
+        nodes.append({"type": "ComputeNode", "name": "InputEventMessage", "required": True})
+        nodes.append({"type": "ComputeNode", "name": "Compute", "required": True})
+        
+        # Enrichment
+        if flow_pattern.get('has_enrichment', False):
+            nodes.append({"type": "Subflow", "name": "BeforeEnrichment", "required": True})
+        
+        # XSL Transform
+        if flow_pattern.get('has_xsl_transform', False):
+            nodes.append({"type": "XSLTransform", "name": "XSLTransform", "required": True})
+        
+        # After enrichment and event nodes
+        nodes.append({"type": "ComputeNode", "name": "AfterEnrichment", "required": False})
+        nodes.append({"type": "ComputeNode", "name": "OutputEventMessage", "required": True})
+        nodes.append({"type": "ComputeNode", "name": "AfterEventMessage", "required": False})
+        
+        # Routing
+        if flow_pattern.get('has_method_routing', False) and not is_sat_flow:
+            nodes.append({"type": "RouteNode", "name": "MethodRouter", "required": True})
+            
+            # Label nodes for routing methods
+            for method in flow_pattern.get('routing_methods', [])[:5]:  # Limit to 5 methods
+                nodes.append({"type": "LabelNode", "name": f"Label_{method}", "required": False})
+        
+        # Output
+        if flow_pattern.get('is_synchronous', False) and input_type == "HTTP":
+            nodes.append({"type": "HTTPReply", "name": "HTTPReply", "required": True})
+        else:
+            nodes.append({"type": "MQOutput", "name": "MQOutput", "required": True})
+        
+        # Always add failure handler
+        nodes.append({"type": "ComputeNode", "name": "FailureHandler", "required": True})
+        
+        return nodes
+
+    def _query_vector_db(self, query: str) -> List[Dict]:
+        """Query vector DB for flow-specific information with robust error handling"""
+        try:
+            # Check if we have a vector store
+            if not hasattr(self, 'vector_store') or not self.vector_store:
+                try:
+                    from vector_store import ChromaVectorStore
+                    self.vector_store = ChromaVectorStore()
+                    print("📋 Created new vector store connection")
+                except ImportError:
+                    # Try alternative import path
+                    try:
+                        from vector_knowledge.vector_store import ChromaVectorStore
+                        self.vector_store = ChromaVectorStore()
+                        print("📋 Created new vector store connection (alternative path)")
+                    except Exception as e:
+                        print(f"  ⚠️ Could not initialize vector store: {e}")
+                        return []
+            
+            # Query for flow information
+            enhanced_query = f"{query} message flow routing structure diagram"
+            
+            # CRITICAL FIX: Handle vector store results properly
+            try:
+                # Try the more specific search if available
+                if hasattr(self.vector_store, 'search_for_agent_with_diagrams'):
+                    try:
+                        results = self.vector_store.search_for_agent_with_diagrams(
+                            "messageflow_generator", [enhanced_query], top_k=5
+                        )
+                        
+                        # SAFE CHECK: Ensure results are in the expected format
+                        if isinstance(results, str):
+                            print(f"  ⚠️ Unexpected string result from vector store: {results[:100]}...")
+                            return []
+                            
+                        if results:
+                            return results
+                    except Exception as e:
+                        print(f"  ⚠️ Agent search failed: {e}")
+                
+                # Fall back to standard search if available
+                if hasattr(self.vector_store, 'collection'):
+                    results = self.vector_store.collection.query(
+                        query_texts=[enhanced_query],
+                        n_results=5
+                    )
+                    
+                    # Convert to consistent format
+                    formatted_results = []
+                    if results and 'documents' in results and results['documents']:
+                        for i in range(len(results['documents'][0])):
+                            formatted_results.append({
+                                'content': results['documents'][0][i],
+                                'metadata': results['metadatas'][0][i] if 'metadatas' in results and results['metadatas'][0] else {},
+                                'id': results['ids'][0][i] if 'ids' in results and results['ids'][0] else f"result_{i}"
+                            })
+                        
+                    return formatted_results
+            except Exception as e:
+                print(f"  ⚠️ Vector DB search failed: {e}")
+            
+            return []
+            
+        except Exception as e:
+            print(f"  ⚠️ Vector DB query failed: {e}")
+            return []
+
+    def _extract_node_connections(self, flow_name: str) -> List[Dict]:
+        """Extract node connections with robust fallbacks"""
+        connections = []
+        
+        try:
+            # Query for technical diagrams and flow architecture
+            if hasattr(self, 'vector_store') and self.vector_store:
+                query = f"{flow_name} technical diagram node connections architecture"
+                results = self._query_vector_db(query)
+                
+                if results:
+                    # Look for content with node connections
+                    for result in results:
+                        content = result.get('content', '')
+                        
+                        # Pattern matching for connections in content
+                        connection_patterns = [
+                            r'(\w+)\s*->\s*(\w+)',  # Node1 -> Node2
+                            r'(\w+)\s*connects to\s*(\w+)',  # Node1 connects to Node2
+                            r'from\s*(\w+)\s*to\s*(\w+)',  # from Node1 to Node2
+                            r'(\w+)\s*node\s*.*?\s*followed by\s*(\w+)'  # Node1 node ... followed by Node2
+                        ]
+                        
+                        import re
+                        for pattern in connection_patterns:
+                            matches = re.findall(pattern, content, re.IGNORECASE)
+                            for match in matches:
+                                connections.append({
+                                    "from": match[0].strip(),
+                                    "to": match[1].strip()
+                                })
+                    
+                    # Use LLM for extraction if available and no connections found
+                    if not connections and hasattr(self, 'groq_client') and self.groq_client:
+                        most_relevant = results[0].get('content', '')
+                        
+                        prompt = f"""
+                        Extract node connections from this technical diagram description for {flow_name}:
+                        
+                        {most_relevant[:2000]}
+                        
+                        Return ONLY a JSON array of connections with 'from' and 'to' fields. 
+                        Example:
+                        [
+                        {{"from": "HTTPInput", "to": "Compute1"}},
+                        {{"from": "Compute1", "to": "MQOutput"}}
+                        ]
+                        """
+                        
+                        try:
+                            response = self.groq_client.chat.completions.create(
+                                model=self.groq_model,
+                                messages=[{"role": "user", "content": prompt}],
+                                temperature=0.1,
+                                max_tokens=1000,
+                                response_format={"type": "json_object"}
+                            )
+                            
+                            result = response.choices[0].message.content.strip()
+                            import json
+                            import re
+                            
+                            # Try to extract JSON array from response
+                            json_match = re.search(r'\[\s*\{.*\}\s*\]', result, re.DOTALL)
+                            if json_match:
+                                connections = json.loads(json_match.group(0))
+                            
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+            
+        # If no connections found, generate default linear connections
+        if not connections:
+            default_nodes = ["Input", "prepareStart", "Compute", "XSLTransform", "Output"]
+            for i in range(len(default_nodes) - 1):
+                connections.append({
+                    "from": default_nodes[i],
+                    "to": default_nodes[i+1]
+                })
+        
+        # Remove duplicates
+        unique_connections = []
+        seen = set()
+        for conn in connections:
+            key = f"{conn['from']}-{conn['to']}"
+            if key not in seen:
+                seen.add(key)
+                unique_connections.append(conn)
+        
+        return unique_connections
+
+    def _extract_technical_description(self, flow_name: str) -> str:
+        """Extract technical description with robust fallbacks"""
+        try:
+            if hasattr(self, 'vector_store') and self.vector_store:
+                query = f"{flow_name} technical description specification requirements"
+                results = self._query_vector_db(query)
+                
+                if results and results[0].get('content'):
+                    most_relevant = results[0].get('content', '')
+                    
+                    # If LLM available and description is long, summarize
+                    if len(most_relevant) > 1000 and hasattr(self, 'groq_client') and self.groq_client:
+                        prompt = f"""
+                        Summarize this technical description for {flow_name}:
+                        
+                        {most_relevant[:3000]}
+                        
+                        Focus on key requirements, integration points, and flow behavior.
+                        """
+                        
+                        try:
+                            response = self.groq_client.chat.completions.create(
+                                model=self.groq_model,
+                                messages=[{"role": "user", "content": prompt}],
+                                temperature=0.1,
+                                max_tokens=1000
+                            )
+                            
+                            return response.choices[0].message.content.strip()
+                            
+                        except Exception:
+                            # Fall back to original content
+                            pass
+                    
+                    return most_relevant[:1000] + "..." if len(most_relevant) > 1000 else most_relevant
+        except Exception:
+            pass
+        
+        # Default description if none found
+        return f"Message flow {flow_name} processes data between systems."
+
+    def _discover_naming_conventions(self) -> List[Dict]:
+        """Discover naming conventions from files with improved logging"""
+        naming_files = []
+        
+        print("  Looking for naming convention files...")
+        
+        # Check for single file
+        single_file = Path("naming_convention.json")
+        if single_file.exists():
+            try:
+                with open(single_file, 'r') as f:
+                    naming_data = json.load(f)
+                    naming_files.append(naming_data)
+                    flow_name = naming_data.get('project_naming', {}).get('message_flow_name', 'Unknown')
+                    print(f"  ✓ Found naming file: {single_file} (flow: {flow_name})")
+            except Exception as e:
+                print(f"  ⚠️ Error reading {single_file}: {e}")
+        
+        # Check for numbered files
+        idx = 1
+        while True:
+            numbered_file = Path(f"naming_convention_{idx}.json")
+            if numbered_file.exists():
+                try:
+                    with open(numbered_file, 'r') as f:
+                        naming_data = json.load(f)
+                        naming_files.append(naming_data)
+                        flow_name = naming_data.get('project_naming', {}).get('message_flow_name', 'Unknown')
+                        print(f"  ✓ Found naming file: {numbered_file} (flow: {flow_name})")
+                except Exception as e:
+                    print(f"  ⚠️ Error reading {numbered_file}: {e}")
+                idx += 1
+            else:
+                break
+        
+        return naming_files
+
+            
+    def _extract_technical_diagram(self, flow_name: str) -> Dict:
+        """Extract technical diagram information for a flow from vector DB"""
+        try:
+            # Use the vector DB to find technical diagrams
+            query = f"{flow_name} technical diagram architecture"
+            results = self.vector_store.search_for_agent_with_diagrams("messageflow_generator", [query], top_k=3)
+            
+            if not results:
+                return None
+                
+            # Find results with diagrams
+            diagram_results = [r for r in results if r.get('metadata', {}).get('has_technical_diagrams')]
+            if not diagram_results:
+                return None
+                
+            # Get the best diagram
+            best_diagram = diagram_results[0]
+            
+            # Return diagram information
+            return {
+                "diagram_content": best_diagram.get('content', ''),
+                "ocr_text": best_diagram.get('metadata', {}).get('ocr_text', ''),
+                "diagram_score": best_diagram.get('score', 0.0)
+            }
+        except Exception as e:
+            print(f"⚠️ Error extracting technical diagram: {e}")
+            return None
+        
+
+            
+    def extract_node_connections(self, flow_name: str) -> List[Dict]:
+        """Extract node connections from technical diagrams or descriptions"""
+        try:
+            # Query for technical diagrams and flow architecture
+            query = f"{flow_name} technical diagram node connections architecture"
+            
+            # Get results from vector store
+            results = self._query_vector_db(query)
+            if not results:
+                return []
+                
+            # Look for content with node connections
+            connections = []
+            
+            for result in results:
+                content = result.get('content', '')
+                
+                # Pattern 1: Look for explicit connection descriptions
+                connection_patterns = [
+                    r'(\w+)\s*->\s*(\w+)',  # Node1 -> Node2
+                    r'(\w+)\s*connects to\s*(\w+)',  # Node1 connects to Node2
+                    r'from\s*(\w+)\s*to\s*(\w+)',  # from Node1 to Node2
+                    r'(\w+)\s*node\s*.*?\s*followed by\s*(\w+)'  # Node1 node ... followed by Node2
+                ]
+                
+                import re
+                for pattern in connection_patterns:
+                    matches = re.findall(pattern, content, re.IGNORECASE)
+                    for match in matches:
+                        connections.append({
+                            "from": match[0].strip(),
+                            "to": match[1].strip()
+                        })
+            
+            # If we couldn't extract connections from patterns, use LLM
+            if not connections and self.groq_client:
+                # Find the most relevant content
+                most_relevant = results[0].get('content', '') if results else ""
+                
+                prompt = f"""
+                Extract node connections from this technical diagram description for {flow_name}:
+                
+                {most_relevant[:2000]}
+                
+                Return ONLY a JSON array of connections with 'from' and 'to' fields. 
+                Example:
+                [
+                {{"from": "HTTPInput", "to": "Compute1"}},
+                {{"from": "Compute1", "to": "MQOutput"}}
+                ]
+                
+                If you can't determine connections, return an empty array [].
+                """
+                
+                try:
+                    response = self.groq_client.chat.completions.create(
+                        model=self.groq_model,
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.1,
+                        max_tokens=1000,
+                        response_format={"type": "json_object"}
+                    )
+                    
+                    result = response.choices[0].message.content.strip()
+                    import json
+                    import re
+                    
+                    # Try to extract JSON array from response
+                    json_match = re.search(r'\[\s*\{.*\}\s*\]', result, re.DOTALL)
+                    if json_match:
+                        connections = json.loads(json_match.group(0))
+                    
+                except Exception as e:
+                    print(f"⚠️ Error extracting connections with LLM: {e}")
+            
+            # Remove duplicates
+            unique_connections = []
+            seen = set()
+            for conn in connections:
+                key = f"{conn['from']}-{conn['to']}"
+                if key not in seen:
+                    seen.add(key)
+                    unique_connections.append(conn)
+            
+            return unique_connections
+                
+        except Exception as e:
+            print(f"⚠️ Error extracting node connections: {e}")
+            return []
+
+
+
+    def extract_technical_description(self, flow_name: str) -> str:
+        """Extract technical description specific to a flow"""
+        try:
+            # Query for technical description
+            query = f"{flow_name} technical description specification requirements"
+            
+            # Get results from vector store
+            results = self._query_vector_db(query)
+            if not results:
+                return "No technical description found"
+                
+            # Find the most relevant description
+            most_relevant = results[0].get('content', '') if results else ""
+            
+            # If description is too long, summarize with LLM
+            if len(most_relevant) > 1000 and self.groq_client:
+                prompt = f"""
+                Summarize this technical description for {flow_name}:
+                
+                {most_relevant[:3000]}
+                
+                Focus on key requirements, integration points, and flow behavior.
+                Keep it under 500 words.
+                """
+                
+                try:
+                    response = self.groq_client.chat.completions.create(
+                        model=self.groq_model,
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.1,
+                        max_tokens=1000
+                    )
+                    
+                    return response.choices[0].message.content.strip()
+                    
+                except Exception as e:
+                    print(f"⚠️ Error summarizing technical description: {e}")
+                    # Fall back to first 1000 characters
+                    return most_relevant[:1000] + "..."
+            
+            return most_relevant
+                
+        except Exception as e:
+            print(f"⚠️ Error extracting technical description: {e}")
+            return "Error extracting technical description"
+    
+
+
+
     
     def customize_esql_template(self, template: str, biztalk_components: List[Dict], business_requirements: Dict) -> str:
         """
@@ -2067,6 +2732,7 @@ Extract ONLY what is explicitly mentioned in this chunk. Return empty arrays for
             return template  # Always return something usable
 
 
+
 # Main execution for standalone testing
 if __name__ == "__main__":
     import argparse
@@ -2076,35 +2742,36 @@ if __name__ == "__main__":
     parser.add_argument('--pdf-path', required=True, help='Path to PDF file')
     parser.add_argument('--biztalk-path', required=False, help='Path to BizTalk folder (optional)')
     parser.add_argument('--output-dir', default='output', help='Output directory')
+    parser.add_argument('--extract-requirements', action='store_true', 
+                       help='Extract business requirements for messageflow correction')
     
     args = parser.parse_args()
     
     print("=" * 60)
-    print("ðŸš€ Agent 1: MessageFlow Template Optimizer")
+    print("🚀 Agent 1: MessageFlow Template Optimizer")
     print("=" * 60)
     
     # Create mapper instance
     mapper = BizTalkACEMapper()
     
     # Step 1: Query Vector DB for PDF content
-    print("\n  Step 1: Analyzing PDF content from Vector DB...")
-    # TODO: Implement query_vector_db() or integrate with existing PDF processor
+    print("\n📝 Step 1: Analyzing PDF content from Vector DB...")
     vector_db_results = []  # Placeholder - replace with actual vector DB query
     
     # Step 2: Detect XSL and Transco presence
-    print("\n  Step 2: Detecting XSL and Transco requirements...")
+    print("\n🔍 Step 2: Detecting XSL and Transco requirements...")
     has_xsl, has_transco = mapper.detect_flow_pattern(vector_db_results)
     
-    print(f"   - XSL Transform needed: {'  Yes' if has_xsl else '  No'}")
-    print(f"   - Transco/Enrichment needed: {'  Yes' if has_transco else '  No'}")
+    print(f"   - XSL Transform needed: {'✅ Yes' if has_xsl else '❌ No'}")
+    print(f"   - Transco/Enrichment needed: {'✅ Yes' if has_transco else '❌ No'}")
     
     # Step 3: Generate optimized msgflow template
-    print("\nâš™ï¸  Step 3: Generating optimized msgflow_template.xml...")
+    print("\n⚙️ Step 3: Generating optimized msgflow_template.xml...")
     template_path = mapper.optimize_msgflow_template(has_xsl, has_transco)
     
     # Step 4: (Optional) Process BizTalk components if path provided
     if args.biztalk_path:
-        print("\nðŸ“¦ Step 4: Processing BizTalk components...")
+        print("\n📦 Step 4: Processing BizTalk components...")
         
         # Get all BizTalk files from directory
         biztalk_files = list(Path(args.biztalk_path).rglob("*.btproj"))
@@ -2122,7 +2789,18 @@ if __name__ == "__main__":
     else:
         print("\nStep 4: Skipped (No BizTalk path provided - PDF-only mode)")
     
-    # Step 5: Save metadata for Agent 2
+    # NEW Step 5: Extract comprehensive business requirements if requested
+    if args.extract_requirements:
+        print("\n🔍 Step 5: Extracting comprehensive business requirements...")
+        requirements_result = mapper.extract_business_requirements(args.output_dir)
+        
+        if requirements_result['status'] == 'success':
+            print(f"✅ Business requirements extracted: {requirements_result['flow_count']} flows")
+            print(f"   File: {requirements_result['file_path']}")
+        else:
+            print(f"❌ Failed to extract business requirements: {requirements_result['message']}")
+    
+    # Original Step 5: Save metadata for Agent 2 (now Step 6)
     metadata = {
         'has_xsl': has_xsl,
         'has_transco': has_transco,

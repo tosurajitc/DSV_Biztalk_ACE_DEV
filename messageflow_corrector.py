@@ -1,17 +1,4 @@
-"""
-Smart MessageFlow Corrector Module
-==================================
-Discovers ACE applications via naming_convention files and corrects messageflows
-to sync with actual components and configuration flags.
-Ensure this module to verify the confluence Technical Diagram to understand the messageflow structure. Use OCR to read the image if OCR
-fails then use LLM specially for the node connections. File input is always satelitee and should be at the start of the flow.
-SO process the vector DB data and generate the connections accordingly.
-if any messageflow name ends with RECSAT or SNDSAT then it is a SAT messageflow and should follow the fixed SAT structure.
-Read the Technical Description specific to the flow name to understand abouit the flow. 
-No need for routing nodes in SAT flows. Failure node addition is not required.
-HUBInput Sub inflow is missing which receive from HTTP Input node. Add that subflow as first node in the messageflow.
-For MQ - prepareStart event node if missing, add that node after the input node.
-"""
+
 
 import os
 import json
