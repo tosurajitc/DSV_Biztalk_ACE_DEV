@@ -6,6 +6,7 @@ Author: ACE Migration Expert
 """
 
 import os
+import re
 import json
 import pandas as pd
 from pathlib import Path
@@ -1745,13 +1746,13 @@ END MODULE;
     def extract_business_requirements(self, pdf_content: str) -> Dict:
         """
         Extract comprehensive business requirements for all messageflows
-        with enhanced error handling and robustness
+        using the template-driven approach with enhanced error handling
         
         Args:
             pdf_content: PDF content text
             
         Returns:
-            Dict with extracted business requirements
+            Dict with extracted business requirements according to template
         """
         try:
             print("🔍 Extracting comprehensive business requirements...")
@@ -1784,15 +1785,10 @@ END MODULE;
                     "routing_logic": [],
                     "messageflows": []  # Add our new structure key too
                 }
-            
+                
             # Step 2: Initialize business requirements structure
             business_requirements = {
                 "extraction_timestamp": datetime.now().isoformat(),
-                "messageflows": []
-            }
-            
-            # Also maintain compatibility with old format
-            old_format = {
                 "message_flows": [],
                 "transformation_requirements": [],
                 "integration_endpoints": [],
@@ -1802,7 +1798,8 @@ END MODULE;
                 "processing_patterns": [],
                 "technical_specifications": [],
                 "data_enrichment_rules": [],
-                "routing_logic": []
+                "routing_logic": [],
+                "messageflows": []
             }
             
             # Step 3: Process each application/flow
@@ -1818,11 +1815,12 @@ END MODULE;
                     print(f"\n🔧 Processing Flow: {flow_name}")
                     
                     # Add to old format lists for compatibility
-                    old_format["message_flows"].append(flow_name)
-                    old_format["ace_library_indicators"].append(app_name)
+                    business_requirements["message_flows"].append(flow_name)
+                    business_requirements["ace_library_indicators"].append(app_name)
                     
                     # Get basic flow metadata
                     input_type = naming_file.get('project_naming', {}).get('input_type', 'MQ')
+                    server_name = naming_file.get('project_naming', {}).get('ace_server', 'group-default-server')
                     is_sat_flow = flow_name.endswith("RECSAT") or flow_name.endswith("SNDSAT")
                     
                     # SAFE APPROACH: Use rule-based detection first
@@ -1830,13 +1828,13 @@ END MODULE;
                         'input_type': input_type,
                         'has_enrichment': False,
                         'has_xsl_transform': True,
-                        'xsl_files': [f"{flow_name}_transform.xsl"],
+                        'xsl_files': [],
                         'has_soap_request': False,
                         'is_synchronous': input_type == "HTTP",
                         'flow_type': "SAT" if is_sat_flow else "RTS" if input_type == "HTTP" else "P2P",
                         'has_event_nodes': True,
                         'has_method_routing': input_type == "HTTP",
-                        'routing_methods': ["GET", "POST"] if input_type == "HTTP" else []
+                        'routing_methods': []
                     }
                     
                     # Try to enhance with vector DB info if available
@@ -1850,10 +1848,11 @@ END MODULE;
                     except Exception as e:
                         print(f"  ⚠️ Vector pattern detection failed: {str(e)}")
                     
-                    # Create messageflow requirements entry
+                    # Create messageflow requirements entry - FIXED to contain actual values, not placeholders
                     flow_requirements = {
                         "flow_name": flow_name,
                         "app_name": app_name,
+                        "server_name": server_name,
                         "input_type": input_type,
                         "is_sat_flow": is_sat_flow,
                         "requires_routing": flow_pattern.get('has_method_routing', False),
@@ -1865,41 +1864,131 @@ END MODULE;
                         "xsl_files": flow_pattern.get('xsl_files', []),
                         "is_synchronous": flow_pattern.get('is_synchronous', False),
                         "has_event_nodes": flow_pattern.get('has_event_nodes', False),
-                        "node_connections": [], # Simplified for now to avoid errors
-                        "technical_description": f"Message flow {flow_name} processes data between systems."
+                        "node_connections": [],
+                        "technical_description": naming_file.get('business_context', {}).get('description', 
+                                                f"Message flow {flow_name} processes data between systems.")
                     }
+                    
+                    # Add input configuration section
+                    flow_requirements["input_configuration"] = {
+                        "input_type": input_type,
+                        "input_node_name": f"{input_type}Input",
+                        "input_details": {
+                            "uri_pattern": f"/{flow_name}" if input_type == "HTTP" else "",
+                            "http_method": "POST" if input_type == "HTTP" else "",
+                            "content_type": "application/xml" if input_type == "HTTP" else "",
+                            "queue_name": f"INPUT.{flow_name}.QUEUE" if input_type == "MQ" else "",
+                            "file_pattern": f"*.xml" if input_type == "File" else ""
+                        }
+                    }
+                    
+                    # Create basic nodes list
+                    nodes = []
+                    node_connections = []
+                    
+                    # Entry node based on input type
+                    if input_type == "HTTP":
+                        nodes.append({
+                            "node_id": "FCMComposite_1_1",
+                            "node_name": "HTTPInput",
+                            "node_type": "HTTPInput",
+                            "is_entry_point": True,
+                            "node_purpose": "Receives HTTP requests"
+                        })
+                    elif input_type == "MQ":
+                        nodes.append({
+                            "node_id": "FCMComposite_1_1",
+                            "node_name": "MQInput",
+                            "node_type": "MQInput",
+                            "is_entry_point": True,
+                            "node_purpose": "Receives messages from queue"
+                        })
+                    elif input_type == "File":
+                        nodes.append({
+                            "node_id": "FCMComposite_1_1",
+                            "node_name": "FileInput",
+                            "node_type": "FileInput",
+                            "is_entry_point": True,
+                            "node_purpose": "Receives files from directory"
+                        })
+                    
+                    # Always add compute node
+                    nodes.append({
+                        "node_id": "FCMComposite_1_2",
+                        "node_name": "ComputeNode",
+                        "node_type": "ComputeNode",
+                        "is_entry_point": False,
+                        "node_purpose": "Main processing node"
+                    })
+                    
+                    # Add routing node if needed
+                    if flow_pattern.get('has_method_routing', False):
+                        nodes.append({
+                            "node_id": "FCMComposite_1_3",
+                            "node_name": "RouteNode",
+                            "node_type": "RouteNode",
+                            "is_entry_point": False,
+                            "node_purpose": "Routes based on message content"
+                        })
+                    
+                    # Add output node based on flow type
+                    if input_type == "HTTP" and flow_pattern.get('is_synchronous', False):
+                        nodes.append({
+                            "node_id": "FCMComposite_1_4",
+                            "node_name": "HTTPReply",
+                            "node_type": "HTTPReply",
+                            "is_entry_point": False,
+                            "node_purpose": "Sends HTTP reply"
+                        })
+                    else:
+                        nodes.append({
+                            "node_id": "FCMComposite_1_4",
+                            "node_name": "MQOutput",
+                            "node_type": "MQOutput",
+                            "is_entry_point": False,
+                            "node_purpose": "Sends to output queue"
+                        })
+                    
+                    # Create basic node connections
+                    for i in range(len(nodes) - 1):
+                        node_connections.append({
+                            "source_node_id": nodes[i]["node_id"],
+                            "target_node_id": nodes[i + 1]["node_id"],
+                            "terminal_type": "out",
+                            "filter_condition": None
+                        })
+                    
+                    flow_requirements["nodes"] = nodes
+                    flow_requirements["node_connections"] = node_connections
                     
                     business_requirements["messageflows"].append(flow_requirements)
                     
                     # Add queue to endpoints list for old format compatibility
                     if input_type == "MQ":
-                        old_format["integration_endpoints"].append(f"INPUT.{flow_name}.QUEUE")
+                        business_requirements["integration_endpoints"].append(f"INPUT.{flow_name}.QUEUE")
                     
                 except Exception as e:
                     print(f"⚠️ Error processing {flow_name}: {e}")
                     import traceback
                     traceback.print_exc()
                     continue
-                    
+                        
             # Step 4: Save the enhanced business_requirements.json file
             output_dir = "."  # Use current directory as default
             output_path = Path(output_dir) / "business_requirements.json"
-            
-            # Combine both formats for maximum compatibility
-            combined_requirements = {**old_format, **business_requirements}
             
             # Ensure directory exists
             try:
                 os.makedirs(output_dir, exist_ok=True)
                 
                 with open(output_path, 'w', encoding='utf-8') as f:
-                    json.dump(combined_requirements, f, indent=2)
+                    json.dump(business_requirements, f, indent=2)
                     
                 print(f"✅ Created enhanced business_requirements.json with {len(business_requirements['messageflows'])} flows")
             except Exception as e:
                 print(f"⚠️ Error saving JSON file: {e}")
             
-            return combined_requirements
+            return business_requirements
             
         except Exception as e:
             print(f"❌ Failed to extract business requirements: {e}")
@@ -1921,193 +2010,223 @@ END MODULE;
                 "messageflows": [],
                 "extraction_timestamp": datetime.now().isoformat()
             }
-    
 
-    def _rule_based_flow_pattern(self, flow_name: str, is_sat_flow: bool, input_type: str) -> Dict:
-        """Determine flow pattern using rule-based logic when vector DB is unavailable"""
-        pattern = {
-            'input_type': input_type,
-            'has_enrichment': False,
-            'has_xsl_transform': True,  # Most flows need transformation
-            'xsl_files': [f"{flow_name.lower()}_transform.xsl"],
-            'has_soap_request': False,
-            'soap_endpoint': None,
-            'is_synchronous': input_type == "HTTP",
-            'has_event_nodes': True,
-            'has_method_routing': False,
-            'routing_methods': [],
-            'routing_type': None
-        }
-        
-        # SAT flows
-        if is_sat_flow:
-            pattern['flow_type'] = "SAT"
-            
-        # HTTP flows are typically synchronous
-        elif input_type == "HTTP":
-            pattern['is_synchronous'] = True
-            pattern['flow_type'] = "RTS"
-            pattern['has_method_routing'] = True
-            pattern['routing_methods'] = ["GET", "POST", "PUT", "DELETE"]
-        
-        # Default MQ flow
-        else:
-            pattern['flow_type'] = "P2P"
-            
-            # Check for special patterns in flow name
-            if "RTS" in flow_name:
-                pattern['flow_type'] = "RTS"
-                pattern['is_synchronous'] = True
-            
-            if any(x in flow_name for x in ["Enrich", "Lookup", "DB"]):
-                pattern['has_enrichment'] = True
-        
-        return pattern
-
-    def _determine_flow_type(self, flow_name: str, flow_pattern: Dict, is_sat_flow: bool) -> str:
-        """Determine the flow type based on naming and pattern detection"""
-        if is_sat_flow:
-            return "SAT"
-        
-        if flow_pattern.get('flow_type'):
-            return flow_pattern.get('flow_type')
-        
-        # Determine from name if pattern doesn't specify
-        if "RTS" in flow_name:
-            return "RTS"
-        elif "P2P" in flow_name:
-            return "P2P"
-        
-        # Determine from input type
-        if flow_pattern.get('input_type') == "HTTP":
-            return "RTS"
-            
-        return "P2P"  # Default flow type
-
-    def _extract_queue_info(self, flow_name: str, flow_pattern: Dict) -> List[Dict]:
-        """Extract queue information for the flow"""
-        queues = []
-        
-        # Input queue
-        input_type = flow_pattern.get('input_type', 'MQ')
-        if input_type == "MQ":
-            queues.append({
-                "name": f"INPUT.{flow_name}.QUEUE",
-                "type": "input",
-                "direction": "read"
-            })
-        
-        # Output queue
-        if not flow_pattern.get('is_synchronous', False):
-            queues.append({
-                "name": f"OUTPUT.{flow_name}.QUEUE",
-                "type": "output",
-                "direction": "write"
-            })
-        
-        # Error queue
-        queues.append({
-            "name": f"ERROR.{flow_name}.QUEUE",
-            "type": "error",
-            "direction": "write"
-        })
-        
-        return queues
-
-    def _extract_endpoints(self, flow_name: str, flow_pattern: Dict) -> List[Dict]:
-        """Extract endpoint information for the flow"""
-        endpoints = []
-        
-        # HTTP endpoint
-        if flow_pattern.get('input_type') == "HTTP":
-            endpoints.append({
-                "type": "HTTP",
-                "uri": f"/api/{flow_name.lower()}",
-                "direction": "input",
-                "methods": flow_pattern.get('routing_methods', ["GET", "POST"])
-            })
-        
-        # SOAP endpoint
-        if flow_pattern.get('has_soap_request', False):
-            endpoints.append({
-                "type": "SOAP",
-                "uri": flow_pattern.get('soap_endpoint', 'http://service.endpoint'),
-                "direction": "output",
-                "wsdl": f"{flow_name}_service.wsdl"
-            })
-        
-        return endpoints
-
-    def _has_technical_diagram(self, flow_name: str) -> bool:
-        """Check if technical diagram exists for the flow"""
-        try:
-            if hasattr(self, 'vector_store') and self.vector_store:
-                query = f"{flow_name} technical diagram architecture"
-                results = self._query_vector_db(query)
-                
-                if results:
-                    # Look for diagram indicators in results
-                    for result in results:
-                        metadata = result.get('metadata', {})
-                        if metadata.get('has_technical_diagrams') or metadata.get('has_diagrams'):
-                            return True
-        except Exception:
-            pass
-            
-        return False
-
-    def _get_required_nodes(self, flow_name: str, is_sat_flow: bool, input_type: str, flow_pattern: Dict) -> List[Dict]:
-        """Determine the required nodes for this flow"""
+    def _generate_flow_nodes(self, flow_name, input_type, flow_pattern):
+        """Generate node list based on flow characteristics"""
         nodes = []
         
-        # Input node
-        if input_type == "MQ":
-            nodes.append({"type": "MQInput", "name": "MQInput", "required": True})
-            nodes.append({"type": "ComputeNode", "name": "prepareStart", "required": True})
-        elif input_type == "HTTP":
-            nodes.append({"type": "HTTPInput", "name": "HTTPInput", "required": True})
+        # Entry node based on input type
+        if input_type == "HTTP":
+            nodes.append({
+                "node_id": "FCMComposite_1_1",
+                "node_name": "HTTPInput",
+                "node_type": "HTTPInput",
+                "is_entry_point": True,
+                "node_purpose": "Receives HTTP requests"
+            })
+        elif input_type == "MQ":
+            nodes.append({
+                "node_id": "FCMComposite_1_1",
+                "node_name": "MQInput",
+                "node_type": "MQInput",
+                "is_entry_point": True,
+                "node_purpose": "Receives messages from queue"
+            })
         elif input_type == "File":
-            nodes.append({"type": "FileInput", "name": "FileInput", "required": True})
+            nodes.append({
+                "node_id": "FCMComposite_1_1",
+                "node_name": "FileInput",
+                "node_type": "FileInput",
+                "is_entry_point": True,
+                "node_purpose": "Receives files from directory"
+            })
         
-        # HUBInput subflow for SAT or HTTP flows
-        if is_sat_flow or input_type == "HTTP":
-            nodes.append({"type": "Subflow", "name": "HUBInput", "required": True})
+        # Always add start event node
+        nodes.append({
+            "node_id": "FCMComposite_1_2",
+            "node_name": "StartEvent",
+            "node_type": "ComputeNode",
+            "is_entry_point": False,
+            "node_purpose": "Prepares Start Event + Gets Main Identifier"
+        })
         
-        # Standard event compute nodes
-        nodes.append({"type": "ComputeNode", "name": "InputEventMessage", "required": True})
-        nodes.append({"type": "ComputeNode", "name": "Compute", "required": True})
+        # If routing is needed, add a router node
+        if flow_pattern.get('has_method_routing', False):
+            nodes.append({
+                "node_id": "FCMComposite_1_3",
+                "node_name": "MethodRouter",
+                "node_type": "RouteNode",
+                "is_entry_point": False,
+                "node_purpose": "Routes messages based on method type"
+            })
         
-        # Enrichment
-        if flow_pattern.get('has_enrichment', False):
-            nodes.append({"type": "Subflow", "name": "BeforeEnrichment", "required": True})
-        
-        # XSL Transform
+        # Add transformation nodes if needed
         if flow_pattern.get('has_xsl_transform', False):
-            nodes.append({"type": "XSLTransform", "name": "XSLTransform", "required": True})
+            nodes.append({
+                "node_id": "FCMComposite_1_4",
+                "node_name": "XSLTransform",
+                "node_type": "XSLTransformNode",
+                "is_entry_point": False,
+                "node_purpose": "Transforms message format"
+            })
         
-        # After enrichment and event nodes
-        nodes.append({"type": "ComputeNode", "name": "AfterEnrichment", "required": False})
-        nodes.append({"type": "ComputeNode", "name": "OutputEventMessage", "required": True})
-        nodes.append({"type": "ComputeNode", "name": "AfterEventMessage", "required": False})
+        # Add enrichment nodes if needed
+        if flow_pattern.get('has_enrichment', False):
+            nodes.append({
+                "node_id": "FCMComposite_1_5",
+                "node_name": "Enrichment",
+                "node_type": "ComputeNode",
+                "is_entry_point": False,
+                "node_purpose": "Enriches message with additional data"
+            })
         
-        # Routing
-        if flow_pattern.get('has_method_routing', False) and not is_sat_flow:
-            nodes.append({"type": "RouteNode", "name": "MethodRouter", "required": True})
-            
-            # Label nodes for routing methods
-            for method in flow_pattern.get('routing_methods', [])[:5]:  # Limit to 5 methods
-                nodes.append({"type": "LabelNode", "name": f"Label_{method}", "required": False})
+        # Add SOAP request node if needed
+        if flow_pattern.get('has_soap_request', False):
+            nodes.append({
+                "node_id": "FCMComposite_1_6",
+                "node_name": "SOAPRequest",
+                "node_type": "SOAPRequestNode",
+                "is_entry_point": False,
+                "node_purpose": "Sends SOAP request to external service"
+            })
         
-        # Output
-        if flow_pattern.get('is_synchronous', False) and input_type == "HTTP":
-            nodes.append({"type": "HTTPReply", "name": "HTTPReply", "required": True})
+        # Add appropriate output node
+        if input_type == "HTTP" and flow_pattern.get('is_synchronous', False):
+            nodes.append({
+                "node_id": "FCMComposite_1_7",
+                "node_name": "HTTPReply",
+                "node_type": "HTTPReply",
+                "is_entry_point": False,
+                "node_purpose": "Returns HTTP response"
+            })
         else:
-            nodes.append({"type": "MQOutput", "name": "MQOutput", "required": True})
+            nodes.append({
+                "node_id": "FCMComposite_1_7",
+                "node_name": "MQOutput",
+                "node_type": "MQOutput",
+                "is_entry_point": False,
+                "node_purpose": "Sends message to output queue"
+            })
         
-        # Always add failure handler
-        nodes.append({"type": "ComputeNode", "name": "FailureHandler", "required": True})
+        # Always add end event node
+        nodes.append({
+            "node_id": "FCMComposite_1_8",
+            "node_name": "EndEvent",
+            "node_type": "ComputeNode",
+            "is_entry_point": False,
+            "node_purpose": "Records end event"
+        })
         
         return nodes
+
+    def _generate_node_connections(self, nodes, flow_pattern):
+        """Generate connections between nodes"""
+        connections = []
+        
+        # Create a simple linear flow for most nodes
+        for i in range(len(nodes) - 1):
+            source = nodes[i]
+            target = nodes[i + 1]
+            
+            # Skip connection if source is Router (handled separately)
+            if source["node_type"] == "RouteNode":
+                continue
+                
+            connections.append({
+                "source_node_id": source["node_id"],
+                "target_node_id": target["node_id"],
+                "terminal_type": "out",
+                "filter_condition": None
+            })
+        
+        # Special handling for routing node if present
+        router_node = next((n for n in nodes if n["node_type"] == "RouteNode"), None)
+        if router_node:
+            # Find target nodes for router
+            router_index = next((i for i, n in enumerate(nodes) if n["node_type"] == "RouteNode"), -1)
+            if router_index >= 0 and router_index + 1 < len(nodes):
+                target = nodes[router_index + 1]
+                
+                # Add routing methods if available
+                routing_methods = flow_pattern.get('routing_methods', [])
+                if not routing_methods:
+                    routing_methods = ["default"]
+                    
+                for method in routing_methods:
+                    connections.append({
+                        "source_node_id": router_node["node_id"],
+                        "target_node_id": target["node_id"],
+                        "terminal_type": method.lower(),
+                        "filter_condition": f"method='{method}'" if method != "default" else None
+                    })
+        
+        return connections
+
+    def _extract_connected_systems(self, pdf_content):
+        """Extract connected systems information from PDF content"""
+        systems = []
+        
+        # Try to extract systems from common patterns in PDFs
+        system_patterns = [
+            r'Connected System\(s\)\s*([A-Za-z0-9_\-\s,]+)',
+            r'Source System\s*:\s*([A-Za-z0-9_\-\s]+)',
+            r'Target System\s*:\s*([A-Za-z0-9_\-\s]+)'
+        ]
+        
+        extracted_systems = []
+        for pattern in system_patterns:
+            matches = re.findall(pattern, pdf_content, re.IGNORECASE)
+            for match in matches:
+                # Split by commas, new lines, or spaces followed by dash
+                systems_list = re.split(r'[,\n]|\s+-', match)
+                for system in systems_list:
+                    system_name = system.strip()
+                    if system_name and system_name not in extracted_systems:
+                        extracted_systems.append(system_name)
+        
+        # Try to extract system IDs
+        system_id_pattern = r'([A-Z]+-\d+)'
+        system_ids = re.findall(system_id_pattern, pdf_content)
+        
+        # Create system objects
+        for i, system_name in enumerate(extracted_systems):
+            system_obj = {
+                "system_name": system_name,
+                "system_id": system_ids[i] if i < len(system_ids) else f"SYS-{i+1:04d}",
+                "system_type": self._guess_system_type(system_name),
+                "service_endpoints": []
+            }
+            systems.append(system_obj)
+        
+        # If no systems extracted, add placeholder
+        if not systems:
+            systems.append({
+                "system_name": "Unknown",
+                "system_id": "SYS-0001",
+                "system_type": "External",
+                "service_endpoints": []
+            })
+        
+        return systems
+
+    def _guess_system_type(self, system_name):
+        """Guess system type based on name"""
+        system_name = system_name.lower()
+        
+        if any(db in system_name for db in ['sql', 'oracle', 'db', 'database']):
+            return "Database"
+        elif any(erp in system_name for erp in ['sap', 'oracle', 'dynamics']):
+            return "ERP"
+        elif any(mq in system_name for mq in ['mq', 'rabbit', 'kafka']):
+            return "Messaging"
+        elif any(web in system_name for web in ['http', 'web', 'rest', 'soap']):
+            return "WebService"
+        elif any(file in system_name for file in ['file', 'ftp', 'sftp']):
+            return "File"
+        else:
+            return "External Service"
+    
+
 
     def _query_vector_db(self, query: str) -> List[Dict]:
         """Query vector DB for flow-specific information with robust error handling"""
@@ -2115,7 +2234,7 @@ END MODULE;
             # Check if we have a vector store
             if not hasattr(self, 'vector_store') or not self.vector_store:
                 try:
-                    from vector_store import ChromaVectorStore
+                    from vector_knowledge.vector_store import ChromaVectorStore
                     self.vector_store = ChromaVectorStore()
                     print("📋 Created new vector store connection")
                 except ImportError:
