@@ -15,7 +15,7 @@ C:\Users\SURAJITCHATTERJEE\AppData\Local\Programs\Python\Python312\python.exe cl
 GIT PUSH Steps: 
 git init
 git add .
-git commit -m "Commit updated messageflow file refinement 31 Oct V1" 
+git commit -m "Commit updated messageflow file refinement 2 Nov V1" 
 git remote set-url origin https://github.com/tosurajitc/DSV_Biztalk_ACE_DEV.git
 https://github.ibm.com/GenAI-DSV/DSV_Biztalk_ACE_DEV
 git push -u origin master

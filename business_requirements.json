@@ -1,24 +1,14 @@
 {
-  "extraction_timestamp": "2025-11-02T07:55:02.004149",
+  "extraction_timestamp": "2025-11-03T08:33:09.856063",
   "message_flows": [
-    "SAP_Data_Edicom_RTS",
-    "Edicom.Out.SAP.CancelNFS.Snd.WCF-BasicHttp",
-    "Edicom.Out.SAP.CancelSubscription.Snd.WCF-BasicHttp",
-    "Edicom.Out.SAP.Confirmation.Snd.WCF-BasicHttp",
-    "Edicom.Out.SAP.SubmitNFS.Snd.WCF-BasicHttp",
-    "Edicom.Out.SAP.Subscription.Snd.WCF-BasicHttp"
+    "SuccessFactors_CSV_IGA_P2P"
   ],
   "transformation_requirements": [],
   "integration_endpoints": [],
   "database_lookups": [],
   "business_entities": [],
   "ace_library_indicators": [
-    "EPIS_SAP_Edicom_App",
-    "Not_Specified",
-    "Not_Specified",
-    "Not_Specified",
-    "Not_Specified",
-    "Not_Specified"
+    "EPIS_SuccessFactors_IGA_App"
   ],
   "processing_patterns": [],
   "technical_specifications": [],
@@ -26,64 +16,32 @@
   "routing_logic": [],
   "messageflows": [
     {
-      "flow_name": "SAP_Data_Edicom_RTS",
-      "app_name": "EPIS_SAP_Edicom_App",
-      "server_name": "group-sap-server",
+      "flow_name": "SuccessFactors_CSV_IGA_P2P",
+      "app_name": "EPIS_SuccessFactors_IGA_App",
+      "server_name": "group-payroll-server",
       "input_type": "HTTP",
       "is_sat_flow": false,
       "requires_routing": true,
       "routing_methods": [
-        "confirmsubscription",
-        "cancelsubscription",
-        "flows",
-        "subscription",
-        "cancelnfse",
-        "cancelnfs",
-        "submitnfse",
         "subscriptionws",
-        "submitnfs"
+        "confirmsubscription",
+        "cancelnfse",
+        "submitnfse",
+        "cancelsubscription"
       ],
       "flow_type": "RTS",
       "has_enrichment": true,
-      "has_xsl_transform": true,
+      "has_xsl_transform": false,
       "has_soap_request": false,
-      "xsl_files": [
-        "sap_data_edicom_p2p_03_cancelsubscription_to_subscriptionws.xsl",
-        "sap_data_edicom_p2p_04_confirmsubscription_to_confirmsubscriptionws.xsl",
-        "sap_data_edicom_p2p_05_submitnfs_to_payload.xsl",
-        "sap_data_edicom_p2p_05_payload_to_publishws.xsl",
-        "sap_data_edicom_p2p_06_getsubscription_to_subscriptionws.xsl",
-        "sap_data_edicom_p2p_02_payload_to_cancelpublishws.xsl",
-        "sap_data_edicom_p2p_02_cancelnfs_to_payload.xsl"
-      ],
+      "xsl_files": [],
       "is_synchronous": true,
       "has_event_nodes": true,
-      "node_connections": [
-        {
-          "source_node_id": "FCMComposite_1_1",
-          "target_node_id": "FCMComposite_1_2",
-          "terminal_type": "out",
-          "filter_condition": null
-        },
-        {
-          "source_node_id": "FCMComposite_1_2",
-          "target_node_id": "FCMComposite_1_3",
-          "terminal_type": "out",
-          "filter_condition": null
-        },
-        {
-          "source_node_id": "FCMComposite_1_3",
-          "target_node_id": "FCMComposite_1_4",
-          "terminal_type": "out",
-          "filter_condition": null
-        }
-      ],
-      "technical_description": "ESB will receive invoice files from SAP through a WCF-BasicHttp adapter.",
+      "technical_description": "Message flow SuccessFactors_CSV_IGA_P2P processes data between systems.",
       "input_configuration": {
         "input_type": "HTTP",
         "input_node_name": "HTTPInput",
         "input_details": {
-          "uri_pattern": "/SAP_Data_Edicom_RTS",
+          "uri_pattern": "/SuccessFactors_CSV_IGA_P2P",
           "http_method": "POST",
           "content_type": "application/xml",
           "queue_name": "",
@@ -119,41 +77,7 @@
           "is_entry_point": false,
           "node_purpose": "Sends HTTP reply"
         }
-      ]
-    },
-    {
-      "flow_name": "Edicom.Out.SAP.CancelNFS.Snd.WCF-BasicHttp",
-      "app_name": "Not_Specified",
-      "server_name": "Not_Specified",
-      "input_type": "HTTP",
-      "is_sat_flow": false,
-      "requires_routing": true,
-      "routing_methods": [
-        "confirmsubscription",
-        "cancelsubscription",
-        "flows",
-        "subscription",
-        "cancelnfse",
-        "cancelnfs",
-        "submitnfse",
-        "subscriptionws",
-        "submitnfs"
       ],
-      "flow_type": "RTS",
-      "has_enrichment": true,
-      "has_xsl_transform": true,
-      "has_soap_request": false,
-      "xsl_files": [
-        "sap_data_edicom_p2p_03_cancelsubscription_to_subscriptionws.xsl",
-        "sap_data_edicom_p2p_04_confirmsubscription_to_confirmsubscriptionws.xsl",
-        "sap_data_edicom_p2p_05_submitnfs_to_payload.xsl",
-        "sap_data_edicom_p2p_05_payload_to_publishws.xsl",
-        "sap_data_edicom_p2p_06_getsubscription_to_subscriptionws.xsl",
-        "sap_data_edicom_p2p_02_payload_to_cancelpublishws.xsl",
-        "sap_data_edicom_p2p_02_cancelnfs_to_payload.xsl"
-      ],
-      "is_synchronous": true,
-      "has_event_nodes": true,
       "node_connections": [
         {
           "source_node_id": "FCMComposite_1_1",
@@ -172,432 +96,6 @@
           "target_node_id": "FCMComposite_1_4",
           "terminal_type": "out",
           "filter_condition": null
-        }
-      ],
-      "technical_description": "Not_Specified",
-      "input_configuration": {
-        "input_type": "HTTP",
-        "input_node_name": "HTTPInput",
-        "input_details": {
-          "uri_pattern": "/Edicom.Out.SAP.CancelNFS.Snd.WCF-BasicHttp",
-          "http_method": "POST",
-          "content_type": "application/xml",
-          "queue_name": "",
-          "file_pattern": ""
-        }
-      },
-      "nodes": [
-        {
-          "node_id": "FCMComposite_1_1",
-          "node_name": "HTTPInput",
-          "node_type": "HTTPInput",
-          "is_entry_point": true,
-          "node_purpose": "Receives HTTP requests"
-        },
-        {
-          "node_id": "FCMComposite_1_2",
-          "node_name": "ComputeNode",
-          "node_type": "ComputeNode",
-          "is_entry_point": false,
-          "node_purpose": "Main processing node"
-        },
-        {
-          "node_id": "FCMComposite_1_3",
-          "node_name": "RouteNode",
-          "node_type": "RouteNode",
-          "is_entry_point": false,
-          "node_purpose": "Routes based on message content"
-        },
-        {
-          "node_id": "FCMComposite_1_4",
-          "node_name": "HTTPReply",
-          "node_type": "HTTPReply",
-          "is_entry_point": false,
-          "node_purpose": "Sends HTTP reply"
-        }
-      ]
-    },
-    {
-      "flow_name": "Edicom.Out.SAP.CancelSubscription.Snd.WCF-BasicHttp",
-      "app_name": "Not_Specified",
-      "server_name": "Not_Specified",
-      "input_type": "HTTP",
-      "is_sat_flow": false,
-      "requires_routing": true,
-      "routing_methods": [
-        "confirmsubscription",
-        "cancelsubscription",
-        "flows",
-        "subscription",
-        "cancelnfse",
-        "cancelnfs",
-        "submitnfse",
-        "subscriptionws",
-        "submitnfs"
-      ],
-      "flow_type": "RTS",
-      "has_enrichment": true,
-      "has_xsl_transform": true,
-      "has_soap_request": false,
-      "xsl_files": [
-        "sap_data_edicom_p2p_03_cancelsubscription_to_subscriptionws.xsl",
-        "sap_data_edicom_p2p_04_confirmsubscription_to_confirmsubscriptionws.xsl",
-        "sap_data_edicom_p2p_05_submitnfs_to_payload.xsl",
-        "sap_data_edicom_p2p_05_payload_to_publishws.xsl",
-        "sap_data_edicom_p2p_06_getsubscription_to_subscriptionws.xsl",
-        "sap_data_edicom_p2p_02_payload_to_cancelpublishws.xsl",
-        "sap_data_edicom_p2p_02_cancelnfs_to_payload.xsl"
-      ],
-      "is_synchronous": true,
-      "has_event_nodes": true,
-      "node_connections": [
-        {
-          "source_node_id": "FCMComposite_1_1",
-          "target_node_id": "FCMComposite_1_2",
-          "terminal_type": "out",
-          "filter_condition": null
-        },
-        {
-          "source_node_id": "FCMComposite_1_2",
-          "target_node_id": "FCMComposite_1_3",
-          "terminal_type": "out",
-          "filter_condition": null
-        },
-        {
-          "source_node_id": "FCMComposite_1_3",
-          "target_node_id": "FCMComposite_1_4",
-          "terminal_type": "out",
-          "filter_condition": null
-        }
-      ],
-      "technical_description": "Not_Specified",
-      "input_configuration": {
-        "input_type": "HTTP",
-        "input_node_name": "HTTPInput",
-        "input_details": {
-          "uri_pattern": "/Edicom.Out.SAP.CancelSubscription.Snd.WCF-BasicHttp",
-          "http_method": "POST",
-          "content_type": "application/xml",
-          "queue_name": "",
-          "file_pattern": ""
-        }
-      },
-      "nodes": [
-        {
-          "node_id": "FCMComposite_1_1",
-          "node_name": "HTTPInput",
-          "node_type": "HTTPInput",
-          "is_entry_point": true,
-          "node_purpose": "Receives HTTP requests"
-        },
-        {
-          "node_id": "FCMComposite_1_2",
-          "node_name": "ComputeNode",
-          "node_type": "ComputeNode",
-          "is_entry_point": false,
-          "node_purpose": "Main processing node"
-        },
-        {
-          "node_id": "FCMComposite_1_3",
-          "node_name": "RouteNode",
-          "node_type": "RouteNode",
-          "is_entry_point": false,
-          "node_purpose": "Routes based on message content"
-        },
-        {
-          "node_id": "FCMComposite_1_4",
-          "node_name": "HTTPReply",
-          "node_type": "HTTPReply",
-          "is_entry_point": false,
-          "node_purpose": "Sends HTTP reply"
-        }
-      ]
-    },
-    {
-      "flow_name": "Edicom.Out.SAP.Confirmation.Snd.WCF-BasicHttp",
-      "app_name": "Not_Specified",
-      "server_name": "Not_Specified",
-      "input_type": "HTTP",
-      "is_sat_flow": false,
-      "requires_routing": true,
-      "routing_methods": [
-        "confirmsubscription",
-        "cancelsubscription",
-        "flows",
-        "subscription",
-        "cancelnfse",
-        "cancelnfs",
-        "submitnfse",
-        "subscriptionws",
-        "submitnfs"
-      ],
-      "flow_type": "RTS",
-      "has_enrichment": true,
-      "has_xsl_transform": true,
-      "has_soap_request": false,
-      "xsl_files": [
-        "sap_data_edicom_p2p_03_cancelsubscription_to_subscriptionws.xsl",
-        "sap_data_edicom_p2p_04_confirmsubscription_to_confirmsubscriptionws.xsl",
-        "sap_data_edicom_p2p_05_submitnfs_to_payload.xsl",
-        "sap_data_edicom_p2p_05_payload_to_publishws.xsl",
-        "sap_data_edicom_p2p_06_getsubscription_to_subscriptionws.xsl",
-        "sap_data_edicom_p2p_02_payload_to_cancelpublishws.xsl",
-        "sap_data_edicom_p2p_02_cancelnfs_to_payload.xsl"
-      ],
-      "is_synchronous": true,
-      "has_event_nodes": true,
-      "node_connections": [
-        {
-          "source_node_id": "FCMComposite_1_1",
-          "target_node_id": "FCMComposite_1_2",
-          "terminal_type": "out",
-          "filter_condition": null
-        },
-        {
-          "source_node_id": "FCMComposite_1_2",
-          "target_node_id": "FCMComposite_1_3",
-          "terminal_type": "out",
-          "filter_condition": null
-        },
-        {
-          "source_node_id": "FCMComposite_1_3",
-          "target_node_id": "FCMComposite_1_4",
-          "terminal_type": "out",
-          "filter_condition": null
-        }
-      ],
-      "technical_description": "Not_Specified",
-      "input_configuration": {
-        "input_type": "HTTP",
-        "input_node_name": "HTTPInput",
-        "input_details": {
-          "uri_pattern": "/Edicom.Out.SAP.Confirmation.Snd.WCF-BasicHttp",
-          "http_method": "POST",
-          "content_type": "application/xml",
-          "queue_name": "",
-          "file_pattern": ""
-        }
-      },
-      "nodes": [
-        {
-          "node_id": "FCMComposite_1_1",
-          "node_name": "HTTPInput",
-          "node_type": "HTTPInput",
-          "is_entry_point": true,
-          "node_purpose": "Receives HTTP requests"
-        },
-        {
-          "node_id": "FCMComposite_1_2",
-          "node_name": "ComputeNode",
-          "node_type": "ComputeNode",
-          "is_entry_point": false,
-          "node_purpose": "Main processing node"
-        },
-        {
-          "node_id": "FCMComposite_1_3",
-          "node_name": "RouteNode",
-          "node_type": "RouteNode",
-          "is_entry_point": false,
-          "node_purpose": "Routes based on message content"
-        },
-        {
-          "node_id": "FCMComposite_1_4",
-          "node_name": "HTTPReply",
-          "node_type": "HTTPReply",
-          "is_entry_point": false,
-          "node_purpose": "Sends HTTP reply"
-        }
-      ]
-    },
-    {
-      "flow_name": "Edicom.Out.SAP.SubmitNFS.Snd.WCF-BasicHttp",
-      "app_name": "Not_Specified",
-      "server_name": "Not_Specified",
-      "input_type": "HTTP",
-      "is_sat_flow": false,
-      "requires_routing": true,
-      "routing_methods": [
-        "confirmsubscription",
-        "cancelsubscription",
-        "flows",
-        "subscription",
-        "cancelnfse",
-        "cancelnfs",
-        "submitnfse",
-        "subscriptionws",
-        "submitnfs"
-      ],
-      "flow_type": "RTS",
-      "has_enrichment": true,
-      "has_xsl_transform": true,
-      "has_soap_request": false,
-      "xsl_files": [
-        "sap_data_edicom_p2p_03_cancelsubscription_to_subscriptionws.xsl",
-        "sap_data_edicom_p2p_04_confirmsubscription_to_confirmsubscriptionws.xsl",
-        "sap_data_edicom_p2p_05_submitnfs_to_payload.xsl",
-        "sap_data_edicom_p2p_05_payload_to_publishws.xsl",
-        "sap_data_edicom_p2p_06_getsubscription_to_subscriptionws.xsl",
-        "sap_data_edicom_p2p_02_payload_to_cancelpublishws.xsl",
-        "sap_data_edicom_p2p_02_cancelnfs_to_payload.xsl"
-      ],
-      "is_synchronous": true,
-      "has_event_nodes": true,
-      "node_connections": [
-        {
-          "source_node_id": "FCMComposite_1_1",
-          "target_node_id": "FCMComposite_1_2",
-          "terminal_type": "out",
-          "filter_condition": null
-        },
-        {
-          "source_node_id": "FCMComposite_1_2",
-          "target_node_id": "FCMComposite_1_3",
-          "terminal_type": "out",
-          "filter_condition": null
-        },
-        {
-          "source_node_id": "FCMComposite_1_3",
-          "target_node_id": "FCMComposite_1_4",
-          "terminal_type": "out",
-          "filter_condition": null
-        }
-      ],
-      "technical_description": "Not_Specified",
-      "input_configuration": {
-        "input_type": "HTTP",
-        "input_node_name": "HTTPInput",
-        "input_details": {
-          "uri_pattern": "/Edicom.Out.SAP.SubmitNFS.Snd.WCF-BasicHttp",
-          "http_method": "POST",
-          "content_type": "application/xml",
-          "queue_name": "",
-          "file_pattern": ""
-        }
-      },
-      "nodes": [
-        {
-          "node_id": "FCMComposite_1_1",
-          "node_name": "HTTPInput",
-          "node_type": "HTTPInput",
-          "is_entry_point": true,
-          "node_purpose": "Receives HTTP requests"
-        },
-        {
-          "node_id": "FCMComposite_1_2",
-          "node_name": "ComputeNode",
-          "node_type": "ComputeNode",
-          "is_entry_point": false,
-          "node_purpose": "Main processing node"
-        },
-        {
-          "node_id": "FCMComposite_1_3",
-          "node_name": "RouteNode",
-          "node_type": "RouteNode",
-          "is_entry_point": false,
-          "node_purpose": "Routes based on message content"
-        },
-        {
-          "node_id": "FCMComposite_1_4",
-          "node_name": "HTTPReply",
-          "node_type": "HTTPReply",
-          "is_entry_point": false,
-          "node_purpose": "Sends HTTP reply"
-        }
-      ]
-    },
-    {
-      "flow_name": "Edicom.Out.SAP.Subscription.Snd.WCF-BasicHttp",
-      "app_name": "Not_Specified",
-      "server_name": "Not_Specified",
-      "input_type": "HTTP",
-      "is_sat_flow": false,
-      "requires_routing": true,
-      "routing_methods": [
-        "confirmsubscription",
-        "cancelsubscription",
-        "flows",
-        "subscription",
-        "cancelnfse",
-        "cancelnfs",
-        "submitnfse",
-        "subscriptionws",
-        "submitnfs"
-      ],
-      "flow_type": "RTS",
-      "has_enrichment": true,
-      "has_xsl_transform": true,
-      "has_soap_request": false,
-      "xsl_files": [
-        "sap_data_edicom_p2p_03_cancelsubscription_to_subscriptionws.xsl",
-        "sap_data_edicom_p2p_04_confirmsubscription_to_confirmsubscriptionws.xsl",
-        "sap_data_edicom_p2p_05_submitnfs_to_payload.xsl",
-        "sap_data_edicom_p2p_05_payload_to_publishws.xsl",
-        "sap_data_edicom_p2p_06_getsubscription_to_subscriptionws.xsl",
-        "sap_data_edicom_p2p_02_payload_to_cancelpublishws.xsl",
-        "sap_data_edicom_p2p_02_cancelnfs_to_payload.xsl"
-      ],
-      "is_synchronous": true,
-      "has_event_nodes": true,
-      "node_connections": [
-        {
-          "source_node_id": "FCMComposite_1_1",
-          "target_node_id": "FCMComposite_1_2",
-          "terminal_type": "out",
-          "filter_condition": null
-        },
-        {
-          "source_node_id": "FCMComposite_1_2",
-          "target_node_id": "FCMComposite_1_3",
-          "terminal_type": "out",
-          "filter_condition": null
-        },
-        {
-          "source_node_id": "FCMComposite_1_3",
-          "target_node_id": "FCMComposite_1_4",
-          "terminal_type": "out",
-          "filter_condition": null
-        }
-      ],
-      "technical_description": "Not_Specified",
-      "input_configuration": {
-        "input_type": "HTTP",
-        "input_node_name": "HTTPInput",
-        "input_details": {
-          "uri_pattern": "/Edicom.Out.SAP.Subscription.Snd.WCF-BasicHttp",
-          "http_method": "POST",
-          "content_type": "application/xml",
-          "queue_name": "",
-          "file_pattern": ""
-        }
-      },
-      "nodes": [
-        {
-          "node_id": "FCMComposite_1_1",
-          "node_name": "HTTPInput",
-          "node_type": "HTTPInput",
-          "is_entry_point": true,
-          "node_purpose": "Receives HTTP requests"
-        },
-        {
-          "node_id": "FCMComposite_1_2",
-          "node_name": "ComputeNode",
-          "node_type": "ComputeNode",
-          "is_entry_point": false,
-          "node_purpose": "Main processing node"
-        },
-        {
-          "node_id": "FCMComposite_1_3",
-          "node_name": "RouteNode",
-          "node_type": "RouteNode",
-          "is_entry_point": false,
-          "node_purpose": "Routes based on message content"
-        },
-        {
-          "node_id": "FCMComposite_1_4",
-          "node_name": "HTTPReply",
-          "node_type": "HTTPReply",
-          "is_entry_point": false,
-          "node_purpose": "Sends HTTP reply"
         }
       ]
     }

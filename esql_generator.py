@@ -48,7 +48,7 @@ class ESQLGenerator:
             raise ValueError("GROQ_API_KEY must be provided or set in environment")
         
         self.groq_client = Groq(api_key=self.groq_api_key)
-        self.groq_model = groq_model or os.getenv('GROQ_MODEL', 'llama-3.1-70b-versatile')
+        self.groq_model = groq_model or os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')
         self.json_parser = LLMJSONParser(debug=False)
         
         # Store extracted business information
@@ -75,9 +75,9 @@ class ESQLGenerator:
             'failure': ['FAILURE/ERROR HANDLING TEMPLATE', None]  # Last section
         }
         
-        # Module type suffixes for detection
+        # UPDATED: Module type suffixes for detection - add StartEventMessage
         self.module_type_suffixes = {
-            'input_event': ['_InputEventMessage', '_InputEvent'],
+            'input_event': ['StartEventMessage', '_InputEventMessage', '_InputEvent'],
             'output_event': ['_OutputEventMessage', '_OutputEvent', '_AfterEventMsg'],
             'compute': ['_Compute', '_Transform', '_Mapper'],
             'processing': ['_Processing', '_Validation', '_Router', '_AfterEnrichment'],
@@ -86,6 +86,81 @@ class ESQLGenerator:
         
         print(f"✅ Enhanced ESQL Generator initialized with model: {self.groq_model}")
     
+
+
+
+    def extract_compute_nodes_from_messageflow(self, msgflow_path: str) -> Dict[str, str]:
+        """
+        Extract all compute node names from messageflow XML and categorize them by type.
+        
+        Args:
+            msgflow_path: Path to messageflow XML file
+            
+        Returns:
+            Dictionary mapping node types to actual node names
+        """
+        try:
+            if not os.path.exists(msgflow_path):
+                print(f"⚠️ Messageflow file not found: {msgflow_path}")
+                return {}
+                
+            # Parse the XML
+            tree = ET.parse(msgflow_path)
+            root = tree.getroot()
+            
+            # Find all compute nodes in the messageflow
+            compute_nodes = {}
+            
+            # Use xpath or find to locate ComIbmCompute.msgnode nodes
+            nodes = root.findall(".//*[@xmi:type='ComIbmCompute.msgnode:FCMComposite_1']", 
+                            namespaces={'xmi': 'http://www.omg.org/XMI'})
+            
+            if not nodes:
+                # Try alternative approach for different XML structure
+                for elem in root.iter():
+                    if 'ComIbmCompute.msgnode:FCMComposite_1' in elem.get('xmi:type', ''):
+                        nodes.append(elem)
+            
+            # Process each compute node
+            for node in nodes:
+                # Get the node name (usually in a translation subelement)
+                name = None
+                for child in node:
+                    if 'translation' in child.tag:
+                        name = child.get('string')
+                        break
+                        
+                if not name:
+                    # Try getting the name from the node directly
+                    name = node.get('name') or node.get('translation')
+                
+                if name:
+                    # Determine node type based on name patterns
+                    node_type = None
+                    if any(suffix in name for suffix in self.module_type_suffixes['input_event']):
+                        node_type = 'input_event'
+                    elif any(suffix in name for suffix in self.module_type_suffixes['output_event']):
+                        node_type = 'output_event'
+                    elif any(suffix in name for suffix in self.module_type_suffixes['compute']):
+                        node_type = 'compute'
+                    elif any(suffix in name for suffix in self.module_type_suffixes['processing']):
+                        node_type = 'processing'
+                    elif any(suffix in name for suffix in self.module_type_suffixes['failure']):
+                        node_type = 'failure'
+                    else:
+                        # Default to compute type if can't determine
+                        node_type = 'compute'
+                    
+                    compute_nodes[node_type] = name
+                    
+            print(f"✅ Extracted {len(compute_nodes)} compute nodes from messageflow")
+            return compute_nodes
+            
+        except Exception as e:
+            print(f"❌ Error extracting compute nodes: {str(e)}")
+            return {}    
+
+
     # ============================================================================
     # PART 1: BUSINESS REQUIREMENTS ANALYSIS
     # ============================================================================
@@ -637,12 +712,12 @@ END MODULE;
             return template_content[start_idx:].strip()
         
 
-    
-    # Modified method signature to accept both template_dict and esql_template
+        
     def generate_esql_files(self, vector_content: str, template_dict: Dict = None, msgflow_content: Dict = None, 
-                           json_mappings: Dict = None, output_dir: str = None, esql_template: str = None) -> Dict:
+                        json_mappings: Dict = None, output_dir: str = None, esql_template: str = None) -> Dict:
         """
         Generate ESQL files for a message flow based on vector content and template.
+        Uses the exact node names from messageflow XML without any hardcoded assumptions.
         
         Args:
             vector_content: Business requirements from Vector DB
@@ -703,10 +778,11 @@ END MODULE;
                 # Try to extract from business requirements
                 business_reqs = self.analyze_vector_content(vector_content)
                 flow_name = business_reqs.get('flow_name', "Default_Flow")
-                
+            
+            # Load naming convention
             naming_convention = self._load_naming_convention(output_dir)
             
-            # Step 2: Load ESQL template - pass the path directly, not the dictionary
+            # Step 2: Load ESQL template
             template_path = template_dict['path'] if isinstance(template_dict, dict) and 'path' in template_dict else template_dict
             template_content = self._load_esql_template(template_path)
             
@@ -717,7 +793,129 @@ END MODULE;
             if not self.required_nodes:
                 self.analyze_vector_content(vector_content)
             
-            # Step 4: Generate ESQL files for each required node
+            # Step 4: First check for existing ESQL files - this is critical to prevent file deletion
+            existing_esql_files = {}
+            if os.path.exists(output_dir):
+                for file in os.listdir(output_dir):
+                    if file.endswith('.esql'):
+                        base_name = os.path.splitext(file)[0]
+                        existing_esql_files[base_name] = os.path.join(output_dir, file)
+                
+                if existing_esql_files:
+                    print(f"✅ Found {len(existing_esql_files)} existing ESQL files in {output_dir}:")
+                    for name in existing_esql_files:
+                        print(f"   • {name}.esql")
+            
+            # Step 5: Extract all node names from messageflow file
+            all_compute_nodes = {}  # Will store node_name -> node_type mapping
+            all_esql_modules = {}   # Will store module_name -> esql_reference mapping
+            
+            if msgflow_content and 'path' in msgflow_content and os.path.exists(msgflow_content['path']):
+                try:
+                    msgflow_path = msgflow_content['path']
+                    print(f"🔍 Analyzing messageflow: {msgflow_path}")
+                    
+                    # Read the messageflow content
+                    with open(msgflow_path, 'r') as f:
+                        msgflow_content_xml = f.read()
+                    
+                    # 1. Extract ESQL module references directly from the messageflow
+                    # This pattern captures both module name and full ESQL reference
+                    esql_module_pattern = re.compile(r'value="(esql://routine/[^#]*#([^.]+)\.Main)"', re.DOTALL)
+                    esql_module_matches = esql_module_pattern.findall(msgflow_content_xml)
+                    
+                    if esql_module_matches:
+                        print(f"✅ Found {len(esql_module_matches)} ESQL module references:")
+                        for full_ref, module_name in esql_module_matches:
+                            print(f"   • {module_name} -> {full_ref}")
+                            all_esql_modules[module_name] = full_ref
+                            
+                            # Try to determine node type based on name patterns
+                            for type_name, suffixes in self.module_type_suffixes.items():
+                                if any(suffix in module_name for suffix in suffixes):
+                                    all_compute_nodes[module_name] = type_name
+                                    print(f"     (Detected as {type_name} type)")
+                                    break
+                    
+                    # 2. Extract compute node names from the messageflow
+                    compute_pattern = re.compile(r'<nodes.*?ComIbmCompute\.msgnode:FCMComposite_1.*?<translation[^>]*string="([^"]+)"', re.DOTALL)
+                    compute_matches = compute_pattern.findall(msgflow_content_xml)
+                    
+                    if compute_matches:
+                        print(f"✅ Found {len(compute_matches)} compute nodes:")
+                        for node_name in compute_matches:
+                            print(f"   • {node_name}")
+                            
+                            # Try to determine node type based on name patterns
+                            node_type = None
+                            for type_name, suffixes in self.module_type_suffixes.items():
+                                if any(suffix in node_name for suffix in suffixes):
+                                    node_type = type_name
+                                    break
+                                    
+                            if node_type:
+                                all_compute_nodes[node_name] = node_type
+                                print(f"     (Detected as {node_type} type)")
+                    
+                    # 3. Extract any dynamic nodes that might contain compute module references
+                    dynamic_pattern = re.compile(r'<node dynamic="true" id="([^"]+)"', re.DOTALL)
+                    dynamic_matches = dynamic_pattern.findall(msgflow_content_xml)
+                    
+                    if dynamic_matches:
+                        print(f"✅ Found {len(dynamic_matches)} dynamic nodes:")
+                        for node_name in dynamic_matches:
+                            print(f"   • {node_name}")
+                            
+                            # Try to determine node type based on name patterns
+                            node_type = None
+                            for type_name, suffixes in self.module_type_suffixes.items():
+                                if any(suffix in node_name for suffix in suffixes):
+                                    node_type = type_name
+                                    break
+                                    
+                            if node_type:
+                                all_compute_nodes[node_name] = node_type
+                                print(f"     (Detected as {node_type} type)")
+                    
+                except Exception as e:
+                    print(f"⚠️ Error extracting node names from messageflow: {str(e)}")
+            
+            # Step 6: Create a mapping from node types to actual node names
+            node_type_to_name = {}
+            
+            for node_name, node_type in all_compute_nodes.items():
+                if node_type not in node_type_to_name:
+                    # Make sure node_name has the flow_name prefix
+                    if flow_name and not node_name.startswith(flow_name):
+                        # If the node name doesn't have the flow name prefix, add it
+                        if any(suffix in node_name for suffix in sum(self.module_type_suffixes.values(), [])):
+                            # If it's just a plain node type like "StartEventMessage", add the prefix
+                            node_name = f"{flow_name}_{node_name}"
+                            
+                    node_type_to_name[node_type] = node_name
+                    print(f"✅ Mapped {node_type} to {node_name}")
+
+            # Fall back to using suffix-based mapping if no nodes found
+            if not node_type_to_name and flow_name:
+                for node_type, suffixes in self.module_type_suffixes.items():
+                    # Use first suffix as default
+                    if suffixes:
+                        # Always include the flow_name prefix
+                        node_type_to_name[node_type] = f"{flow_name}_{suffixes[0]}"
+                        print(f"⚠️ No node found for {node_type}, using default: {node_type_to_name[node_type]}")
+
+            # Special handling for StartEventMessage
+            if 'input_event' in node_type_to_name:
+                # If it contains InputEventMessage, replace with StartEventMessage
+                if '_InputEventMessage' in node_type_to_name['input_event']:
+                    node_type_to_name['input_event'] = node_type_to_name['input_event'].replace('_InputEventMessage', '_StartEventMessage')
+                    print(f"🔧 Using StartEventMessage instead of InputEventMessage: {node_type_to_name['input_event']}")
+                # If it doesn't have flow name prefix, add it
+                elif not node_type_to_name['input_event'].startswith(f"{flow_name}_"):
+                    node_type_to_name['input_event'] = f"{flow_name}_StartEventMessage"
+                    print(f"🔧 Adding flow name prefix to StartEventMessage: {node_type_to_name['input_event']}")
+            
+            # Step 7: Generate ESQL files for each required node
             for node_req in self.required_nodes:
                 node_name = node_req.get('name', '')
                 node_type = node_req.get('type', '')
@@ -729,29 +927,54 @@ END MODULE;
                 results['total_modules'] += 1
                 
                 try:
-                    # Get the appropriate suffix for this node type
-                    suffix = self._get_suffix_for_node_type(node_type)
-                    module_name = f"{flow_name}{suffix}"
+                    # Determine the module name to use based on the mapping
+                    if node_type in node_type_to_name:
+                        module_name = node_type_to_name[node_type]
+                        print(f"✅ Using mapped node name for {node_type}: {module_name}")
+                    else:
+                        # Fall back to default suffix
+                        suffix = self._get_suffix_for_node_type(node_type)
+                        module_name = f"{flow_name}{suffix}"
+                        print(f"⚠️ No mapped node found for {node_type}, using default: {module_name}")
                     
                     # Extract the appropriate section from the template
                     section_content = self._extract_template_section(template_content, node_type)
                     
                     if not section_content:
                         print(f"⚠️ Empty template section for {node_type}, using minimal template")
-                        # Create a minimal template section
                         section_content = self._create_minimal_template_section(node_type)
                     
                     # Replace module name in template
-                    esql_content = section_content.replace('{MODULE_NAME}', flow_name)
+                    # For the standard template, we need to replace the placeholder with actual module name
+                    if '_SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE' in section_content:
+                        for suffix in sum(self.module_type_suffixes.values(), []):
+                            pattern = f'_SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE{suffix}'
+                            if pattern in section_content:
+                                section_content = section_content.replace(pattern, module_name)
+                    
+                    # Replace generic {MODULE_NAME} placeholder if present
+                    esql_content = section_content.replace('{MODULE_NAME}', module_name)
+                    
+                    # Also handle BROKER SCHEMA replacement
+                    broker_schema_pattern = r'BROKER SCHEMA MODULE .*'
+                    if re.search(broker_schema_pattern, esql_content):
+                        broker_schema_replacement = f'BROKER SCHEMA {flow_name}'
+                        esql_content = re.sub(broker_schema_pattern, broker_schema_replacement, esql_content)
                     
                     # Create the ESQL file
                     esql_filename = f"{module_name}.esql"
                     esql_path = os.path.join(output_dir, esql_filename)
                     
+                    # Check if this file already exists
+                    if module_name in existing_esql_files:
+                        print(f"🔄 Updating existing ESQL file: {esql_filename}")
+                    else:
+                        print(f"✅ Creating new ESQL file: {esql_filename}")
+                    
+                    # Write the ESQL file
                     with open(esql_path, 'w') as f:
                         f.write(esql_content)
                     
-                    print(f"✅ Generated ESQL file: {esql_filename}")
                     results['successful'] += 1
                     results['esql_files'].append(esql_path)
                     

@@ -253,7 +253,7 @@ class PDFNamingExtractor:
         return []
                 
 
-    
+        
     def _create_naming_convention_json(self, extracted_data_list: list) -> bool:
         """Create naming_convention.json file(s) with extracted data"""
         try:
@@ -261,10 +261,24 @@ class PDFNamingExtractor:
             if isinstance(extracted_data_list, dict):
                 extracted_data_list = [extracted_data_list]
                 
-            # Create a file for each configuration
-            for idx, extracted_data in enumerate(extracted_data_list):
+            # Filter to only include message flow names that don't contain dots
+            valid_flows = []
+            for flow_data in extracted_data_list:
+                message_flow_name = flow_data.get("message_flow_name", "")
+                # Check if message_flow_name exists and doesn't contain dots
+                if message_flow_name and "." not in message_flow_name:
+                    valid_flows.append(flow_data)
+                    
+            print(f"ℹ️ Found {len(valid_flows)} valid message flows (without dots in name)")
+            
+            if not valid_flows:
+                print("⚠️ No valid message flow names found (all names contained dots)")
+                return False
+                
+            # Create a file for each valid flow configuration
+            for idx, extracted_data in enumerate(valid_flows):
                 # Determine filename (numbered if multiple)
-                if len(extracted_data_list) > 1:
+                if len(valid_flows) > 1:
                     # Start with 1 not 0 for user friendliness
                     output_file = f"naming_convention_{idx+1}.json"
                 else:

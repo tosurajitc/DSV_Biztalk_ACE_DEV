@@ -862,7 +862,7 @@ def render_program_1_ui():
     col1, col2, col3 = st.columns([1.5, 1, 1.5])  # Create center alignment
     with col2:
         if st.button(
-            "Run Agent 1 & create Mapping", 
+            "Generate Business requirement", 
             disabled=not st.session_state.vector_db_ready,
             type="primary" if st.session_state.vector_db_ready else "secondary",
             width="stretch",
@@ -1327,16 +1327,16 @@ def run_specification_mapping(biztalk_folder, confluence_pdf, groq_api_key, groq
     
 
 def render_program_2_ui():
-    """Render Program 2: DSV MessageFlow Generator - Enhanced with Vector DB"""
-    st.header("Agent 2: DSV MessageFlow Generator")
-    st.markdown("Generate DSV standard **ACE MessageFlow** with Vector DB optimization")
+    """Render Program 2: MessageFlow Generator - Enhanced with Vector DB"""
+    st.header("Agent 2: MessageFlow Generator")
+    st.markdown("Generate standard **ACE MessageFlow** with Vector DB optimization")
     
     # Validate backend availability
     try:
         from messageflow_generator import run_messageflow_generator
-        st.success("  DSV MessageFlow Generator ready")
+        st.success("  MessageFlow Generator ready")
     except ImportError as e:
-        st.error(f"  DSV MessageFlow Generator not available: {e}")
+        st.error(f"  MessageFlow Generator not available: {e}")
         st.error("Ensure updated messageflow_generator.py is available")
         return
     
@@ -1378,7 +1378,7 @@ def render_program_2_ui():
 
     
     st.subheader("  Automated Business Requirements")
-    # DSV MessageFlow Configuration - Generic hardcoded values (not displayed to user)
+    # MessageFlow Configuration - Generic hardcoded values (not displayed to user)
     app_name = None
     flow_name = None
 
@@ -1393,7 +1393,7 @@ def render_program_2_ui():
         st.error(f"  **Missing Required Inputs**: {', '.join(missing_inputs)}")
         return
 
-    if st.button("  Generate DSV MessageFlow", type="primary"):
+    if st.button("  Generate MessageFlow", type="primary"):
         run_messageflow_generation(
             confluence_doc=None,  # No longer needed - Vector DB provides content
             app_name=app_name,
@@ -1433,7 +1433,7 @@ def extract_messageflow_details_from_pdf_content(confluence_content: str) -> dic
 
 
 def run_messageflow_generation(confluence_doc, app_name, flow_name, groq_api_key, groq_model):
-    """Execute DSV MessageFlow generation with Vector DB integration"""
+    """Execute MessageFlow generation with Vector DB integration"""
     progress_placeholder = st.empty()
     status_placeholder = st.empty()
     
@@ -1587,11 +1587,11 @@ def run_messageflow_generation(confluence_doc, app_name, flow_name, groq_api_key
                 'timestamp': datetime.now().isoformat()
             }
             
-            status_placeholder.success("  DSV MessageFlow generation completed successfully!")
+            status_placeholder.success("  MessageFlow generation completed successfully!")
             
             # Display results with vector processing indicator
             vector_indicator = " (Vector DB Optimized)" if result.get('vector_processing') else ""
-            st.success(f"🚀 DSV MessageFlow Generated Successfully!{vector_indicator}")
+            st.success(f"🚀 MessageFlow Generated Successfully!{vector_indicator}")
             
             # Display metadata
             col1, col2, col3 = st.columns(3)
@@ -1657,7 +1657,7 @@ def run_messageflow_generation(confluence_doc, app_name, flow_name, groq_api_key
 def render_program_3_ui():
     """Render Program 3: ACE Module Creator UI - Single Input (Confluence PDF only)"""
     st.header("Agent 3: ACE Module Creator")
-    st.markdown("Pure Gen AI driven orchestration module manages 6 Agents to generate **ACE components**" \
+    st.markdown("Pure Gen AI driven orchestration module to generate **ACE components**" \
     "\n- Generates: application.descriptor\n- Generates: enrichment files\n- Generates: .ESQL Files\n- Generates: Schema .XSD files\n- Generates: .xsl FIles\n- Generates: .project File")
     
     # Check prerequisites
@@ -1740,7 +1740,7 @@ def render_program_3_ui():
 
     # Execution Button
     if input_validation:
-        if st.button("  Generate Enhanced ACE Project", type="primary", key="run_prog3"):
+        if st.button("  Generate ACE Modules", type="primary", key="run_prog3"):
             run_program_3(groq_api_key)
     else:
         st.button("  Generate Enhanced ACE Project", disabled=True, help="Fix validation errors first")
@@ -1778,8 +1778,8 @@ def run_program_3(groq_api_key):
 
 
 def render_program_4_ui():
-    """Render Program 4: Smart Migration Quality Reviewer UI - Template-Driven, <10K Tokens"""
-    st.header("Agent 4: Smart Migration Quality Reviewer")
+    """Render Program 4: ACE Module Quality Reviewer UI - Template-Driven, <10K Tokens"""
+    st.header("Agent 4: ACE Quality Reviewer")
     st.markdown("Validates ACE component quality with ACE toolkit and creates **ACE toolkit deployable** component folder")
     
     # Check prerequisites
@@ -1800,7 +1800,7 @@ def render_program_4_ui():
     # Run button
     col1, col2, col3 = st.columns([2, 1, 2])
     with col2:
-        run_button = st.button("🚀 Start Smart Review", type="primary", width='stretch')
+        run_button = st.button("🚀 Start Quality Review", type="primary", width='stretch')
     
     if run_button:
         # Create progress placeholders

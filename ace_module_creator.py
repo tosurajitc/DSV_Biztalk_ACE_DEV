@@ -96,6 +96,12 @@ class ACEModuleCreator:
         # Step 4: Generate final report
         return self._generate_final_report(results)
     
+
+
+
+
+
+    
     def _validate_prerequisites(self):
         """Validate all required files exist"""
         print("\n🔍 Validating prerequisites...")
@@ -257,6 +263,8 @@ class ACEModuleCreator:
                 'project': True
             }
     
+
+
     def _process_single_flow(self, context: FlowContext) -> Dict:
         """Process one messageflow through required generators only"""
         start_time = time.time()
@@ -274,6 +282,18 @@ class ACEModuleCreator:
             # Detect which modules are needed based on messageflow nodes
             required_modules = self._detect_required_modules(context.msgflow_path)
             
+            # Add additional_components to required modules - always check for subflows
+            # We'll assume this is needed based on flow analysis, without a helper method
+            with open(context.msgflow_path, 'r') as f:
+                msgflow_content = f.read()
+                required_modules['additional_components'] = any(indicator in msgflow_content 
+                                                            for indicator in ['componentName=', 
+                                                                            'FCMSource', 
+                                                                            'FCMSink',
+                                                                            '.subflow:',
+                                                                            'RECSATInput',
+                                                                            'RECSATOutput'])
+            
             print(f"\n📋 Execution Plan:")
             for module, needed in required_modules.items():
                 status = "✅ Required" if needed else "⏭️ Skipped"
@@ -284,6 +304,12 @@ class ACEModuleCreator:
                 results['modules']['schema'] = self._run_schema_generator(context)
             else:
                 results['skipped_modules'].append('schema')
+            
+            # NEW Module: Additional Components (subflows, etc.) - placed between schema and ESQL
+            if required_modules['additional_components']:
+                results['modules']['additional_components'] = self._run_additional_components_generator(context)
+            else:
+                results['skipped_modules'].append('additional_components')
             
             # Module 2: ESQL Generation (conditional)
             if required_modules['esql']:
@@ -332,6 +358,56 @@ class ACEModuleCreator:
         return results
     
 
+    def _run_additional_components_generator(self, context: FlowContext) -> Dict:
+        """Execute additional components generator to create subflows and other components"""
+        print("\n🧩 Step: Additional Components Generation (Subflows)")
+        start = time.time()
+        
+        try:
+            # Import the additional components generator
+            from additional_ACE_components import AdditionalComponentsGenerator
+            
+            # Create the generator
+            generator = AdditionalComponentsGenerator()
+            
+            # Run analysis and generation
+            business_req_path = str(self.business_requirements_path)
+            result = generator.analyze_and_generate(
+                msgflow_path=context.msgflow_path,
+                output_dir=context.output_subdir,
+                business_req_path=business_req_path
+            )
+            
+            # Count the generated components
+            total_components = (
+                len(result.get('esql', [])) + 
+                len(result.get('subflows', [])) + 
+                len(result.get('wsdl', [])) + 
+                len(result.get('additional_xsl', []))
+            )
+            
+            print(f"  ✅ Generated {total_components} additional components:")
+            print(f"    • Subflows: {len(result.get('subflows', []))}")
+            print(f"    • Additional ESQL: {len(result.get('esql', []))}")
+            print(f"    • WSDL: {len(result.get('wsdl', []))}")
+            print(f"    • XSL: {len(result.get('additional_xsl', []))}")
+            
+            return {
+                'status': 'success',
+                'files_generated': total_components,
+                'llm_calls': 0,  # No LLM calls here
+                'execution_time': time.time() - start
+            }
+            
+        except Exception as e:
+            print(f"  ❌ Additional components generation failed: {e}")
+            return {
+                'status': 'failed',
+                'error': str(e),
+                'execution_time': time.time() - start
+            }
+    
+    
 
     
     def _run_schema_generator(self, context: FlowContext) -> Dict:

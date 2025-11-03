@@ -2,6 +2,7 @@
 """
 Migration Quality Reviewer - ACE Project Structure Finalizer
 Creates production-ready IBM ACE project folders with proper naming conventions
+and strictly filters out unwanted ACE components
 """
 
 import os
@@ -9,32 +10,19 @@ import json
 import shutil
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Set
 
 
 class MigrationQualityReviewer:
-    """Smart and efficient ACE project structure finalizer"""
+    """Smart and efficient ACE project structure finalizer with strict component filtering"""
     
     def __init__(self, source_dir: str = "output/multiple"):
-        """
-        Initialize the migration reviewer
-        
-        Args:
-            source_dir: Source directory containing generated ACE projects
-        """
+        """Initialize the migration reviewer"""
         self.source_dir = Path(source_dir)
         self.root_dir = Path.cwd()  # Project root directory
-
-
-
         
     def process_all_projects(self) -> List[str]:
-        """
-        Process all projects in the source directory with duplicate project name detection
-        
-        Returns:
-            List of created project folder names
-        """
+        """Process all projects in the source directory"""
         if not self.source_dir.exists():
             raise FileNotFoundError(f"Source directory not found: {self.source_dir}")
         
@@ -49,33 +37,138 @@ class MigrationQualityReviewer:
         if not project_folders:
             raise ValueError(f"No project folders found in {self.source_dir}")
         
-        print(f"🔍 Found {len(project_folders)} projects to migrate")
+        print(f"🔍 Found {len(project_folders)} projects to analyze")
         
-        # NEW: Detect duplicate project names and assign versions
+        # Detect duplicate project names and assign versions
         project_name_mapping = self._detect_duplicate_app_names(project_folders)
         
         for project_folder in project_folders:
             try:
-                project_name = self._migrate_project(project_folder, project_name_mapping)
-                created_projects.append(project_name)
-                print(f"✅ Migrated: {project_name}")
+                # Get required components before migration
+                msgflow_files = list(project_folder.glob("*.msgflow"))
+                if not msgflow_files:
+                    print(f"⚠️ Skipping {project_folder.name}: No messageflow file found")
+                    continue
+                    
+                # Parse messageflow to get required components
+                required_components = self._get_required_components(msgflow_files[0])
+                if not required_components:
+                    print(f"⚠️ Skipping {project_folder.name}: No components found in messageflow")
+                    continue
+                
+                print(f"📋 Found required components in {project_folder.name}:")
+                for component in required_components:
+                    print(f"  - {component}")
+                
+                # Proceed with migration
+                project_name = self._migrate_project(project_folder, project_name_mapping, required_components)
+                if project_name:
+                    created_projects.append(project_name)
+                    print(f"✅ Migrated: {project_name}")
             except Exception as e:
-                print(f"❌ Failed to migrate {project_folder.name}: {e}")
+                print(f"❌ Failed to process {project_folder.name}: {e}")
         
         return created_projects
-
-
-
-    def _detect_duplicate_app_names(self, project_folders: List[Path]) -> Dict[str, Dict]:
+    
+    def _get_required_components(self, msgflow_file: Path) -> Set[str]:
         """
-        Detect duplicate project names and assign version numbers
+        Parse messageflow XML file to identify required ACE components
         
         Args:
-            project_folders: List of project folder paths
+            msgflow_file: Path to the messageflow file
             
         Returns:
-            Dict mapping folder names to versioning info
+            Set of required ACE component names
         """
+        try:
+            # Parse XML with all namespaces
+            with open(msgflow_file, 'r') as f:
+                content = f.read()
+                
+            # Print first 100 chars of file for debugging
+            print(f"  Debug - Messageflow content preview: {content[:100]}...")
+                
+            root = ET.fromstring(content)
+            
+            # Extract all component types and names
+            required_components = set()
+            
+            # 1. Check for node types in format "ComIbm*.msgnode:*"
+            for elem in root.findall(".//*"):
+                # Check element tag for node types
+                tag = elem.tag
+                if ":" in tag:
+                    namespace, node_type = tag.split("}")[-1].split(":")
+                    if namespace.startswith("ComIbm") and namespace.endswith(".msgnode"):
+                        component_name = namespace
+                        required_components.add(component_name)
+                        print(f"    Found node type: {component_name}")
+            
+            # 2. Check for subflow references
+            for elem in root.findall(".//*[@componentName]"):
+                subflow_name = elem.get("componentName")
+                if subflow_name:
+                    required_components.add(subflow_name)
+                    print(f"    Found subflow: {subflow_name}")
+            
+            # 3. Extract ESQL modules from computeExpression attributes
+            for elem in root.findall(".//*[@computeExpression]"):
+                expr = elem.get("computeExpression")
+                if expr and expr.startswith("esql://"):
+                    parts = expr.split("#")
+                    if len(parts) > 1:
+                        module_parts = parts[1].split(".")
+                        if len(module_parts) > 0:
+                            esql_module = module_parts[0]
+                            required_components.add(esql_module)
+                            print(f"    Found ESQL module: {esql_module}")
+            
+            return required_components
+            
+        except ET.ParseError as e:
+            print(f"  ⚠️ XML parsing error in {msgflow_file}: {e}")
+            # Fallback to simpler parsing method for non-standard XML
+            return self._fallback_parse_messageflow(msgflow_file)
+        except Exception as e:
+            print(f"  ⚠️ Error extracting components from {msgflow_file}: {e}")
+            return set()
+    
+    def _fallback_parse_messageflow(self, msgflow_file: Path) -> Set[str]:
+        """Fallback method for parsing messageflow when XML parsing fails"""
+        required_components = set()
+        try:
+            with open(msgflow_file, 'r') as f:
+                content = f.read()
+            
+            # Look for ComIbm*.msgnode patterns
+            import re
+            node_matches = re.findall(r'ComIbm[A-Za-z0-9]+\.msgnode', content)
+            for match in node_matches:
+                required_components.add(match)
+                print(f"    Found node (fallback): {match}")
+                
+            # Look for ESQL references
+            esql_matches = re.findall(r'esql://routine/([A-Za-z0-9_]+)#', content)
+            for match in esql_matches:
+                if match:
+                    required_components.add(match)
+                    print(f"    Found ESQL (fallback): {match}")
+                    
+            # Look for subflow references
+            subflow_matches = re.findall(r'componentName="([A-Za-z0-9_]+)"', content)
+            for match in subflow_matches:
+                if match:
+                    required_components.add(match)
+                    print(f"    Found subflow (fallback): {match}")
+                    
+            return required_components
+            
+        except Exception as e:
+            print(f"  ⚠️ Even fallback parsing failed for {msgflow_file}: {e}")
+            return set()
+
+    def _detect_duplicate_app_names(self, project_folders: List[Path]) -> Dict[str, Dict]:
+        """Detect duplicate project names and assign version numbers"""
         project_name_counts = {}
         project_name_mapping = {}
         
@@ -146,18 +239,18 @@ class MigrationQualityReviewer:
         
         return project_name_mapping 
 
-
-
-    def _migrate_project(self, source_project_dir: Path, app_name_mapping: Dict[str, Dict] = None) -> str:
+    def _migrate_project(self, source_project_dir: Path, app_name_mapping: Dict[str, Dict], 
+                         required_components: Set[str]) -> str:
         """
-        Migrate a single project to production-ready structure with versioning support
+        Migrate a single project, strictly filtering components
         
         Args:
             source_project_dir: Source project directory
-            app_name_mapping: Mapping of folder names to versioning info (optional for backward compatibility)
+            app_name_mapping: Mapping of folder names to versioning info
+            required_components: Set of required component names
             
         Returns:
-            Final project name
+            Final project name or None if project should be skipped
         """
         # Read naming convention
         naming_path = source_project_dir / "naming_convention.json"
@@ -193,15 +286,28 @@ class MigrationQualityReviewer:
         
         final_project_dir.mkdir(parents=True)
         
-        # Copy and organize components
-        self._copy_project_files(source_project_dir, final_project_dir)
+        # Now strictly copy only required components
+        self._strictly_copy_required_files(source_project_dir, final_project_dir, required_components, msgflow_name)
+        
+        # Make sure ESQL folder is renamed
         self._rename_esql_folder(final_project_dir, msgflow_name)
+        
+        # Update project file
         self._update_project_file(final_project_dir, project_name)
         
+        # IMPORTANT: Explicitly remove naming_convention.json if it was copied
+        naming_file = final_project_dir / "naming_convention.json"
+        if naming_file.exists():
+            os.remove(naming_file)
+            print(f"  🗑️ Removed naming_convention.json from final output")
+        
+        # Verify the removal worked
+        if naming_file.exists():
+            print(f"  ⚠️ WARNING: Failed to remove naming_convention.json!")
+        else:
+            print(f"  ✅ Confirmed naming_convention.json is removed")
+        
         return project_name
-
-
-
     
     def _extract_naming_params(self, naming_data: Dict) -> Tuple[str, str]:
         """Extract project_name and msgflow_name from naming convention"""
@@ -229,36 +335,112 @@ class MigrationQualityReviewer:
             
         except Exception as e:
             raise ValueError(f"Invalid naming_convention.json format: {e}")
+        
+
+        
     
-    def _copy_project_files(self, source_dir: Path, target_dir: Path) -> None:
-        """Copy all project files to target directory"""
+    def _strictly_copy_required_files(self, source_dir: Path, target_dir: Path, 
+                                    required_components: Set[str], msgflow_name: str) -> None:
+        """
+        Strictly copy only the required files based on messageflow analysis
         
-        # Files to copy directly
-        direct_files = [
-            "naming_convention.json",
-            "application.descriptor",
-            ".project"
-        ]
+        Args:
+            source_dir: Source directory
+            target_dir: Target directory
+            required_components: Set of required component names
+            msgflow_name: Name of the messageflow (without extension)
+        """
+        print(f"  🔍 Strictly copying only required components")
         
-        # Copy direct files
-        for file_name in direct_files:
-            source_file = source_dir / file_name
-            if source_file.exists():
-                shutil.copy2(source_file, target_dir / file_name)
-        
-        # Copy msgflow file
+        # 1. Always copy the messageflow file itself
         msgflow_files = list(source_dir.glob("*.msgflow"))
         if msgflow_files:
-            shutil.copy2(msgflow_files[0], target_dir / msgflow_files[0].name)
+            msgflow_file = msgflow_files[0]
+            shutil.copy2(msgflow_file, target_dir / msgflow_file.name)
+            print(f"  📄 Copied messageflow: {msgflow_file.name}")
         
-        # Copy directories
-        directories_to_copy = ["schemas", "transforms", "enrichment", "esql"]
+        # 2. Always copy .project file (needed for ACE Toolkit)
+        project_file = source_dir / ".project"
+        if project_file.exists():
+            shutil.copy2(project_file, target_dir / ".project")
+            print(f"  📄 Copied .project file")
         
-        for dir_name in directories_to_copy:
-            source_subdir = source_dir / dir_name
-            if source_subdir.exists():
-                target_subdir = target_dir / dir_name
-                shutil.copytree(source_subdir, target_subdir)
+        # 3. Always copy application.descriptor (needed for ACE Toolkit)
+        app_desc = source_dir / "application.descriptor"
+        if app_desc.exists():
+            shutil.copy2(app_desc, target_dir / "application.descriptor")
+            print(f"  📄 Copied application.descriptor")
+        
+        # 4. Filter ESQL files - only copy modules referenced in messageflow
+        esql_dir = source_dir / "esql"
+        if esql_dir.exists():
+            target_esql = target_dir / "esql"
+            os.makedirs(target_esql, exist_ok=True)
+            
+            # Check each ESQL file
+            esql_files = list(esql_dir.glob("**/*.esql"))
+            copied_esql = False
+            
+            for esql_file in esql_files:
+                # Get module name from file name
+                module_name = esql_file.stem
+                
+                # Extract parent folder name if in subdirectory
+                relative_path = esql_file.relative_to(esql_dir)
+                parent_folder = relative_path.parts[0] if len(relative_path.parts) > 1 else None
+                
+                # Check if this module or its parent folder is required
+                is_required = (
+                    module_name in required_components or 
+                    (parent_folder and parent_folder in required_components) or
+                    msgflow_name == module_name or
+                    (parent_folder and msgflow_name == parent_folder)
+                )
+                
+                if is_required:
+                    # Preserve the directory structure when copying
+                    target_file = target_esql / relative_path
+                    os.makedirs(target_file.parent, exist_ok=True)
+                    shutil.copy2(esql_file, target_file)
+                    copied_esql = True
+                    print(f"  📄 Copied required ESQL: {relative_path}")
+                else:
+                    print(f"  🗑️ Skipped unreferenced ESQL: {relative_path}")
+            
+            # If no ESQL files were copied, remove the empty directory
+            if not copied_esql:
+                shutil.rmtree(target_esql)
+                print(f"  🗑️ Removed empty esql directory")
+        
+        # 5. Copy subflows directory - ADDED THIS PART
+        subflows_dir = source_dir / "subflows"
+        if subflows_dir.exists() and any(subflows_dir.iterdir()):
+            target_subflows = target_dir / "subflows"
+            shutil.copytree(subflows_dir, target_subflows)
+            print(f"  📁 Copied subflows directory")
+        
+        # 6. Handle schemas directory - ACE might need these for validation
+        schemas_dir = source_dir / "schemas"
+        if schemas_dir.exists() and list(schemas_dir.glob("**/*.xsd")):
+            target_schemas = target_dir / "schemas"
+            shutil.copytree(schemas_dir, target_schemas)
+            print(f"  📁 Copied schemas directory (with XSD files)")
+        
+        # 7. Handle transforms directory - only copy if XSL files exist
+        transforms_dir = source_dir / "transforms"
+        if transforms_dir.exists() and list(transforms_dir.glob("**/*.xsl")):
+            target_transforms = target_dir / "transforms"
+            shutil.copytree(transforms_dir, target_transforms)
+            print(f"  📁 Copied transforms directory (with XSL files)")
+        
+        # 8. Handle enrichment directory - only copy if files exist
+        enrichment_dir = source_dir / "enrichment"
+        if enrichment_dir.exists() and any(enrichment_dir.iterdir()):
+            target_enrichment = target_dir / "enrichment"
+            shutil.copytree(enrichment_dir, target_enrichment)
+            print(f"  📁 Copied enrichment directory (with content)")
+
+
     
     def _rename_esql_folder(self, project_dir: Path, msgflow_name: str) -> None:
         """Rename esql folder to msgflow_name"""
@@ -266,8 +448,17 @@ class MigrationQualityReviewer:
         
         if esql_dir.exists():
             target_dir = project_dir / msgflow_name
-            esql_dir.rename(target_dir)
-            print(f"  📁 Renamed: esql → {msgflow_name}")
+            
+            # Make sure target doesn't already exist
+            if target_dir.exists():
+                print(f"  ⚠️ Target directory {msgflow_name}/ already exists, can't rename esql/")
+                return
+                
+            try:
+                esql_dir.rename(target_dir)
+                print(f"  📁 Renamed: esql → {msgflow_name}")
+            except Exception as e:
+                print(f"  ⚠️ Error renaming esql folder: {e}")
     
     def _update_project_file(self, project_dir: Path, project_name: str) -> None:
         """Update .project file with correct project name"""
@@ -385,7 +576,7 @@ class SmartACEQualityReviewer:
             print(f"✅ Migration successful: {final_path}")
             return final_path
         else:
-            raise Exception("No projects were successfully migrated - check if naming_convention.json exists in project folders")
+            raise Exception("No projects were successfully migrated")
 
 
 if __name__ == "__main__":
