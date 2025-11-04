@@ -1,10 +1,16 @@
-from typing import List, Dict
-from .vector_store import ChromaVectorStore
+from typing import List, Dict, Any, Optional
+from vector_store import VectorStore, SearchResult
 
 class SemanticSearchEngine:
-    def __init__(self, vector_store: ChromaVectorStore):
+    def __init__(self, vector_store: Optional[VectorStore] = None):
+        """
+        Initialize the semantic search engine
+        
+        Args:
+            vector_store: Optional vector store instance
+        """
         self.vector_store = vector_store
-        self.collection = None
+        
         # Define agent-specific search queries
         self.agent_queries = {
             'component_mapper': [
@@ -72,47 +78,37 @@ class SemanticSearchEngine:
             ],
         }
 
-    def ensure_collection_exists(self):
-        """Ensure collection is properly initialized"""
+    def ensure_vector_store_exists(self) -> bool:
+        """Ensure vector store is properly initialized"""
         try:
-            if self.collection is None:
-                # Re-create collection if missing
-                if hasattr(self, 'vector_store') and self.vector_store:
-                    self.collection = self.vector_store.collection
-                    
-                    # Check if collection is still None after assignment
-                    if self.collection is None:
-                        print("🔧 Force creating collection in SemanticSearchEngine")
-                        # Create a new vector store if needed
-                        from .vector_store import ChromaVectorStore
-                        if not hasattr(self, 'vector_store') or self.vector_store is None:
-                            self.vector_store = ChromaVectorStore()
-                        
-                        # Create a new collection with an empty knowledge base if needed
-                        if hasattr(self.vector_store, 'create_collection'):
-                            self.vector_store.create_collection()
-                        
-                        # Get the new collection
-                        self.collection = self.vector_store.collection
-                else:
-                    # Initialize vector store if missing
-                    from .vector_store import ChromaVectorStore
-                    self.vector_store = ChromaVectorStore()
-                    self.collection = self.vector_store.collection
+            if self.vector_store is None:
+                # Initialize vector store if missing
+                from vector_store import VectorStore
+                self.vector_store = VectorStore(
+                    collection_name="business_requirements",
+                    persist_directory="business_requirement/chroma_db"
+                )
             
-            return self.collection is not None
+            return self.vector_store is not None
         
         except Exception as e:
-            print(f"Collection creation failed: {e}")
+            print(f"Vector store creation failed: {e}")
             return False
     
     def get_agent_content(self, agent_name: str, top_k: int = 5) -> str:
         """
-        ENHANCED: Get focused content for specific agent with diagram data integration
+        Get focused content for specific agent with diagram data integration
+        
+        Args:
+            agent_name: Name of the agent to retrieve content for
+            top_k: Number of results to return
+            
+        Returns:
+            str: Formatted content for the agent
         """
-        # Check collection exists first
-        if not self.ensure_collection_exists():
-            return f"No content available - collection not initialized"
+        # Check vector store exists first
+        if not self.ensure_vector_store_exists():
+            return f"No content available - vector store not initialized"
             
         # Check if agent name is valid
         if agent_name not in self.agent_queries:
@@ -120,8 +116,12 @@ class SemanticSearchEngine:
         
         queries = self.agent_queries[agent_name]
         
-        # Search for relevant chunks with diagram priority
-        results = self.vector_store.search_for_agent_with_diagrams(agent_name, queries, top_k)
+        # Search for relevant chunks with agent-specific search
+        results = self.vector_store.agent_specific_search(
+            agent_name=agent_name,
+            queries=queries,
+            k=top_k
+        )
         
         if not results:
             return f"No relevant content found for {agent_name}"
@@ -135,16 +135,19 @@ class SemanticSearchEngine:
         regular_sections = []
         
         for i, result in enumerate(results, 1):
-            content = result['content']
-            metadata = result['metadata']
+            content = result.content
+            metadata = result.metadata
             
-            has_technical_diagrams = metadata.get('has_technical_diagrams', False) or metadata.get('has_diagrams', False)
+            has_technical_diagrams = (
+                metadata.get('has_technical_diagrams', False) or 
+                metadata.get('has_diagrams', False)
+            )
             
             section_info = {
                 'index': i,
-                'score': result['score'],
-                'source': metadata.get('section', 'Unknown'),
-                'query': result['query'],
+                'score': result.score,
+                'source': metadata.get('section', metadata.get('section_type', 'Unknown')),
+                'query': result.query,
                 'content': content,
                 'has_technical_diagrams': has_technical_diagrams,
                 'diagram_count': metadata.get('diagram_count', 0)
@@ -165,7 +168,7 @@ class SemanticSearchEngine:
             
             # Add diagram indicator
             if section['has_technical_diagrams']:
-                content_parts.append(f"🔍 CONTAINS TECHNICAL DIAGRAMS ({section['diagram_count']} diagrams)")
+                content_parts.append(f"📊 CONTAINS TECHNICAL DIAGRAMS ({section['diagram_count']} diagrams)")
             
             content_parts.append(section['content'])
             content_parts.append("")  # Empty line for separation
@@ -180,10 +183,18 @@ class SemanticSearchEngine:
         print(f"✅ {agent_name}: Retrieved {len(results)} relevant chunks ({len(focused_content)} chars) - {len(diagram_sections)} with diagrams")
         return focused_content
     
-    def get_search_summary(self, agent_name: str) -> Dict:
-        """Get summary of search results for monitoring"""
-        # Check collection exists first
-        if not self.ensure_collection_exists():
+    def get_search_summary(self, agent_name: str) -> Dict[str, Any]:
+        """
+        Get summary of search results for monitoring
+        
+        Args:
+            agent_name: Name of the agent
+            
+        Returns:
+            Dict: Summary statistics
+        """
+        # Check vector store exists first
+        if not self.ensure_vector_store_exists():
             return {
                 'agent': agent_name,
                 'queries_used': 0,
@@ -194,13 +205,20 @@ class SemanticSearchEngine:
             }
             
         queries = self.agent_queries[agent_name]
-        results = self.vector_store.search_for_agent_with_diagrams(agent_name, queries, 3)
+        results = self.vector_store.agent_specific_search(
+            agent_name=agent_name,
+            queries=queries,
+            k=3
+        )
         
         return {
             'agent': agent_name,
             'queries_used': len(queries),
             'chunks_found': len(results),
-            'avg_relevance': sum(r['score'] for r in results) / len(results) if results else 0,
-            'content_size_chars': sum(len(r['content']) for r in results),
-            'sections_covered': list(set(r['metadata'].get('section', 'Unknown') for r in results))
+            'avg_relevance': sum(r.score for r in results) / len(results) if results else 0,
+            'content_size_chars': sum(len(r.content) for r in results),
+            'sections_covered': list(set(
+                r.metadata.get('section', r.metadata.get('section_type', 'Unknown')) 
+                for r in results
+            ))
         }

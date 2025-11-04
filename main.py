@@ -19,12 +19,14 @@ from bs4 import BeautifulSoup
 from fetch_naming import run_pdf_naming_extraction
 from cleanup_manager import CleanupManager
 from ace_module_creator import create_ace_project, ACEModuleCreator
+from vector_knowledge.chunk_creator import create_chunks
 # Vector DB imports - MANDATORY, no fallback
 try:
     from vector_knowledge.pdf_processor import AdaptivePDFProcessor
     from vector_knowledge.vector_store import ChromaVectorStore
     from vector_knowledge.semantic_search import SemanticSearchEngine
     from vector_knowledge.pipeline_integration import VectorOptimizedPipeline
+    from vector_knowledge.chunk_creator import create_chunks
     
     VECTOR_DB_AVAILABLE = True
     VECTOR_PIPELINE_AVAILABLE = True
@@ -540,6 +542,10 @@ def render_program_1_ui():
         st.session_state.confluence_content = ""
     if 'confluence_fetch_error' not in st.session_state:
         st.session_state.confluence_fetch_error = None
+    if 'biztalk_analysis_completed' not in st.session_state:
+        st.session_state.biztalk_analysis_completed = False
+    if 'biztalk_analysis_error' not in st.session_state:
+        st.session_state.biztalk_analysis_error = None
     if 'vector_db_ready' not in st.session_state:
         st.session_state.vector_db_ready = False
     if 'agent1_completed' not in st.session_state:
@@ -547,27 +553,8 @@ def render_program_1_ui():
     if 'agent1_error' not in st.session_state:
         st.session_state.agent1_error = None
     
-def render_program_1_ui():
-    """Render Program 1: BizTalk to ACE Mapper UI - REDESIGNED"""
-    
-    st.header("Agent 1: BizTalk to ACE Mapper")
-    st.markdown("Business specification-driven **intelligent mapping** with sequential workflow")
-    
-    # Initialize session states if not exists
-    if 'cleanup_completed' not in st.session_state:
-        st.session_state.cleanup_completed = False
-    if 'inputs_provided' not in st.session_state:
-        st.session_state.inputs_provided = False
-    if 'business_input_method' not in st.session_state:
-        st.session_state.business_input_method = 'pdf'
-    if 'confluence_content' not in st.session_state:
-        st.session_state.confluence_content = ""
-    if 'vector_db_ready' not in st.session_state:
-        st.session_state.vector_db_ready = False
-    if 'agent1_completed' not in st.session_state:
-        st.session_state.agent1_completed = False
-    if 'agent1_error' not in st.session_state:
-        st.session_state.agent1_error = None
+    # Define business_requirement directory constant
+    BUSINESS_REQUIREMENT_DIR = "business_requirement"
     
     # ===== STEP 1: CLEANUP & RESET BUTTON (Center Position, Always Available) =====
     st.markdown("---")
@@ -583,11 +570,14 @@ def render_program_1_ui():
                 try:
                     # Initialize CleanupManager
                     cleanup_manager = CleanupManager(
-                        chroma_db_path="chroma_db",
-                        output_dir="output",
+                        chroma_db_path=os.path.join(BUSINESS_REQUIREMENT_DIR, "chroma_db"),
+                        output_dir=BUSINESS_REQUIREMENT_DIR,
                         root_cleanup_patterns=[
                             "naming_convention*.json",
-                            "msgflow_template.xml"
+                            "msgflow_template.xml",
+                            "*_requirements.html",  # Clean up any dynamically named HTML files
+                            "consolidated_analysis.json",
+                            "debug_chunks.json"
                         ]
                     )
                     
@@ -625,6 +615,8 @@ def render_program_1_ui():
                     # Reset session states
                     st.session_state.cleanup_completed = True
                     st.session_state.inputs_provided = False
+                    st.session_state.biztalk_analysis_completed = False
+                    st.session_state.biztalk_analysis_error = None
                     st.session_state.vector_db_ready = False
                     st.session_state.agent1_completed = False
                     st.session_state.confluence_content = ""
@@ -664,12 +656,12 @@ def render_program_1_ui():
     st.markdown("---")
     st.markdown("### Step 2: Provide Required Inputs")
     
-    # BizTalk Folder Input C:\@Official\@Gen AI\DSV\BizTalk\MH.ESB.EE.Out.DocPackApp\MH.ESB.EE.Out.DocPackApp
+    # BizTalk Folder Input 
     biztalk_folder = st.text_input(
-        "**BizTalk Folder Path**",
+        "**BizTalk Folder Path** (Optional)",
         disabled=not st.session_state.cleanup_completed,
         value="",
-        help="Path to your BizTalk project folder containing maps and schemas"
+        help="Path to your BizTalk project folder containing maps and schemas (Optional, enhances results when provided)"
     )
     
     # Business Requirements Input - Two Options
@@ -761,8 +753,7 @@ def render_program_1_ui():
     
     # Check if inputs are provided
     inputs_ready = (
-        st.session_state.cleanup_completed and 
-        # biztalk_folder and  # FIXED: Made BizTalk folder OPTIONAL 
+        st.session_state.cleanup_completed and
         (
             (business_input_method == "PDF Upload" and uploaded_file is not None) or
             (business_input_method == "Confluence URL" and st.session_state.confluence_content)
@@ -784,13 +775,90 @@ def render_program_1_ui():
         if input_sources:
             st.success(f"✅ Inputs provided: {', '.join(input_sources)}")
         else:
-            st.success("✅ Ready to setup Vector DB")
+            st.success("✅ Ready to process business requirements")
 
-    
+    # ===== NEW STEP: ANALYZE BIZTALK COMPONENTS (Optional, if BizTalk folder provided) =====
+    if biztalk_folder:
+        st.markdown("---")
+        st.markdown("### Step 3: Analyze BizTalk Components")
+        
+        col1, col2, col3 = st.columns([1.5, 1, 1.5])  # Create center alignment
+        with col2:
+            if st.button(
+                "🔍 Analyze BizTalk Components", 
+                disabled=not inputs_ready,
+                type="primary" if inputs_ready else "secondary",
+                width="stretch",
+                help="Extract business requirements from BizTalk components"
+            ):
+                try:
+                    with st.spinner("Analyzing BizTalk components..."):
+                        # Import the BizTalk analyzer
+                        from biztalk_llm_analyzer import BizTalkLLMAnalyzer
+                        
+                        # Setup business requirement directory
+                        os.makedirs(BUSINESS_REQUIREMENT_DIR, exist_ok=True)
+                        
+                        # Create analyzer instance with output in business_requirement directory
+                        analyzer = BizTalkLLMAnalyzer(
+                            input_dir=biztalk_folder,
+                            output_dir=BUSINESS_REQUIREMENT_DIR,  # Save to business_requirement directory
+                            cache_dir=os.path.join(BUSINESS_REQUIREMENT_DIR, "cache")  # Cache in business_requirement directory
+                        )
+                        
+                        # Run the analysis
+                        analyzer.process()
+                        
+                        # Check if consolidated_analysis.json was created
+                        consolidated_file = os.path.join(BUSINESS_REQUIREMENT_DIR, "consolidated_analysis.json")
+                        if os.path.exists(consolidated_file):
+                            st.session_state.biztalk_analysis_completed = True
+                            st.session_state.biztalk_analysis_error = None
+                            
+                            # Get the dynamically named HTML file
+                            html_files = [f for f in os.listdir(BUSINESS_REQUIREMENT_DIR) if f.endswith("_requirements.html")]
+                            if html_files:
+                                st.session_state.biztalk_html_file = os.path.join(BUSINESS_REQUIREMENT_DIR, html_files[0])
+                            
+                            st.success("✅ BizTalk analysis completed!")
+                        else:
+                            st.session_state.biztalk_analysis_completed = False
+                            st.session_state.biztalk_analysis_error = "Consolidated analysis file not found"
+                            st.error("  BizTalk analysis failed: Consolidated analysis file not found")
+                except Exception as e:
+                    error_message = str(e)
+                    st.session_state.biztalk_analysis_completed = False
+                    st.session_state.biztalk_analysis_error = error_message
+                    st.error(f"  BizTalk analysis failed: {error_message}")
+                    import traceback
+                    with st.expander("📁Error Details"):
+                        st.code(traceback.format_exc())
+        
+        # Display BizTalk analysis status
+        if st.session_state.get('biztalk_analysis_completed', False):
+            st.success("✅ BizTalk analysis completed!")
+            
+            # Show HTML file link if available
+            if 'biztalk_html_file' in st.session_state and os.path.exists(st.session_state.biztalk_html_file):
+                html_filename = os.path.basename(st.session_state.biztalk_html_file)
+                st.markdown(f"📄 Generated HTML: **{html_filename}**")
+                
+                # Display a preview of the HTML file content
+                with st.expander("Preview Business Requirements Document", expanded=False):
+                    with open(st.session_state.biztalk_html_file, 'r', encoding='utf-8') as f:
+                        html_content = f.read()
+                    st.components.v1.html(html_content, height=400, scrolling=True)
+        
+        elif st.session_state.get('biztalk_analysis_error'):
+            st.error(f"BizTalk analysis failed: {st.session_state.biztalk_analysis_error}")
+            
+        elif inputs_ready and biztalk_folder:
+            st.info("📄 Click 'Analyze BizTalk Components' to extract business requirements from BizTalk files")
 
-    # ===== STEP 3: SETUP VECTOR KNOWLEDGE BASE =====
+    # ===== STEP: SETUP VECTOR KNOWLEDGE BASE =====
     st.markdown("---")
-    st.markdown("### Step 3: Setup Vector Knowledge Base")
+    step_number = "4" if biztalk_folder else "3"
+    st.markdown(f"### Step {step_number}: Setup Vector Knowledge Base")
     
     # ✅ FIX: Check if PDF uploaded OR Confluence content available
     inputs_ready = (
@@ -812,20 +880,65 @@ def render_program_1_ui():
         ):
             try:
                 with st.spinner("Setting up Vector Knowledge Base..."):
-                    # ✅ Show correct processing message based on source
+                    # Import required modules
+                    from vector_knowledge.chunk_creator import create_chunks
+                    from vector_knowledge.vector_store import VectorStore
+                    
+                    # Ensure business_requirement directory exists
+                    os.makedirs(BUSINESS_REQUIREMENT_DIR, exist_ok=True)
+                    
+                    # Determine content source
                     if uploaded_file is not None:
-                        success = setup_vector_knowledge_base(uploaded_file, "Agent 1")
+                        content_source = uploaded_file
+                        st.write("📄 Processing PDF file...")
                     elif st.session_state.get('confluence_content'):
-                        st.write("🌐 Processing Confluence content...")
-                        success = setup_vector_knowledge_base(st.session_state.confluence_content, "Agent 1")
+                        content_source = st.session_state.confluence_content
+                        st.write("🌐 Processing Confluence content...")
                     else:
                         st.error("  No content source available!")
-                        success = False
+                        raise ValueError("No content source available")
+                    
+                    # Check if consolidated_analysis.json exists from BizTalk analysis
+                    consolidated_json_path = os.path.join(BUSINESS_REQUIREMENT_DIR, "consolidated_analysis.json")
+                    if os.path.exists(consolidated_json_path) and st.session_state.get('biztalk_analysis_completed', False):
+                        st.write("📋 Using BizTalk component analysis to enhance Vector DB")
+                    else:
+                        consolidated_json_path = None
+                    
+                    # Create debug output path
+                    debug_output_path = os.path.join(BUSINESS_REQUIREMENT_DIR, "debug_chunks.json")
+                    
+                    # Create chunks using chunk_creator
+                    chunks = create_chunks(
+                        content_source=content_source,
+                        consolidated_json_path=consolidated_json_path,
+                        debug_output_path=debug_output_path
+                    )
+                    
+                    if not chunks:
+                        st.error("  No chunks created from content!")
+                        raise ValueError("No chunks created from content")
+                    
+                    # Create vector store
+                    vector_store = VectorStore(
+                        collection_name="agent1_requirements",
+                        persist_directory=os.path.join(BUSINESS_REQUIREMENT_DIR, "chroma_db")
+                    )
+                    
+                    # Add chunks to vector store
+                    success = vector_store.add_chunks(chunks)
                     
                     if success:
                         st.session_state.vector_db_ready = True
                         st.session_state.agent1_error = None
-                        st.success("✅ Vector Knowledge Base setup completed!")
+                        
+                        # Store stats in pipeline progress
+                        if 'pipeline_progress' in st.session_state and 'program_1' in st.session_state.pipeline_progress:
+                            st.session_state.pipeline_progress['program_1']['vector_content_length'] = sum(len(chunk['content']) for chunk in chunks)
+                            st.session_state.pipeline_progress['program_1']['chunks_created'] = len(chunks)
+                            st.session_state.pipeline_progress['program_1']['enhanced_with_biztalk'] = consolidated_json_path is not None
+                        
+                        st.success(f"✅ Vector Knowledge Base setup completed with {len(chunks)} chunks!")
                     else:
                         st.session_state.vector_db_ready = False
                         st.error("  Vector Knowledge Base setup failed!")
@@ -833,6 +946,9 @@ def render_program_1_ui():
             except Exception as e:
                 st.error(f"  Vector Knowledge Base setup failed: {str(e)}")
                 st.session_state.vector_db_ready = False
+                import traceback
+                with st.expander("📁Error Details"):
+                    st.code(traceback.format_exc())
     
     # Show vector DB status
     if st.session_state.get('vector_db_ready', False):
@@ -845,9 +961,10 @@ def render_program_1_ui():
     else:
         st.warning("⚠️ Please upload a PDF or provide Confluence content first")
 
-    # ===== STEP 4: RUN AGENT 1 (Disabled until Vector DB ready) =====
+    # ===== STEP: RUN AGENT 1 (Disabled until Vector DB ready) =====
     st.markdown("---")
-    st.markdown("### Step 4: Execute Agent 1")
+    final_step_number = "5" if biztalk_folder else "4"
+    st.markdown(f"### Step {final_step_number}: Execute Agent 1")
     
     # Check for successful run from pipeline progress
     program_1_status = st.session_state.pipeline_progress.get('program_1', {}).get('status')
@@ -857,8 +974,6 @@ def render_program_1_ui():
         st.error(f"Agent 1 failed: {st.session_state.agent1_error}")
     
     # Execute button
-
-
     col1, col2, col3 = st.columns([1.5, 1, 1.5])  # Create center alignment
     with col2:
         if st.button(
@@ -874,23 +989,29 @@ def render_program_1_ui():
                     # Get required parameters
                     groq_api_key = os.getenv('GROQ_API_KEY', '')
                     groq_model = os.getenv('GROQ_MODEL', 'llama-3.1-8b-instant')
-                    output_dir = "output"
                     
                     # Clear any existing error
                     st.session_state.agent1_error = None
                     
-                    # Use the proper high-level method that handles Vector DB integration
-                    result = run_specification_mapping(
-                        biztalk_folder=biztalk_folder,
-                        confluence_pdf=None,  # Vector DB will be used
+                    # Import VectorOptimizedPipeline
+                    from vector_knowledge.pipeline_integration import VectorOptimizedPipeline
+                    
+                    # Create pipeline
+                    pipeline = VectorOptimizedPipeline()
+                    
+                    # Run the mapping process with vector search
+                    result = run_specification_mapping_with_vector(
+                        pipeline=pipeline,
+                        biztalk_folder=biztalk_folder, 
                         groq_api_key=groq_api_key,
                         groq_model=groq_model,
-                        output_dir=output_dir
+                        output_dir=BUSINESS_REQUIREMENT_DIR
                     )
 
-                    st.session_state.pipeline_progress['program_1']['components_processed'] = result.get('components_processed', 0)
-                    st.session_state.pipeline_progress['program_1']['mappings_generated'] = result.get('mappings_generated', 0)
-                    st.session_state.pipeline_progress['program_1']['vector_content_length'] = result.get('vector_content_length', 0)
+                    # Update pipeline progress
+                    if 'pipeline_progress' in st.session_state and 'program_1' in st.session_state.pipeline_progress:
+                        st.session_state.pipeline_progress['program_1']['components_processed'] = result.get('components_processed', 0)
+                        st.session_state.pipeline_progress['program_1']['mappings_generated'] = result.get('mappings_generated', 0)
                     
                     st.session_state.agent1_completed = True
                     st.success("✅ Agent 1 execution completed!")
@@ -908,14 +1029,13 @@ def render_program_1_ui():
         st.markdown("---")
         st.markdown("## Generated Files")
         
-        # Get generated files
-        output_dir = "output"
-        if os.path.exists(output_dir):
+        # Get generated files from business_requirement directory
+        if os.path.exists(BUSINESS_REQUIREMENT_DIR):
             files_found = False
             
-            for file in os.listdir(output_dir):
-                file_path = os.path.join(output_dir, file)
-                if os.path.isfile(file_path):
+            for file in os.listdir(BUSINESS_REQUIREMENT_DIR):
+                file_path = os.path.join(BUSINESS_REQUIREMENT_DIR, file)
+                if os.path.isfile(file_path) and not file.startswith('.'):
                     files_found = True
                     st.success(f"  {file}")
             
@@ -926,9 +1046,49 @@ def render_program_1_ui():
                 st.success(f"  {msgflow_path}")
             
             if not files_found:
-                st.warning("No output files found in the output directory.")
+                st.warning(f"No output files found in the {BUSINESS_REQUIREMENT_DIR} directory.")
         else:
-            st.warning("Output directory not found. Please run Agent 1 first.")
+            st.warning(f"{BUSINESS_REQUIREMENT_DIR} directory not found. Please run Agent 1 first.")
+
+
+# Helper function for vector-based mapping
+def run_specification_mapping_with_vector(pipeline, biztalk_folder, groq_api_key, groq_model, output_dir):
+    """
+    Run specification mapping with vector search
+    
+    Args:
+        pipeline: VectorOptimizedPipeline instance
+        biztalk_folder: Path to BizTalk folder
+        groq_api_key: API key for Groq
+        groq_model: Model name for Groq
+        output_dir: Output directory for generated files
+        
+    Returns:
+        Dict with results
+    """
+    from biztalk_ace_mapper import BizTalkACEMapper
+    
+    # Initialize mapper
+    mapper = BizTalkACEMapper(
+        biztalk_folder=biztalk_folder,
+        output_dir=output_dir,
+        llm_api_key=groq_api_key,
+        llm_model=groq_model
+    )
+    
+    # Create mapping lambda that will be called with vector content
+    mapping_function = lambda content: mapper.generate_ace_components(
+        biztalk_folder=biztalk_folder,
+        confluence_pdf=content,  # Use vector content instead of raw PDF
+        use_vector=True  # Flag to indicate we're using vector content
+    )
+    
+    # Run with vector search
+    result = pipeline.run_agent_with_vector_search("component_mapper", mapping_function)
+    
+    return result
+
+
 
 
 def debug_vector_db_state(context=""):
@@ -1193,135 +1353,6 @@ def verify_business_requirements_quality():
         print(f"  Adaptive business verification failed: {e}")
         return False
 
-
-def run_specification_mapping(biztalk_folder, confluence_pdf, groq_api_key, groq_model, output_dir):
-    """Execute specification-driven mapping with Vector DB optimization"""
-    progress_placeholder = st.empty()
-    status_placeholder = st.empty()
-    
-    try:
-        # Update status
-        st.session_state.pipeline_progress['program_1']['status'] = 'running'
-        progress_placeholder.progress(0)
-        status_placeholder.info("  Initializing Specification-Driven Mapper...")
-        
-        # Set environment variables
-        os.environ['GROQ_API_KEY'] = groq_api_key
-        os.environ['GROQ_MODEL'] = groq_model
-        
-        # Initialize mapper
-        from biztalk_ace_mapper import BizTalkACEMapper
-        mapper = BizTalkACEMapper()
-        
-        progress_placeholder.progress(20)
-        
-        # Vector DB Integration Check
-        if (st.session_state.get('vector_enabled', False) and 
-            st.session_state.get('vector_ready', False) and 
-            st.session_state.get('vector_pipeline')):
-            
-            status_placeholder.info("  Using Vector DB for focused business requirements...")
-            progress_placeholder.progress(40)
-            
-            # Create agent function that BizTalkACEMapper expects
-            def agent_function(focused_content):
-                """Agent function that receives focused vector content"""
-                return mapper.process_mapping(
-                    biztalk_files=biztalk_folder,
-                    pdf_file=focused_content,  # Vector focused content (text)
-                    output_dir=output_dir
-                )
-            
-            progress_placeholder.progress(60)
-            status_placeholder.info("  Running intelligent mapping with Vector optimization...")
-            
-            # Use Vector DB pipeline to get focused content and run agent
-            result = st.session_state.vector_pipeline.run_agent_with_vector_search(
-                agent_name="component_mapper",
-                agent_function=agent_function
-            )
-            
-            progress_placeholder.progress(90)
-            status_placeholder.info("  Vector DB processing completed!")
-            
-            # Add vector processing indicators to result
-            result['vector_processing'] = True
-            result['processing_method'] = 'Vector DB Optimization'
-            
-        else:
-            # Vector DB not available - raise error (no fallback)
-            error_msg = "Vector DB not enabled or not ready. Please setup Vector Knowledge Base first."
-            
-            if not st.session_state.get('vector_enabled', False):
-                error_msg = "Vector DB is disabled. Please enable Vector DB in sidebar."
-            elif not st.session_state.get('vector_ready', False):
-                error_msg = "Vector DB not ready. Please setup Vector Knowledge Base using PDF upload."
-            elif not st.session_state.get('vector_pipeline'):
-                error_msg = "Vector DB pipeline not initialized. Please restart the application."
-            
-            progress_placeholder.error(f"  {error_msg}")
-            raise Exception(f"Vector DB Error: {error_msg}")
-        
-        progress_placeholder.progress(100)
-        
-        # Update session state - IMPORTANT UPDATE HERE
-        st.session_state.pipeline_progress['program_1']['status'] = 'success'
-        st.session_state.pipeline_progress['program_1']['output'] = result.get('json_file')
-        st.session_state.pipeline_progress['program_1']['timestamp'] = datetime.now()
-
-        st.session_state.pipeline_progress['program_1']['components_processed'] = result.get('components_processed', 0)
-        st.session_state.pipeline_progress['program_1']['mappings_generated'] = result.get('mappings_generated', 0)
-        st.session_state.pipeline_progress['program_1']['vector_content_length'] = result.get('vector_content_length', 0)
-        
-        
-        # Add msgflow_template to session state for other agents to use
-        if 'msgflow_template' in result:
-            st.session_state.pipeline_progress['program_1']['msgflow_template'] = result['msgflow_template']
-        
-        # Success message with vector info
-        vector_info = ""
-        if result.get('vector_processing'):
-            vector_info = f" (Vector optimized: {result.get('vector_content_length', 0)} chars)"
-        
-        status_placeholder.success(f"  Specification-driven mapping completed!")
-        
-        # Clear the error message container if it exists
-        if 'agent1_error_container' in st.session_state:
-            st.session_state.agent1_error_container = None
-        
-        # Force UI refresh
-        st.rerun()
-        
-        return result
-        
-    except Exception as e:
-        # Update status
-        st.session_state.pipeline_progress['program_1']['status'] = 'error'
-        st.session_state.pipeline_progress['program_1']['error_message'] = str(e)
-        st.session_state.pipeline_progress['program_1']['timestamp'] = datetime.now()
-        
-        progress_placeholder.progress(100)
-        status_placeholder.error(f"  Mapping failed: {str(e)}")
-        
-        # Store error for display
-        st.session_state.agent1_error_container = str(e)
-        
-        # Enhanced error handling for Vector DB issues
-        error_msg = str(e).lower()
-        if "vector" in error_msg or "knowledge base" in error_msg:
-            st.error("  Vector DB issue. Please check Vector Knowledge Base status.")
-        elif "groq" in error_msg or "api" in error_msg:
-            st.error("  LLM API issue. Please verify your GROQ API key is valid and has sufficient credits.")
-        else:
-            st.error("  Check your inputs and try again")
-            
-        # Show error details
-        with st.expander("  Error Details"):
-            import traceback
-            st.code(traceback.format_exc())
-        
-        progress_placeholder.empty()
-        raise e
     
 
     

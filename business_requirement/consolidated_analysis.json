@@ -1,0 +1,68 @@
+{
+  "business_entities": [
+    "Transformations:",
+    "*",
+    "Patterns:",
+    "Note: Please keep your response concise and to the point.",
+    "Rules:"
+  ],
+  "business_rules": [
+    "*",
+    "Patterns:",
+    "Note: Please keep your response concise and to the point."
+  ],
+  "transformations": [
+    "*",
+    "Rules:",
+    "Patterns:",
+    "Note: Please keep your response concise and to the point."
+  ],
+  "integration_points": [
+    "MH.ESB.Common.HelperClasses"
+  ],
+  "message_formats": [],
+  "technical_components": {
+    "map": [
+      {
+        "name": "WINFRD_To_CDMMessage.btm",
+        "summary": "mapsource Name=\"WINFRD_To_CDMMessage\" Version=\"1."
+      }
+    ],
+    "pipeline": [
+      {
+        "name": "rpl_WINFRDOutbound.btp",
+        "summary": "ReceivePipelineData>\n  <Pipeline>WINFRDOutbound</Pipeline>\n  <Description>Outbound pipeline for WINF..."
+      }
+    ],
+    "schema": [
+      {
+        "name": "CDMMessage_V2.xsd",
+        "summary": "xs:schema xmlns:xs=\"http://www."
+      },
+      {
+        "name": "HeaderPropertySchema_V2.xsd",
+        "summary": "xs:schema xmlns:xs=\"http://www."
+      },
+      {
+        "name": "SharedDataTypes_V2.xsd",
+        "summary": "xs:schema xmlns:xs=\"http://www."
+      },
+      {
+        "name": "WINFRD.xsd",
+        "summary": "xs:schema xmlns:xs=\"http://www."
+      }
+    ],
+    "xslt": [
+      {
+        "name": "WINFRD_To_CDMMessage.xsl",
+        "summary": "ns0:WINFRD_To_CDMMessage xmlns:ns0=\"http://Microsoft."
+      }
+    ],
+    "xml": [
+      {
+        "name": "ExtensionObjects.xml",
+        "summary": "This component registers an XSLT extension object for use in transformations"
+      }
+    ]
+  }
+}
