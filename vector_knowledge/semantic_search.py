@@ -14,10 +14,12 @@ class SemanticSearchEngine:
                 'integration flow diagrams and message routing'
             ],
             'messageflow_generator': [
-                'message flow patterns and routing logic with flow diagrams',
-                'system integration diagrams and connection points',
-                'data flow diagrams between applications and services',
-                'technical architecture diagrams and message processing flows'
+                'ACE message flow MQ queue input output configuration',
+                'message queue names queue manager IBM MQ input terminal',
+                'ACE receive flow MQInput MQOutput node configuration',
+                'message flow technical diagram excluding SFTP satellite DMZ',
+                'ACE application flow architecture MQ-based integration',
+                'queue-to-queue transformation ACE message flow pattern'
             ],
             'esql_generator': [
                 'database lookup diagrams and stored procedures',

@@ -1,0 +1,72 @@
+/*
+================================================================================
+COMPUTE TEMPLATE - RECSAT
+================================================================================
+*/
+BROKER SCHEMA MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE
+CREATE COMPUTE MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE__InputEventMessage
+
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+		BEGIN
+			-- CALL CopyMessageHeaders();
+			CALL CopyEntireMessage();
+			IF (NOT EXISTS(OutputRoot.MQRFH2.*[])) THEN
+				CREATE PREVIOUSSIBLING OF OutputRoot.BLOB DOMAIN 'MQRFH2' NAME 'MQRFH2';
+			END IF;
+			SET OutputRoot.MQRFH2.usr.FileName = InputLocalEnvironment.File.Name;
+			SET OutputRoot.MQRFH2.usr.Directory = InputLocalEnvironment.File.Directory;
+			RETURN TRUE;
+		END;
+ 
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+ 
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+/*
+================================================================================
+COMPUTE TEMPLATE - SNDSAT
+================================================================================
+*/
+BROKER SCHEMA MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE
+CREATE COMPUTE MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE__InputEventMessage
+
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		 CALL CopyEntireMessage();
+		 DELETE FIELD OutputRoot.MQMD;
+		 DELETE FIELD OutputRoot.MQRFH2;
+		 DECLARE rfhRef REFERENCE TO InputRoot.MQRFH2.usr;
+		 CREATE FIELD OutputLocalEnvironment.Destination.File;
+		 DECLARE refFile REFERENCE TO OutputLocalEnvironment.Destination.File;
+		 --Sample FTP URL: \\Dsv.com\corp\apps\APP-4059\BYWMS2020\PreProd\hostin\%SourceFileName% 
+		 SET refFile.Name 									= rfhRef.Filename;	
+		 SET refFile.Directory	 						 	= SUBSTRING(rfhRef.URL BEFORE '%SourceFileName%');
+
+		RETURN TRUE;
+	END;
+ 
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+ 
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;

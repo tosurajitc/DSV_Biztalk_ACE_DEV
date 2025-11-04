@@ -71,6 +71,8 @@ class ESQLGenerator:
             'input_event': ['INPUT AND OUTPUT EVENT MESSAGE TEMPLATE - METADATA ONLY', 'COMPUTE TEMPLATE - FULL BUSINESS LOGIC'],
             'output_event': ['INPUT AND OUTPUT EVENT MESSAGE TEMPLATE - METADATA ONLY', 'COMPUTE TEMPLATE - FULL BUSINESS LOGIC'],
             'compute': ['COMPUTE TEMPLATE - FULL BUSINESS LOGIC', 'PROCESSING TEMPLATE'],
+            'compute_recsat': ['COMPUTE TEMPLATE - RECSAT', 'COMPUTE TEMPLATE - SNDSAT'],  # NEW
+            'compute_sndsat': ['COMPUTE TEMPLATE - SNDSAT', 'PROCESSING TEMPLATE'],  # NEW
             'processing': ['PROCESSING TEMPLATE - VALIDATION AND ROUTING ONLY', 'FAILURE/ERROR HANDLING TEMPLATE'],
             'failure': ['FAILURE/ERROR HANDLING TEMPLATE', None]  # Last section
         }
@@ -707,7 +709,74 @@ END MODULE;
                 return template_content[start_idx:]
                 
             end_idx = template_content.find(end_marker)
-            return template_content[start_idx:end_idx].strip()
+            section = template_content[start_idx:end_idx].strip()
+
+            # Remove template marker comments and comment delimiters from the extracted section
+            template_markers_to_remove = [
+                'COMPUTE TEMPLATE - FULL BUSINESS LOGIC',
+                'INPUT AND OUTPUT EVENT MESSAGE TEMPLATE - METADATA ONLY',
+                'PROCESSING TEMPLATE',
+                'COMPUTE TEMPLATE - RECSAT',      
+                'COMPUTE TEMPLATE - SNDSAT'       
+            ]
+
+            for marker in template_markers_to_remove:
+                if marker in section:
+                    # Find and remove the entire comment block containing the marker
+                    lines = section.split('\n')
+                    cleaned_lines = []
+                    in_comment_block = False
+                    
+                    for i, line in enumerate(lines):
+                        stripped_line = line.strip()
+                        
+                        # Check if this line contains the marker
+                        if marker in line:
+                            in_comment_block = True
+                            continue
+                        
+                        # Skip comment opening delimiters
+                        if '/*' in stripped_line and (i + 1 < len(lines) and marker in lines[i + 1]):
+                            continue
+                        
+                        # Skip comment closing delimiters after marker
+                        if '*/' in stripped_line and in_comment_block:
+                            in_comment_block = False
+                            continue
+                        
+                        # Skip separator lines (==== or ----)
+                        if stripped_line and (stripped_line.startswith('=') or stripped_line.startswith('-')):
+                            if len(set(stripped_line)) == 1:  # All same character
+                                continue
+                        
+                        # Skip standalone */ or /* or *
+                        if stripped_line in ['*/', '/*', '*']:
+                            continue
+                        
+                        # Add valid lines
+                        if line.strip():  # Only non-empty lines
+                            cleaned_lines.append(line)
+                    
+                    section = '\n'.join(cleaned_lines).strip()
+
+            # Final cleanup: remove any leading/trailing comment delimiters that might remain
+            section = section.lstrip('*/').lstrip('/*').strip()
+            section = section.rstrip('*/').rstrip('/*').strip()
+
+            # Remove trailing comment blocks at the end
+            if section.endswith('*/'):
+                # Find the start of the trailing comment block
+                last_comment_start = section.rfind('/*')
+                if last_comment_start != -1:
+                    # Check if there's only comment stuff after this point
+                    potential_comment = section[last_comment_start:].strip()
+                    if potential_comment.startswith('/*') and potential_comment.endswith('*/'):
+                        # Check if it only contains comment delimiters and separators
+                        comment_content = potential_comment[2:-2].strip()
+                        if not comment_content or all(c in '=- \n\r\t' for c in comment_content):
+                            section = section[:last_comment_start].strip()
+
+            return section
         else:
             return template_content[start_idx:].strip()
         
@@ -938,28 +1007,63 @@ END MODULE;
                         print(f"⚠️ No mapped node found for {node_type}, using default: {module_name}")
                     
                     # Extract the appropriate section from the template
-                    section_content = self._extract_template_section(template_content, node_type)
+                    actual_node_type = node_type
+                    if node_type == 'compute':
+                        if flow_name and flow_name.endswith('RECSAT'):
+                            actual_node_type = 'compute_recsat'
+                            print(f"  🔍 Detected RECSAT flow, using RECSAT compute template")
+                        elif flow_name and flow_name.endswith('SNDSAT'):
+                            actual_node_type = 'compute_sndsat'
+                            print(f"  🔍 Detected SNDSAT flow, using SNDSAT compute template")
+
+                    section_content = self._extract_template_section(template_content, actual_node_type)
+
                     
                     if not section_content:
-                        print(f"⚠️ Empty template section for {node_type}, using minimal template")
-                        section_content = self._create_minimal_template_section(node_type)
+                        # If RECSAT/SNDSAT template not found, fallback to regular compute template
+                        if actual_node_type in ['compute_recsat', 'compute_sndsat']:
+                            print(f"⚠️ {actual_node_type} template not found, falling back to regular compute template")
+                            section_content = self._extract_template_section(template_content, 'compute')
+                        
+                        if not section_content:
+                            print(f"⚠️ Empty template section for {node_type}, using minimal template")
+                            section_content = self._create_minimal_template_section(node_type)
                     
                     # Replace module name in template
                     # For the standard template, we need to replace the placeholder with actual module name
-                    if '_SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE' in section_content:
+                    base_placeholder = '_SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE'
+
+                    if base_placeholder in section_content:
+                        # First, try to match with suffixes (handles cases like __Compute, _InputEventMessage)
+                        replaced = False
                         for suffix in sum(self.module_type_suffixes.values(), []):
-                            pattern = f'_SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE{suffix}'
-                            if pattern in section_content:
-                                section_content = section_content.replace(pattern, module_name)
+                            # Handle both single and double underscore patterns
+                            for separator in ['_', '__']:
+                                pattern = f'{base_placeholder}{separator}{suffix.lstrip("_")}'
+                                if pattern in section_content:
+                                    section_content = section_content.replace(pattern, module_name)
+                                    replaced = True
+                                    print(f"  ✅ Replaced placeholder pattern: {pattern} -> {module_name}")
+                        
+                        # If no suffix match found, replace the base placeholder directly
+                        if not replaced and base_placeholder in section_content:
+                            section_content = section_content.replace(base_placeholder, module_name)
+                            print(f"  ✅ Replaced base placeholder: {base_placeholder} -> {module_name}")
                     
                     # Replace generic {MODULE_NAME} placeholder if present
                     esql_content = section_content.replace('{MODULE_NAME}', module_name)
                     
-                    # Also handle BROKER SCHEMA replacement
-                    broker_schema_pattern = r'BROKER SCHEMA MODULE .*'
-                    if re.search(broker_schema_pattern, esql_content):
-                        broker_schema_replacement = f'BROKER SCHEMA {flow_name}'
-                        esql_content = re.sub(broker_schema_pattern, broker_schema_replacement, esql_content)
+
+                    broker_schema_patterns = [
+                        r'BROKER SCHEMA MODULE .*',
+                        r'BROKER SCHEMA _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE'
+                    ]
+
+                    for broker_schema_pattern in broker_schema_patterns:
+                        if re.search(broker_schema_pattern, esql_content):
+                            broker_schema_replacement = f'BROKER SCHEMA {flow_name}'
+                            esql_content = re.sub(broker_schema_pattern, broker_schema_replacement, esql_content)
+                            print(f"  ✅ Replaced BROKER SCHEMA with: {broker_schema_replacement}")
                     
                     # Create the ESQL file
                     esql_filename = f"{module_name}.esql"

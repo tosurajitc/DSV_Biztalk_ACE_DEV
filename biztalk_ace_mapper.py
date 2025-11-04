@@ -1101,66 +1101,7 @@ class BizTalkACEMapper:
             print(f"  PDF extraction failed: {e}")
             return ""
     
-    def load_standard_esql_template(self) -> str:
-        """Load the standard ESQL template"""
-        template = """
-CREATE COMPUTE MODULE _SYSTEM___MSG_TYPE___FLOW_PROCESS___SYSTEM2___FLOW_TYPE__InputEventMessage
-	CREATE FUNCTION Main() RETURNS BOOLEAN
-	BEGIN
-		
-		DECLARE episInfo 		REFERENCE TO 	Environment.variables.EventData.episInfo;
-		DECLARE sourceInfo 		REFERENCE TO 	Environment.variables.EventData.sourceInfo;
-		DECLARE targetInfo 		REFERENCE TO 	Environment.variables.EventData.targetInfo;
-		DECLARE integrationInfo REFERENCE TO 	Environment.variables.EventData.integrationInfo;
-		DECLARE dataInfo 		REFERENCE TO 	Environment.variables.EventData.dataInfo;
-		
-		SET sourceInfo.srcAppIdentifier 		= InputRoot.XMLNSC.[<].*:Header.*:Source.*:Identifier; 
-		SET sourceInfo.srcEnterpriseCode	 	= InputRoot.XMLNSC.[<].*:Header.*:Source.*:EnterpriseCode;
-		SET sourceInfo.srcDivision		 		= InputRoot.XMLNSC.[<].*:Header.*:Source.*:Division;
-		SET sourceInfo.srcDepartmentCode 		= InputRoot.XMLNSC.[<].*:Header.*:Source.*:DepartmentCode;
-		SET sourceInfo.srcBranchCode 			= InputRoot.XMLNSC.[<].*:Header.*:Source.*:BranchCode;
-		SET sourceInfo.srcCountryCode 			= InputRoot.XMLNSC.[<].*:Header.*:Source.*:CountryCode;	
-		SET sourceInfo.srcCompanyCode 			= InputRoot.XMLNSC.[<].*:Header.*:Source.*:CompanyCode;
-		SET sourceInfo.srcApplicationCode 		= InputRoot.XMLNSC.[<].*:Header.*:Source.*:ApplicationCode;
-		
-		SET targetInfo.tgtAppIdentifier 		= InputRoot.XMLNSC.[<].*:Header.*:Target.*:Identifier; 	
-		SET targetInfo.tgtEnterpriseCode 		= InputRoot.XMLNSC.[<].*:Header.*:Target.*:EnterpriseCode; 
-		SET targetInfo.tgtDivision 				= InputRoot.XMLNSC.[<].*:Header.*:Target.*:Division; 
-		SET targetInfo.tgtDepartmentCode 		= InputRoot.XMLNSC.[<].*:Header.*:Target.*:DepartmentCode; 
-		SET targetInfo.tgtBranchCode 			= InputRoot.XMLNSC.[<].*:Header.*:Target.*:branchCode;
-		SET targetInfo.tgtCountryCode 			= InputRoot.XMLNSC.[<].*:Header.*:Target.*:CountryCode;  
-		SET targetInfo.tgtCompanyCode 			= InputRoot.XMLNSC.[<].*:Header.*:Target.*:CompanyCode; 
-		SET targetInfo.tgtApplicationCode 		= InputRoot.XMLNSC.[<].*:Header.*:Target.*:ApplicationCode; 
-	
-		SET dataInfo.messageType = InputRoot.XMLNSC.[<].*:Header.*:MessageType;		
-		SET dataInfo.dataFormat = 'XML';
-		SET dataInfo.mainIdentifier = InputRoot.XMLNSC.[<].*:ShipmentInstruction.*:ShipmentDetails.*:ShipmentId;
-		SET dataInfo.customReference1		= ''; 						
-		SET dataInfo.customReference1Type	= ''; 	
-		SET dataInfo.customReference2		= ''; 	
-		SET dataInfo.customReference2Type	= ''; 	
-		SET dataInfo.customReference3		= ''; 	
-		SET dataInfo.customReference3Type	= ''; 
-		SET dataInfo.customReference4		= ''; 
-		SET dataInfo.customReference4Type	= '';
-		SET dataInfo.customProperty1		= '';
-		SET dataInfo.customProperty1Type	= '';
-		SET dataInfo.customProperty2		= '';
-		SET dataInfo.customProperty2Type	= '';
-		SET dataInfo.customProperty3		= '';
-		SET dataInfo.customProperty3Type	= '';
-		SET dataInfo.customProperty4		= '';
-		SET dataInfo.customProperty4Type	= '';
-		SET dataInfo.batch = false;
-		SET OutputRoot=NULL;
 
-	RETURN TRUE;
-	END;
-END MODULE;
-"""
-        self.esql_template = template.strip()
-        print("Standard ESQL template loaded")
-        return self.esql_template
     
     def validate_esql_syntax(self, esql_content: str) -> Dict:
         """Validate ESQL template syntax"""
@@ -1745,18 +1686,21 @@ END MODULE;
 
     def extract_business_requirements(self, pdf_content: str) -> Dict:
         """
-        Extract comprehensive business requirements with only one primary message flow
+        LLM-based intelligent extraction of business requirements from Vector DB content
         
         Args:
-            pdf_content: PDF content text
+            pdf_content: Focused content from Vector DB search
             
         Returns:
-            Dict with extracted business requirements according to template
+            Dict with extracted business requirements
         """
         try:
-            print("🔍 Extracting comprehensive business requirements...")
+            print("🔍 Extracting business requirements using LLM intelligence...")
             
-            # Initialize business requirements structure
+            if not self.groq_client:
+                raise Exception("LLM client not initialized. Cannot extract business requirements.")
+            
+            # Initialize base structure
             business_requirements = {
                 "extraction_timestamp": datetime.now().isoformat(),
                 "message_flows": [],
@@ -1772,120 +1716,140 @@ END MODULE;
                 "messageflows": []
             }
             
-            # Extract the primary message flow from PDF content - DIRECTLY from PDF
-            # Look for the ACE Message Flows table
-            flow_name_pattern = r"ACE Message Flow Name\s+ACE Application Name\s+ACE Server Name\s+([A-Za-z0-9_]+)"
-            flow_matches = re.findall(flow_name_pattern, pdf_content)
+            # Prepare LLM prompt for intelligent extraction
+            extraction_prompt = f"""You are an expert ACE/IIB integration architect analyzing business requirement documents.
+
+Extract ONLY the information present in the document below. Do NOT make assumptions or add default values.
+
+Document Content:
+{pdf_content[:8000]}
+
+Extract and return a JSON object with this EXACT structure:
+{{
+  "flow_name": "extract the ACE Message Flow Name from the document",
+  "app_name": "extract the ACE Application Name from the document",
+  "server_name": "extract the ACE Server Name from the document",
+  "flow_type": "determine from flow name suffix (RTS/SAT/P2P/etc) or description",
+  "is_sat_flow": true/false based on whether flow name contains SAT,
+  "is_synchronous": true/false based on flow type or description,
+  "input_type": "HTTP/MQ/FILE based on document description",
+  "uri_pattern": "extract HTTP URI pattern if mentioned",
+  "http_method": "POST/GET if mentioned",
+  "content_type": "application/xml or application/json if mentioned",
+  "queue_name": "extract MQ queue name if mentioned",
+  "technical_description": "extract the main description of what this flow does",
+  "requires_routing": true/false based on whether multiple methods/endpoints are mentioned,
+  "routing_methods": ["list", "of", "methods"] if routing is mentioned,
+  "subscribing_endpoints": ["list", "of", "endpoint", "names"] extract all BizTalk send/receive ports,
+  "has_enrichment": true/false if enrichment/lookup/database is mentioned,
+  "has_xsl_transform": true/false if XSL/XSLT/transformation is mentioned,
+  "xsl_files": ["list.xsl", "of.xsl", "files.xsl"] if XSL files are named,
+  "has_soap_request": true/false if SOAP/web service is mentioned,
+  "processing_patterns": ["list of processing patterns like synchronous, asynchronous, request-reply"]
+}}
+
+CRITICAL RULES:
+1. Extract ONLY what is explicitly in the document
+2. Use empty strings "" for text fields if not found
+3. Use false for boolean fields if not clearly indicated
+4. Use empty arrays [] for list fields if not found
+5. Be precise - extract exact names, don't invent them
+6. Look for tables with column headers like "ACE Message Flow Name", "ACE Application Name"
+7. Look for BizTalk port names in format like "*.Snd.*" or "*.Rcv.*"
+
+Return ONLY valid JSON, no markdown, no explanation."""
+
+            print("  📤 Sending extraction request to LLM...")
             
-            # Extract application and server names
-            app_name_pattern = r"ACE Message Flow Name\s+ACE Application Name\s+ACE Server Name\s+[A-Za-z0-9_]+\s+([A-Za-z0-9_]+)"
-            app_matches = re.findall(app_name_pattern, pdf_content)
+            # Call LLM for extraction
+            response = self.groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a precise data extraction expert. Return only valid JSON."
+                    },
+                    {
+                        "role": "user",
+                        "content": extraction_prompt
+                    }
+                ],
+                temperature=0.1,
+                max_tokens=4000
+            )
             
-            server_name_pattern = r"ACE Message Flow Name\s+ACE Application Name\s+ACE Server Name\s+[A-Za-z0-9_]+\s+[A-Za-z0-9_]+\s+([A-Za-z0-9_\-]+)"
-            server_matches = re.findall(server_name_pattern, pdf_content)
+            # Parse LLM response
+            llm_output = response.choices[0].message.content.strip()
+            print(f"  📥 Received LLM response: {len(llm_output)} characters")
             
-            # Get the message flow name, app name, and server name
-            flow_name = flow_matches[0] if flow_matches else "SAP_Data_Edicom_RTS"
-            app_name = app_matches[0] if app_matches else "EPIS_SAP_Edicom_App"
-            server_name = server_matches[0] if server_matches else "group-sap-server"
+            # Clean and parse JSON
+            if llm_output.startswith("```json"):
+                llm_output = llm_output.replace("```json", "").replace("```", "").strip()
+            elif llm_output.startswith("```"):
+                llm_output = llm_output.replace("```", "").strip()
             
-            # Add to message_flows and ace_library_indicators
+            extracted_data = json.loads(llm_output)
+            print("  ✅ Successfully parsed LLM extraction")
+            
+            # Validate critical fields
+            if not extracted_data.get("flow_name"):
+                raise Exception("LLM failed to extract flow_name - critical field missing")
+            
+            # Build business requirements from LLM extraction
+            flow_name = extracted_data["flow_name"]
+            app_name = extracted_data.get("app_name", "")
+            server_name = extracted_data.get("server_name", "")
+            
             business_requirements["message_flows"].append(flow_name)
-            business_requirements["ace_library_indicators"].append(app_name)
+            if app_name:
+                business_requirements["ace_library_indicators"].append(app_name)
             
-            # Extract related endpoints - extract only as subscribing endpoints
-            endpoint_pattern = r"(Edicom\.Out\.SAP\.[A-Za-z]+\.Snd\.WCF-BasicHttp)"
-            endpoint_matches = re.findall(endpoint_pattern, pdf_content)
-            subscribing_endpoints = list(set(endpoint_matches))
+            # Add subscribing endpoints
+            subscribing_endpoints = extracted_data.get("subscribing_endpoints", [])
+            business_requirements["integration_endpoints"].extend(subscribing_endpoints)
             
-            # Extract document description
-            desc_pattern = r"Description\s+(ESB will.*?\.)"
-            desc_matches = re.findall(desc_pattern, pdf_content)
-            description = desc_matches[0] if desc_matches else f"Message flow {flow_name} processes data between systems."
+            # Add processing patterns
+            business_requirements["processing_patterns"].extend(
+                extracted_data.get("processing_patterns", [])
+            )
             
-            # Extract routing methods from technical description
-            methods_pattern = r"(?:methonds|methods) should be trigger based on SAP messages\s*([a-zA-Z\n,]+)"
-            methods_matches = re.findall(methods_pattern, pdf_content, re.IGNORECASE)
-            
-            routing_methods = []
-            if methods_matches:
-                methods_text = methods_matches[0]
-                routing_methods = [m.strip() for m in re.split(r'[\n,]', methods_text) if m.strip()]
-            else:
-                # Fallback to extract from the PDF content directly
-                method_candidates = ["subscriptionWS", "confirmsubscription", "CancelNFSe", "SubmitNFSe", "Cancelsubscription"]
-                routing_methods = [m.lower() for m in method_candidates]
-            
-            # Extract XSL files from Resources section
-            xsl_pattern = r"([A-Za-z0-9_]+_to_[A-Za-z0-9_]+\.xsl)"
-            xsl_matches = re.findall(xsl_pattern, pdf_content)
-            unique_xsl_files = list(set(xsl_matches))
-            
-            # Create message flow details
+            # Build flow requirements structure
             flow_requirements = {
                 "flow_name": flow_name,
                 "app_name": app_name,
                 "server_name": server_name,
-                "input_type": "HTTP",  # Based on PDF
-                "is_sat_flow": False,  # Based on PDF (no SAT in name)
-                "requires_routing": True,  # Based on multiple methods in PDF
-                "routing_methods": routing_methods,
-                "flow_type": "RTS",  # Based on flow name
-                "has_enrichment": "enrichment" in pdf_content.lower(),
-                "has_xsl_transform": len(unique_xsl_files) > 0,
-                "has_soap_request": "soap" in pdf_content.lower(),
-                "xsl_files": unique_xsl_files,
-                "is_synchronous": True,  # Based on RTS flow type
-                "has_event_nodes": True,  # Based on PDF flow diagram
-                "technical_description": description
+                "input_type": extracted_data.get("input_type", "HTTP"),
+                "is_sat_flow": extracted_data.get("is_sat_flow", False),
+                "requires_routing": extracted_data.get("requires_routing", False),
+                "routing_methods": extracted_data.get("routing_methods", []),
+                "flow_type": extracted_data.get("flow_type", "RTS"),
+                "has_enrichment": extracted_data.get("has_enrichment", False),
+                "has_xsl_transform": extracted_data.get("has_xsl_transform", False),
+                "has_soap_request": extracted_data.get("has_soap_request", False),
+                "xsl_files": extracted_data.get("xsl_files", []),
+                "is_synchronous": extracted_data.get("is_synchronous", True),
+                "has_event_nodes": True,
+                "technical_description": extracted_data.get("technical_description", "")
             }
             
-            # Add input configuration
+            # Build input configuration
             flow_requirements["input_configuration"] = {
-                "input_type": "HTTP",
-                "input_node_name": "HTTPInput",
+                "input_type": extracted_data.get("input_type", "HTTP"),
+                "input_node_name": f"{extracted_data.get('input_type', 'HTTP')}Input",
                 "input_details": {
-                    "uri_pattern": f"/{flow_name}",
-                    "http_method": "POST",
-                    "content_type": "application/xml",
-                    "queue_name": "",
+                    "uri_pattern": extracted_data.get("uri_pattern", f"/{flow_name}"),
+                    "http_method": extracted_data.get("http_method", "POST"),
+                    "content_type": extracted_data.get("content_type", "application/xml"),
+                    "queue_name": extracted_data.get("queue_name", ""),
                     "file_pattern": ""
                 }
             }
             
-            # Create nodes
-            nodes = [
-                {
-                    "node_id": "FCMComposite_1_1",
-                    "node_name": "HTTPInput",
-                    "node_type": "HTTPInput",
-                    "is_entry_point": True,
-                    "node_purpose": "Receives HTTP requests"
-                },
-                {
-                    "node_id": "FCMComposite_1_2",
-                    "node_name": "ComputeNode",
-                    "node_type": "ComputeNode",
-                    "is_entry_point": False,
-                    "node_purpose": "Main processing node"
-                },
-                {
-                    "node_id": "FCMComposite_1_3",
-                    "node_name": "RouteNode",
-                    "node_type": "RouteNode",
-                    "is_entry_point": False,
-                    "node_purpose": "Routes based on message content"
-                },
-                {
-                    "node_id": "FCMComposite_1_4",
-                    "node_name": "HTTPReply",
-                    "node_type": "HTTPReply",
-                    "is_entry_point": False,
-                    "node_purpose": "Sends HTTP reply"
-                }
-            ]
+            # Generate nodes based on extracted information
+            nodes = self._generate_intelligent_nodes(extracted_data)
+            flow_requirements["nodes"] = nodes
             
-            # Create node connections
+            # Generate node connections
             node_connections = []
             for i in range(len(nodes) - 1):
                 node_connections.append({
@@ -1894,53 +1858,111 @@ END MODULE;
                     "terminal_type": "out",
                     "filter_condition": None
                 })
-            
-            flow_requirements["nodes"] = nodes
             flow_requirements["node_connections"] = node_connections
             
             # Add to messageflows
             business_requirements["messageflows"].append(flow_requirements)
             
-            # Add the related endpoints to integration_endpoints
-            for endpoint in subscribing_endpoints:
-                business_requirements["integration_endpoints"].append(endpoint)
-            
-            # Save the enhanced business_requirements.json file
-            output_dir = "."  # Use current directory as default
-            output_path = Path(output_dir) / "business_requirements.json"
-            
-            try:
-                os.makedirs(output_dir, exist_ok=True)
-                
-                with open(output_path, 'w', encoding='utf-8') as f:
-                    json.dump(business_requirements, f, indent=2)
-                    
-                print(f"✅ Created business_requirements.json with 1 primary flow")
-            except Exception as e:
-                print(f"⚠️ Error saving JSON file: {e}")
+            print(f"  ✅ Extracted flow: {flow_name}")
+            print(f"  ✅ Application: {app_name}")
+            print(f"  ✅ Endpoints: {len(subscribing_endpoints)}")
             
             return business_requirements
+            
+        except json.JSONDecodeError as e:
+            print(f"❌ Failed to parse LLM response as JSON: {e}")
+            print(f"   LLM Output: {llm_output[:500]}")
+            raise Exception("LLM returned invalid JSON")
             
         except Exception as e:
             print(f"❌ Failed to extract business requirements: {e}")
             import traceback
             traceback.print_exc()
-            
-            # Return default structure for backward compatibility
-            return {
-                "message_flows": [flow_name],
-                "transformation_requirements": [],
-                "integration_endpoints": subscribing_endpoints if 'subscribing_endpoints' in locals() else [],
-                "database_lookups": [],
-                "business_entities": [],
-                "ace_library_indicators": [app_name],
-                "processing_patterns": [],
-                "technical_specifications": [],
-                "data_enrichment_rules": [],
-                "routing_logic": [],
-                "messageflows": [],
-                "extraction_timestamp": datetime.now().isoformat()
-            }
+            raise
+    
+
+    def _generate_intelligent_nodes(self, extracted_data: Dict) -> List[Dict]:
+        """Generate ACE flow nodes based on LLM-extracted flow characteristics"""
+        nodes = []
+        node_counter = 1
+        
+        # Input node based on input type
+        input_type = extracted_data.get("input_type", "HTTP")
+        input_node_type = f"{input_type}Input"
+        
+        nodes.append({
+            "node_id": f"FCMComposite_1_{node_counter}",
+            "node_name": input_node_type,
+            "node_type": input_node_type,
+            "is_entry_point": True,
+            "node_purpose": f"Receives {input_type} requests"
+        })
+        node_counter += 1
+        
+        # Add enrichment node if needed
+        if extracted_data.get("has_enrichment", False):
+            nodes.append({
+                "node_id": f"FCMComposite_1_{node_counter}",
+                "node_name": "EnrichmentCompute",
+                "node_type": "ComputeNode",
+                "is_entry_point": False,
+                "node_purpose": "Data enrichment and lookup operations"
+            })
+            node_counter += 1
+        
+        # Add XSL transform node if needed
+        if extracted_data.get("has_xsl_transform", False):
+            nodes.append({
+                "node_id": f"FCMComposite_1_{node_counter}",
+                "node_name": "XSLTransform",
+                "node_type": "JavaComputeNode",
+                "is_entry_point": False,
+                "node_purpose": "XSL transformation"
+            })
+            node_counter += 1
+        
+        # Add routing node if needed
+        if extracted_data.get("requires_routing", False):
+            nodes.append({
+                "node_id": f"FCMComposite_1_{node_counter}",
+                "node_name": "RouteNode",
+                "node_type": "RouteNode",
+                "is_entry_point": False,
+                "node_purpose": "Routes based on message content"
+            })
+            node_counter += 1
+        
+        # Add SOAP request node if needed
+        if extracted_data.get("has_soap_request", False):
+            nodes.append({
+                "node_id": f"FCMComposite_1_{node_counter}",
+                "node_name": "SOAPRequest",
+                "node_type": "SOAPRequest",
+                "is_entry_point": False,
+                "node_purpose": "SOAP web service call"
+            })
+            node_counter += 1
+        
+        # Output node based on synchronous/asynchronous
+        if extracted_data.get("is_synchronous", True):
+            output_node_type = f"{input_type}Reply"
+            nodes.append({
+                "node_id": f"FCMComposite_1_{node_counter}",
+                "node_name": output_node_type,
+                "node_type": output_node_type,
+                "is_entry_point": False,
+                "node_purpose": f"Sends {input_type} reply"
+            })
+        else:
+            nodes.append({
+                "node_id": f"FCMComposite_1_{node_counter}",
+                "node_name": "MQOutput",
+                "node_type": "MQOutput",
+                "is_entry_point": False,
+                "node_purpose": "Sends message to queue"
+            })
+        
+        return nodes    
     
 
     def _generate_flow_nodes(self, flow_name, input_type, flow_pattern):

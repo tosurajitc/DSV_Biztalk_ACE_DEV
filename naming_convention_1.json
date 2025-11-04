@@ -1,0 +1,19 @@
+{
+  "pdf_source": "tmpm_vczy8j.pdf",
+  "extraction_timestamp": "2025-11-04T21:05:50.303164",
+  "project_naming": {
+    "ace_application_name": "EPIS_WINFRD_App",
+    "message_flow_name": "WINFRD_OUT_ShipmentUpdate_REC",
+    "connected_system": "WINFRD",
+    "ace_server": "road-afri-server",
+    "input_type": "File"
+  },
+  "component_naming_rules": {
+    "msgflow_files": "WINFRD_OUT_ShipmentUpdate_REC.msgflow",
+    "project_name": "EPIS_WINFRD_App"
+  },
+  "business_context": {
+    "description": "Flow description not available",
+    "pdf_extracted": true
+  }
+}

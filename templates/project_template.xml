@@ -72,7 +72,7 @@
 		</buildCommand>
 	</buildSpec>
 	<natures>
-		<nature>com.ibm.etools.mft.applib.applibrarynature</nature>
-		<nature>com.ibm.etools.mft.project.partnature</nature>
+		<nature>com.ibm.etools.msgbroker.tooling.applicationNature</nature>
+		<nature>com.ibm.etools.msgbroker.tooling.messageBrokerProjectNature</nature>
 	</natures>
 </projectDescription>

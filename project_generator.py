@@ -38,196 +38,85 @@ class ProjectGenerator:
                             template_path: str,
                             business_requirements_json_path: str,
                             output_dir: str,
-                            biztalk_folder: str = None,  # ✅ FIXED: Added parameter
+                            biztalk_folder: str = None,  # âœ… FIXED: Added parameter
                             generated_components_dir: str = None) -> Dict[str, Any]:
         """
         Generate final .project file using MINIMAL functionality - NO undefined method calls
-        ✅ USES ONLY: os, json, basic file operations - NO extraction methods
+        âœ… USES ONLY: os, json, basic file operations - NO extraction methods
         """
-        print("🎯 Starting Simple Project File Generation")
+        print("Starting Simple Project File Generation")
         
         # Extract project name from output directory
         project_name = os.path.basename(os.path.abspath(output_dir))
         if not project_name or project_name == '.':
             project_name = "Enhanced_ACE_Project"
         
-        print(f"🎯 Project name: {project_name}")
+        print(f"Project name: {project_name}")
         
         try:
-            # ✅ STEP 1: Read template file (basic file reading only)
+            # ✅ STEP 1: Read template file (template-only, no fallback)
             print("📄 Step 1: Reading template...")
-            if os.path.exists(template_path):
-                with open(template_path, 'r', encoding='utf-8') as f:
-                    template_content = f.read()
-                print(f"  ✅ Template loaded: {len(template_content)} characters")
-            else:
-                # Create basic IBM ACE project template
-                template_content = '''<?xml version="1.0" encoding="UTF-8"?>
-    <projectDescription>
-        <name>{project_name}</name>
-        <comment></comment>
-        <projects>
-            <project>EPIS_CommonUtils_Lib</project>
-            <project>EPIS_Consumer_Lib_v2</project>
-            <project>EPIS_BlobStorage_Lib</project>
-            <project>EPIS_MessageEnrichment_StaticLib</project>
-            <project>EPIS_CommonFlows_Lib</project>
-            <project>EPIS_CargoWiseOne_eAdapter_Lib</project>
-            <project>EPIS_CargoWiseOne_Schemas_Lib</project>
-        </projects>
-        <buildSpec>
-            <buildCommand>
-                <name>com.ibm.etools.mft.applib.applibbuilder</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-            <buildCommand>
-                <name>com.ibm.etools.mft.applib.applibresourcevalidator</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-            <buildCommand>
-                <name>com.ibm.etools.mft.connector.policy.ui.PolicyBuilder</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-            <buildCommand>
-                <name>com.ibm.etools.mft.applib.mbprojectbuilder</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-            <buildCommand>
-                <name>com.ibm.etools.msg.validation.dfdl.mlibdfdlbuilder</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-            <buildCommand>
-                <name>com.ibm.etools.mft.flow.adapters.adapterbuilder</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-            <buildCommand>
-                <name>com.ibm.etools.mft.flow.sca.scabuilder</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-            <buildCommand>
-                <name>com.ibm.etools.msg.validation.dfdl.mbprojectresourcesbuilder</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-            <buildCommand>
-                <name>com.ibm.etools.mft.esql.lang.esqllangbuilder</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-            <buildCommand>
-                <name>com.ibm.etools.mft.map.builder.mslmappingbuilder</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-            <buildCommand>
-                <name>com.ibm.etools.mft.flow.msgflowxsltbuilder</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-            <buildCommand>
-                <name>com.ibm.etools.mft.flow.msgflowbuilder</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-            <buildCommand>
-                <name>com.ibm.etools.mft.decision.service.ui.decisionservicerulebuilder</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-            <buildCommand>
-                <name>com.ibm.etools.mft.pattern.capture.PatternBuilder</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-            <buildCommand>
-                <name>com.ibm.etools.mft.json.builder.JSONBuilder</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-            <buildCommand>
-                <name>com.ibm.etools.mft.restapi.ui.restApiDefinitionsBuilder</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-            <buildCommand>
-                <name>com.ibm.etools.mft.policy.ui.policybuilder</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-            <buildCommand>
-                <name>com.ibm.etools.mft.msg.assembly.messageAssemblyBuilder</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-            <buildCommand>
-                <name>com.ibm.etools.msg.validation.dfdl.dfdlqnamevalidator</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-            <buildCommand>
-                <name>com.ibm.etools.mft.bar.ext.barbuilder</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-            <buildCommand>
-                <name>com.ibm.etools.mft.unittest.ui.TestCaseBuilder</name>
-                <arguments>
-                </arguments>
-            </buildCommand>
-        </buildSpec>
-        <natures>
-            <nature>com.ibm.etools.msgbroker.tooling.applicationNature</nature>
-            <nature>com.ibm.etools.msgbroker.tooling.messageBrokerProjectNature</nature>
-        </natures>
-    </projectDescription>'''
-                print("  ⚠️ Template not found - using default IBM ACE template")
             
-            # ✅ STEP 2: Read JSON file (basic JSON reading only)
-            print("📄 Step 2: Reading JSON mappings...")
+            # Try multiple possible template locations
+            template_locations = [
+                template_path,
+                os.path.join(os.path.dirname(__file__), 'templates', 'project_template.xml'),
+                os.path.join(os.getcwd(), 'templates', 'project_template.xml'),
+            ]
+            
+            template_content = None
+            for template_location in template_locations:
+                if os.path.exists(template_location):
+                    with open(template_location, 'r', encoding='utf-8') as f:
+                        template_content = f.read()
+                    print(f"  ✅ Template loaded from: {template_location}")
+                    break
+            
+            if template_content is None:
+                error_msg = "❌ project_template.xml not found. Searched:\n" + "\n".join(f"  - {loc}" for loc in template_locations)
+                print(error_msg)
+                raise FileNotFoundError(error_msg)
+
+            
+            # STEP 2: Read JSON file (basic JSON reading only)
+            print("Step 2: Reading JSON mappings...")
             if os.path.exists(business_requirements_json_path):
                 with open(business_requirements_json_path, 'r', encoding='utf-8') as f:
                     json_data = json_module.load(f)
-                print(f"  ✅ JSON loaded: {len(str(json_data))} characters")
+                print(f" JSON loaded: {len(str(json_data))} characters")
             else:
                 json_data = {}
-                print("  ⚠️ JSON not found - using empty data")
+                print("  JSON not found - using empty data")
             
-            # ✅ STEP 3: Count component files (basic file counting only)
-            print("📄 Step 3: Counting component files...")
+            # STEP 3: Count component files (basic file counting only)
+            print("Step 3: Counting component files...")
             component_count = 0
             if generated_components_dir and os.path.exists(generated_components_dir):
                 for root, dirs, files in os.walk(generated_components_dir):
                     for file in files:
                         if file.endswith(('.esql', '.xsd', '.xsl', '.msgflow', '.xml')):
                             component_count += 1
-            print(f"  ✅ Found {component_count} component files")
+            print(f" Found {component_count} component files")
             
-            # ✅ STEP 4: Generate project content (simple string replacement only)
-            print("📄 Step 4: Generating project content...")
+            # STEP 4: Generate project content (simple string replacement only)
+            print("Step 4: Generating project content...")
             
-            # Simple template replacement - This handles {project_name} placeholder correctly ✅
+            # Simple template replacement - This handles {project_name} placeholder correctly âœ…
             project_content = template_content.replace('{project_name}', project_name)
             project_content = project_content.replace('${project_name}', project_name)
             project_content = project_content.replace('PROJECT_NAME', project_name)
             
-            # ❌ DELETED PROBLEMATIC REGEX BLOCK - No longer needed!
+            # DELETED PROBLEMATIC REGEX BLOCK - No longer needed!
             # The above replacements already handle the <name>{project_name}</name> correctly
             # Removed lines that were:
             # if '<name>' in project_content and '</name>' in project_content:
             #     import re
             #     project_content = re.sub(r'<name>.*?</name>', f'<name>{project_name}</name>', project_content)
             
-            print(f"  ✅ Project content generated: {len(project_content)} characters")
+            print(f"  Project content generated: {len(project_content)} characters")
             
-            # ✅ STEP 5: Write project file (basic file writing only)
-            print("📄 Step 5: Writing project file...")
+            # STEP 5: Write project file (basic file writing only)
+            print("Step 5: Writing project file...")
             
             # Ensure output directory exists
             os.makedirs(output_dir, exist_ok=True)
@@ -237,10 +126,10 @@ class ProjectGenerator:
             with open(project_file_path, 'w', encoding='utf-8') as f:
                 f.write(project_content)
             
-            print(f"  ✅ Project file written: {project_file_path}")
-            print("✅ Project generation completed successfully!")
+            print(f" Project file written: {project_file_path}")
+            print("Project generation completed successfully!")
             
-            # ✅ Return success with minimal data
+            # Return success with minimal data
             return {
                 'status': 'success',
                 'project_file_path': project_file_path,
@@ -259,7 +148,7 @@ class ProjectGenerator:
             }
             
         except Exception as e:
-            print(f"❌ Project generation failed: {str(e)}")
+            print(f"Project generation failed: {str(e)}")
             return {
                 'status': 'failed',
                 'error': str(e),

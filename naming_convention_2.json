@@ -1,0 +1,19 @@
+{
+  "pdf_source": "tmpm_vczy8j.pdf",
+  "extraction_timestamp": "2025-11-04T21:05:50.305799",
+  "project_naming": {
+    "ace_application_name": "EPIS_WINFRD_SAT_App",
+    "message_flow_name": "WINFRD_OUT_ShipmentUpdate_RECSAT",
+    "connected_system": "WINFRD",
+    "ace_server": "road-sat-dmz-server",
+    "input_type": "File"
+  },
+  "component_naming_rules": {
+    "msgflow_files": "WINFRD_OUT_ShipmentUpdate_RECSAT.msgflow",
+    "project_name": "EPIS_WINFRD_SAT_App"
+  },
+  "business_context": {
+    "description": "Flow description not available",
+    "pdf_extracted": true
+  }
+}
